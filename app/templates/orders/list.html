@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Orders — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-steel-dark">Orders</h1>
+    <p class="text-sm text-gray-500 mt-0.5">{{ orders|length }} order{{ 's' if orders|length != 1 }}</p>
+  </div>
+  <a href="/orders/new" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">+ New Order</a>
+</div>
+
+<!-- Filters -->
+<form method="GET" class="bg-white rounded-xl shadow p-4 mb-6 flex flex-wrap gap-3 items-end">
+  <div class="flex-1 min-w-[160px]">
+    <label class="block text-xs text-gray-500 mb-1">Search</label>
+    <input name="q" value="{{ filters.q or '' }}" placeholder="Order # or customer…"
+      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Status</label>
+    <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <option value="">All</option>
+      {% for s in statuses %}
+      <option value="{{ s.value }}" {% if filters.status == s.value %}selected{% endif %}>{{ s.value.replace('_',' ').title() }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Type</label>
+    <select name="job_type" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <option value="">All</option>
+      {% for j in job_types %}
+      <option value="{{ j.value }}" {% if filters.job_type == j.value %}selected{% endif %}>{{ j.value.replace('_',' ').title() }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Priority</label>
+    <select name="priority" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <option value="">All</option>
+      {% for p in priorities %}
+      <option value="{{ p.value }}" {% if filters.priority == p.value %}selected{% endif %}>{{ p.value.title() }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="bg-steel-mid text-white px-4 py-2 rounded-lg text-sm hover:bg-steel-dark transition">Filter</button>
+  <a href="/orders" class="text-sm text-gray-400 hover:text-gray-600 py-2">Clear</a>
+</form>
+
+<!-- Orders Table -->
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-4 py-3 text-left">Order #</th>
+        <th class="px-4 py-3 text-left">Customer</th>
+        <th class="px-4 py-3 text-left">Type</th>
+        <th class="px-4 py-3 text-left">Status</th>
+        <th class="px-4 py-3 text-left">Priority</th>
+        <th class="px-4 py-3 text-left">Due</th>
+        <th class="px-4 py-3 text-left">Created</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for o in orders %}
+      <tr class="hover:bg-steel-light cursor-pointer transition" onclick="window.location='/orders/{{ o.id }}'">
+        <td class="px-4 py-3 font-mono font-semibold text-steel-mid">{{ o.order_number }}</td>
+        <td class="px-4 py-3 font-medium">{{ o.customer.name if o.customer else '—' }}</td>
+        <td class="px-4 py-3 text-gray-600 capitalize">{{ o.job_type.value.replace('_',' ') }}</td>
+        <td class="px-4 py-3">
+          {% set s = o.status.value %}
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-medium
+            {% if s == 'on_hold' %}bg-yellow-100 text-yellow-800
+            {% elif s == 'ready' %}bg-green-100 text-green-800
+            {% elif s == 'qa_review' %}bg-purple-100 text-purple-800
+            {% elif s == 'cancelled' %}bg-red-100 text-red-800
+            {% elif s == 'paid' %}bg-gray-100 text-gray-600
+            {% else %}bg-blue-100 text-blue-800{% endif %}">
+            {{ s.replace('_',' ').title() }}
+          </span>
+        </td>
+        <td class="px-4 py-3">
+          {% set p = o.priority.value %}
+          {% if p == 'urgent' %}<span class="font-bold text-red-600">⚡ Urgent</span>
+          {% elif p == 'priority' %}<span class="font-medium text-yellow-600">↑ Priority</span>
+          {% else %}<span class="text-gray-400">Standard</span>{% endif %}
+        </td>
+        <td class="px-4 py-3 text-gray-500">{{ o.promised_date or '—' }}</td>
+        <td class="px-4 py-3 text-gray-400 text-xs">{{ o.created_at.strftime('%b %-d') if o.created_at else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" class="px-4 py-12 text-center text-gray-400">
+          No orders found.
+          <a href="/orders/new" class="text-steel-mid hover:underline ml-1">Create one.</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

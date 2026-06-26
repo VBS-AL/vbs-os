@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}New Order — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="max-w-4xl mx-auto">
+  <div class="flex items-center gap-3 mb-6">
+    <a href="/orders" class="text-gray-400 hover:text-steel-mid text-sm">← Orders</a>
+    <h1 class="text-2xl font-bold text-steel-dark">New Order</h1>
+  </div>
+
+  {% if error %}
+  <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/orders/new" id="order-form">
+
+    <!-- Customer & Type -->
+    <div class="bg-white rounded-xl shadow p-6 mb-4">
+      <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide mb-4">Customer & Job Info</h2>
+      <div class="grid grid-cols-2 gap-4">
+
+        <!-- Customer search -->
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Customer <span class="text-red-500">*</span></label>
+          <input id="customer-search" name="_customer_search" placeholder="Search by name or phone…"
+            hx-get="/orders/search/customers" hx-trigger="keyup changed delay:300ms" hx-target="#customer-results"
+            hx-include="this" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none" autocomplete="off"/>
+          <input type="hidden" name="customer_id" id="customer-id" required/>
+          <div id="customer-selected" class="mt-1 text-sm text-steel-mid font-medium hidden"></div>
+          <div id="customer-results" class="border border-gray-200 rounded-lg mt-1 divide-y divide-gray-100 text-sm hidden shadow-sm"></div>
+          <div class="mt-2">
+            <a href="/customers/new?next=/orders/new" class="text-xs text-steel-mid hover:underline">+ New customer</a>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Job Type <span class="text-red-500">*</span></label>
+          <select name="job_type" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for j in job_types %}
+            <option value="{{ j.value }}">{{ j.value.replace('_',' ').title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <select name="priority" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for p in priorities %}
+            <option value="{{ p.value }}" {% if p.value == 'standard' %}selected{% endif %}>{{ p.value.title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Promised Date</label>
+          <input type="date" name="promised_date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">PO # (customer's)</label>
+          <input type="text" name="customer_po" placeholder="Optional" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Job Description / Notes</label>
+          <textarea name="notes" rows="2" placeholder="Brief description of scope…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+        </div>
+
+        <div class="flex items-center gap-6">
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" name="drawings_required" value="1" class="rounded border-gray-300 text-steel-mid"/>
+            Drawings Required
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" name="material_supplied_by_customer" value="1" class="rounded border-gray-300 text-steel-mid"/>
+            Customer Supplies Material
+          </label>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Paint Spec (job-level)</label>
+          <input type="text" name="paint_spec" placeholder="e.g. Primer + Black Oxide" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line Items -->
+    <div class="bg-white rounded-xl shadow p-6 mb-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Line Items</h2>
+        <button type="button" onclick="addLine()" class="text-sm text-steel-mid hover:text-steel-dark font-medium">+ Add Line</button>
+      </div>
+
+      <div id="lines-container" class="space-y-3">
+        <!-- Line item row template -->
+      </div>
+      <p id="no-lines" class="text-sm text-gray-400 text-center py-4">No line items yet. Click "Add Line".</p>
+    </div>
+
+    <div class="flex justify-end gap-3">
+      <a href="/orders" class="px-5 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition">Cancel</a>
+      <button type="submit" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-6 py-2 rounded-lg transition">Create Order</button>
+    </div>
+
+  </form>
+</div>
+
+<script>
+let lineCount = 0;
+
+function addLine() {
+  const idx = lineCount++;
+  const row = document.createElement('div');
+  row.className = 'line-item grid grid-cols-12 gap-2 items-end bg-gray-50 rounded-lg p-3';
+  row.innerHTML = `
+    <div class="col-span-5">
+      <label class="block text-xs text-gray-500 mb-1">Description</label>
+      <input type="text" name="li_desc_${idx}" required placeholder="Item description…"
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-1">Qty</label>
+      <input type="number" name="li_qty_${idx}" min="1" value="1" required
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-1">Unit Price ($)</label>
+      <input type="number" name="li_price_${idx}" step="0.01" min="0" placeholder="0.00"
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-1">Paint Override</label>
+      <input type="text" name="li_paint_${idx}" placeholder="Optional"
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-1 flex justify-end">
+      <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
+        class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+    </div>`;
+  document.getElementById('lines-container').appendChild(row);
+  updateNoLines();
+}
+
+function updateNoLines() {
+  const count = document.querySelectorAll('.line-item').length;
+  document.getElementById('no-lines').style.display = count ? 'none' : 'block';
+}
+
+// Customer autocomplete
+document.addEventListener('htmx:afterSwap', function(e) {
+  if (e.target.id === 'customer-results') {
+    const results = e.target;
+    results.classList.remove('hidden');
+    results.querySelectorAll('[data-customer-id]').forEach(el => {
+      el.addEventListener('click', function() {
+        document.getElementById('customer-id').value = this.dataset.customerId;
+        document.getElementById('customer-search').value = this.dataset.customerName;
+        document.getElementById('customer-selected').textContent = '✓ ' + this.dataset.customerName;
+        document.getElementById('customer-selected').classList.remove('hidden');
+        results.innerHTML = '';
+        results.classList.add('hidden');
+      });
+    });
+  }
+});
+</script>
+{% endblock %}

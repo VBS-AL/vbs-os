@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}Van Buren Steel OS{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        'steel-dark': '#1C3557',
+        'steel-mid':  '#2E6DA4',
+        'steel-light':'#EEF4FA',
+      }}}
+    }
+  </script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+{% if user %}
+<!-- Nav -->
+<nav class="bg-steel-dark text-white px-6 py-3 flex items-center justify-between shadow">
+  <div class="flex items-center gap-6">
+    <span class="font-bold text-lg tracking-wide">VAN BUREN STEEL</span>
+    <a href="/dashboard"   class="text-sm hover:text-steel-light transition">Dashboard</a>
+    <a href="/orders"      class="text-sm hover:text-steel-light transition">Orders</a>
+    <a href="/quotes"      class="text-sm hover:text-steel-light transition">Quotes</a>
+    <a href="/customers"   class="text-sm hover:text-steel-light transition">Customers</a>
+    <a href="/inventory"   class="text-sm hover:text-steel-light transition">Inventory</a>
+    {% if user.role in ['owner','ops_manager'] %}
+    <a href="/reports"     class="text-sm hover:text-steel-light transition">Reports</a>
+    {% endif %}
+  </div>
+  <div class="flex items-center gap-4">
+    <span class="text-xs text-gray-300">{{ user.first_name }} {{ user.last_name }} · {{ user.role.replace('_',' ').title() }}</span>
+    <a href="/auth/logout" class="text-xs bg-steel-mid hover:bg-blue-700 px-3 py-1 rounded transition">Sign Out</a>
+  </div>
+</nav>
+{% endif %}
+
+<main class="p-6 max-w-screen-xl mx-auto">
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

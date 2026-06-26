@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block title %}{{ order.order_number }} — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="max-w-5xl mx-auto">
+
+  <!-- Header -->
+  <div class="flex items-start justify-between mb-6">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-gray-400 mb-1">
+        <a href="/orders" class="hover:text-steel-mid">Orders</a>
+        <span>/</span>
+        <span class="font-mono font-semibold text-steel-mid">{{ order.order_number }}</span>
+      </div>
+      <h1 class="text-2xl font-bold text-steel-dark">
+        {{ order.customer.name if order.customer else 'Unknown Customer' }}
+        <span class="text-base font-normal text-gray-400 ml-2">{{ order.job_type.value.replace('_',' ').title() }}</span>
+      </h1>
+    </div>
+    <div class="text-right">
+      <span class="inline-block px-3 py-1 rounded-full text-sm font-medium
+        {% set s = order.status.value %}
+        {% if s == 'on_hold' %}bg-yellow-100 text-yellow-800
+        {% elif s == 'ready' %}bg-green-100 text-green-800
+        {% elif s == 'qa_review' %}bg-purple-100 text-purple-800
+        {% elif s == 'cancelled' %}bg-red-100 text-red-800
+        {% elif s == 'paid' %}bg-gray-100 text-gray-500
+        {% else %}bg-blue-100 text-blue-800{% endif %}">
+        {{ order.status.value.replace('_',' ').title() }}
+      </span>
+      {% if order.priority.value != 'standard' %}
+      <div class="mt-1 text-sm {% if order.priority.value == 'urgent' %}text-red-600 font-bold{% else %}text-yellow-600{% endif %}">
+        {% if order.priority.value == 'urgent' %}⚡ URGENT{% else %}↑ Priority{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-4">
+
+    <!-- Left column: main info -->
+    <div class="col-span-2 space-y-4">
+
+      <!-- Order details card -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Order Details</h2>
+        <div class="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+          <div class="flex justify-between"><span class="text-gray-500">Order #</span><span class="font-mono font-semibold">{{ order.order_number }}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">Invoice #</span><span class="font-mono">{{ order.order_number }}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">Description</span><span class="text-right max-w-xs truncate">{{ order.description or '—' }}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">Promised</span><span>{{ order.promised_date or '—' }}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">Drawings</span><span>{{ 'Yes' if order.drawings_required else 'No' }}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">Paint Spec</span><span>{{ order.paint_spec or '—' }}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">Rework Count</span><span class="{% if order.rework_count > 0 %}text-red-600 font-semibold{% endif %}">{{ order.rework_count }}</span></div>
+        </div>
+        {% if order.notes %}
+        <div class="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-600">{{ order.notes }}</div>
+        {% endif %}
+        {% if order.status.value == 'on_hold' and order.hold_reason %}
+        <div class="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm">
+          <span class="font-semibold text-yellow-800">Hold: </span>
+          <span class="text-yellow-700">{{ order.hold_reason }}</span>
+          {% if order.hold_owner %}<span class="text-yellow-500 ml-1">({{ order.hold_owner }})</span>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Line Items -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Line Items</h2>
+        {% if order.line_items %}
+        <table class="w-full text-sm">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left pb-2">Description</th>
+              <th class="text-right pb-2 pr-4">Qty</th>
+              <th class="text-right pb-2 pr-4">Unit Price</th>
+              <th class="text-right pb-2">Total</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            {% for li in order.line_items %}
+            <tr>
+              <td class="py-2">
+                {{ li.description }}
+                {% if li.paint_override %}<span class="text-xs text-gray-400 ml-1">(paint: {{ li.paint_override }})</span>{% endif %}
+              </td>
+              <td class="text-right pr-4 py-2">{{ li.quantity }}</td>
+              <td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
+              <td class="text-right py-2 font-medium">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot class="border-t border-gray-200">
+            <tr>
+              <td colspan="3" class="text-right pt-2 text-sm text-gray-500 font-medium">Material Subtotal</td>
+              <td class="text-right pt-2 font-bold">${{ '%.2f'|format(order.line_items | map(attribute='unit_price') | select | sum or 0) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        {% else %}
+        <p class="text-sm text-gray-400">No line items.</p>
+        {% endif %}
+      </div>
+
+      <!-- Labor -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Labor Log</h2>
+          {% if user.role.value in ['owner','ops_manager','shop_foreman'] %}
+          <button onclick="toggleLaborForm()" class="text-xs text-steel-mid hover:underline">+ Log Labor</button>
+          {% endif %}
+        </div>
+
+        <!-- Labor entry form (hidden by default) -->
+        <div id="labor-form" class="hidden bg-steel-light rounded-lg p-4 mb-4">
+          <form method="POST" action="/orders/{{ order.id }}/labor">
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Work Date</label>
+                <input type="date" name="work_date" required id="labor-date-picker"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Department</label>
+                <select name="billing_dept" required class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                  <option value="general_labor">General Labor ($80/hr)</option>
+                  <option value="steel_fabrication">Steel Fabrication ($100/hr)</option>
+                  <option value="aluminum_structural">Aluminum & Structural ($120/hr)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Hours</label>
+                <input type="number" name="hours" step="0.25" min="0.25" placeholder="0.00" required
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">Notes</label>
+                <input type="text" name="notes" placeholder="Optional" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div class="flex items-end">
+                <button type="submit" class="w-full bg-steel-dark text-white text-sm py-1.5 rounded-md hover:bg-steel-mid transition">Log</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div id="labor-list">
+          {% if order.labor_entries %}
+          <table class="w-full text-sm">
+            <thead class="text-xs text-gray-500 border-b border-gray-100">
+              <tr>
+                <th class="text-left pb-2">Employee</th>
+                <th class="text-left pb-2">Dept</th>
+                <th class="text-right pb-2 pr-4">Hrs</th>
+                <th class="text-right pb-2">Total</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+              {% for l in order.labor_entries %}
+              <tr>
+                <td class="py-1.5">{{ l.employee.first_name }} {{ l.employee.last_name or '' }}</td>
+                <td class="py-1.5 text-gray-500 capitalize">{{ l.billing_dept.value.replace('_',' ') }}</td>
+                <td class="py-1.5 text-right pr-4">{{ l.hours }}</td>
+                <td class="py-1.5 text-right font-medium">${{ '%.2f'|format(l.billed_value or 0) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot class="border-t border-gray-200">
+              <tr>
+                <td colspan="3" class="text-right pt-2 text-sm text-gray-500 font-medium">Labor Total</td>
+                <td class="text-right pt-2 font-bold">${{ '%.2f'|format(total_labor or 0) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+          {% else %}
+          <p class="text-sm text-gray-400">No labor logged.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- QA Records -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">QA / Inspection</h2>
+          {% if user.role.value in ['owner','ops_manager','shop_foreman'] %}
+          <button onclick="toggleQAForm()" class="text-xs text-steel-mid hover:underline">+ Add QA Record</button>
+          {% endif %}
+        </div>
+
+        <div id="qa-form" class="hidden bg-steel-light rounded-lg p-4 mb-4">
+          <form method="POST" action="/orders/{{ order.id }}/qa">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Result</label>
+                <select name="result" required class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                  <option value="pass">Pass</option>
+                  <option value="fail">Fail — Rework Required</option>
+                  <option value="conditional">Conditional Pass</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Failure Reason</label>
+                <input type="text" name="failure_reason" placeholder="If fail/conditional…"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">Rework Notes</label>
+                <textarea name="rework_notes" rows="2" placeholder="What needs to be redone…"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"></textarea>
+              </div>
+              <div class="col-span-2 flex justify-end">
+                <button type="submit" class="bg-steel-dark text-white text-sm px-4 py-1.5 rounded-md hover:bg-steel-mid transition">Save QA Record</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div id="qa-list">
+          {% if order.qa_records %}
+          <div class="space-y-2">
+            {% for qa in order.qa_records %}
+            <div class="flex items-start gap-3 text-sm">
+              <span class="mt-0.5 px-2 py-0.5 rounded text-xs font-medium
+                {% if qa.result == 'pass' %}bg-green-100 text-green-700
+                {% elif qa.result == 'fail' %}bg-red-100 text-red-700
+                {% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                {{ qa.result.title() }}
+              </span>
+              <div>
+                <span class="font-medium">{{ qa.inspector.first_name if qa.inspector else '—' }}</span>
+                <span class="text-gray-400 ml-2 text-xs">{{ qa.created_at.strftime('%b %-d, %Y') if qa.created_at else '' }}</span>
+                {% if qa.failure_reason %}<p class="text-gray-500 text-xs mt-0.5">{{ qa.failure_reason }}</p>{% endif %}
+                {% if qa.rework_notes %}<p class="text-gray-400 text-xs">↳ {{ qa.rework_notes }}</p>{% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-sm text-gray-400">No QA records.</p>
+          {% endif %}
+        </div>
+      </div>
+
+    </div><!-- /left column -->
+
+    <!-- Right column: status + customer -->
+    <div class="space-y-4">
+
+      <!-- Status Update -->
+      {% if next_statuses %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Update Status</h2>
+        {% for ns in next_statuses %}
+        <form method="POST" action="/orders/{{ order.id }}/status" class="mb-2">
+          <input type="hidden" name="new_status" value="{{ ns.value }}"/>
+          {% if ns.value == 'on_hold' %}
+          <input type="text" name="hold_reason" placeholder="Hold reason (required)…"
+            class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs mb-1" required/>
+          {% endif %}
+          <button type="submit" class="w-full text-sm py-2 px-4 rounded-lg border transition
+            {% if ns.value == 'cancelled' %}border-red-300 text-red-600 hover:bg-red-50
+            {% elif ns.value in ['ready','paid','delivered'] %}bg-green-600 text-white hover:bg-green-700 border-green-600
+            {% else %}bg-steel-mid text-white hover:bg-steel-dark border-steel-mid{% endif %}">
+            → {{ ns.value.replace('_',' ').title() }}
+          </button>
+        </form>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Customer -->
+      {% if order.customer %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Customer</h2>
+        <div class="text-sm space-y-1">
+          <div class="font-semibold">{{ order.customer.name }}</div>
+          {% if order.customer.company %}<div class="text-gray-500">{{ order.customer.company }}</div>{% endif %}
+          {% if order.customer.phone %}<div class="text-gray-500">{{ order.customer.phone }}</div>{% endif %}
+          {% if order.customer.email %}<div class="text-gray-500">{{ order.customer.email }}</div>{% endif %}
+        </div>
+        <a href="/customers/{{ order.customer.id }}" class="text-xs text-steel-mid hover:underline mt-2 inline-block">View profile →</a>
+      </div>
+      {% endif %}
+
+      <!-- Production Stages -->
+      {% if order.production_stages %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Production Stages</h2>
+        <div class="space-y-2">
+          {% for stage in order.production_stages %}
+          <div class="flex items-center gap-2 text-sm">
+            <span class="w-2 h-2 rounded-full flex-shrink-0
+              {% if stage.completed_at %}bg-green-400
+              {% elif stage.started_at %}bg-blue-400
+              {% else %}bg-gray-200{% endif %}"></span>
+            <span class="{% if stage.completed_at %}text-gray-400 line-through{% endif %}">{{ stage.name }}</span>
+            {% if stage.completed_at %}<span class="text-xs text-gray-400 ml-auto">✓</span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Quick info -->
+      <div class="bg-steel-light rounded-xl p-5 text-sm">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-2">Summary</h2>
+        <div class="space-y-1 text-gray-600">
+          <div class="flex justify-between">
+            <span>Material</span>
+            <span class="font-medium">${{ '%.2f'|format(order.line_items | map(attribute='unit_price') | select | sum or 0) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Labor</span>
+            <span class="font-medium">${{ '%.2f'|format(total_labor or 0) }}</span>
+          </div>
+          <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-semibold text-steel-dark">
+            <span>Est. Total</span>
+            <span>${{ '%.2f'|format((order.line_items | map(attribute='unit_price') | select | sum or 0) + (total_labor or 0)) }}</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /right column -->
+  </div><!-- /grid -->
+</div>
+
+<script>
+function toggleLaborForm() {
+  const f = document.getElementById('labor-form');
+  f.classList.toggle('hidden');
+}
+function toggleQAForm() {
+  const f = document.getElementById('qa-form');
+  f.classList.toggle('hidden');
+}
+</script>
+{% endblock %}
+                                                                                     

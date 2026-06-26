@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Customers — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold text-steel-dark">Customers</h1>
+  <a href="/customers/new" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">+ New Customer</a>
+</div>
+
+<form method="GET" class="bg-white rounded-xl shadow p-4 mb-6 flex gap-3 items-end">
+  <div class="flex-1">
+    <label class="block text-xs text-gray-500 mb-1">Search</label>
+    <input name="q" value="{{ q }}" placeholder="Name, company, phone, email…"
+      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
+  </div>
+  <button type="submit" class="bg-steel-mid text-white px-4 py-2 rounded-lg text-sm hover:bg-steel-dark transition">Search</button>
+  {% if q %}<a href="/customers" class="text-sm text-gray-400 hover:text-gray-600 py-2">Clear</a>{% endif %}
+</form>
+
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-4 py-3 text-left">Name</th>
+        <th class="px-4 py-3 text-left">Company</th>
+        <th class="px-4 py-3 text-left">Phone</th>
+        <th class="px-4 py-3 text-left">Email</th>
+        <th class="px-4 py-3 text-left">Orders</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for c in customers %}
+      <tr class="hover:bg-steel-light cursor-pointer transition" onclick="window.location='/customers/{{ c.id }}'">
+        <td class="px-4 py-3 font-medium">{{ c.name }}</td>
+        <td class="px-4 py-3 text-gray-500">{{ c.company or '—' }}</td>
+        <td class="px-4 py-3 text-gray-500">{{ c.phone or '—' }}</td>
+        <td class="px-4 py-3 text-gray-500">{{ c.email or '—' }}</td>
+        <td class="px-4 py-3 text-gray-400">{{ c.orders|length }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" class="px-4 py-12 text-center text-gray-400">
+          No customers found.
+          <a href="/customers/new" class="text-steel-mid hover:underline ml-1">Add one.</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: vbs-os
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./vbs.db
+      - key: ENVIRONMENT
+        value: production

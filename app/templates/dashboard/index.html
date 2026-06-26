@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-steel-dark">Dashboard</h1>
+  <p class="text-gray-500 text-sm">Good to see you, {{ user.first_name }}.</p>
+</div>
+
+<!-- Stat cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Active Orders</p>
+    <p class="text-3xl font-bold text-steel-dark mt-1">{{ active_orders|length }}</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-red-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Overdue Invoices</p>
+    <p class="text-3xl font-bold text-red-600 mt-1">{{ overdue_invoices }}</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-yellow-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">On Hold</p>
+    <p class="text-3xl font-bold text-yellow-600 mt-1">
+      {{ active_orders | selectattr('status','equalto','on_hold') | list | length }}
+    </p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-green-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Ready to Deliver</p>
+    <p class="text-3xl font-bold text-green-600 mt-1">
+      {{ active_orders | selectattr('status','equalto','ready') | list | length }}
+    </p>
+  </div>
+</div>
+
+<!-- Active Orders table -->
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <div class="flex items-center justify-between px-6 py-4 border-b">
+    <h2 class="font-semibold text-steel-dark">Active Orders</h2>
+    <a href="/orders/new" class="bg-steel-dark text-white text-xs px-4 py-2 rounded-lg hover:bg-steel-mid transition">+ New Order</a>
+  </div>
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-4 py-3 text-left">Order #</th>
+        <th class="px-4 py-3 text-left">Customer</th>
+        <th class="px-4 py-3 text-left">Type</th>
+        <th class="px-4 py-3 text-left">Status</th>
+        <th class="px-4 py-3 text-left">Priority</th>
+        <th class="px-4 py-3 text-left">Due</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for o in active_orders %}
+      <tr class="hover:bg-steel-light cursor-pointer" onclick="window.location='/orders/{{ o.id }}'">
+        <td class="px-4 py-3 font-mono font-medium text-steel-mid">{{ o.order_number }}</td>
+        <td class="px-4 py-3">{{ o.customer.name if o.customer else '—' }}</td>
+        <td class="px-4 py-3 capitalize">{{ o.job_type.replace('_',' ') }}</td>
+        <td class="px-4 py-3">
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium
+            {% if o.status.value == 'on_hold' %}bg-yellow-100 text-yellow-800
+            {% elif o.status.value == 'ready' %}bg-green-100 text-green-800
+            {% elif o.status.value == 'qa_review' %}bg-purple-100 text-purple-800
+            {% else %}bg-blue-100 text-blue-800{% endif %}">
+            {{ o.status.value.replace('_',' ').title() }}
+          </span>
+        </td>
+        <td class="px-4 py-3">
+          {% if o.priority.value == 'urgent' %}<span class="text-red-600 font-bold">Urgent</span>
+          {% elif o.priority.value == 'priority' %}<span class="text-yellow-600 font-medium">Priority</span>
+          {% else %}<span class="text-gray-400">Standard</span>{% endif %}
+        </td>
+        <td class="px-4 py-3 text-gray-500">{{ o.promised_date or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No active orders.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
