@@ -28,12 +28,12 @@
     <a href="/quotes"      class="text-sm hover:text-steel-light transition">Quotes</a>
     <a href="/customers"   class="text-sm hover:text-steel-light transition">Customers</a>
     <a href="/inventory"   class="text-sm hover:text-steel-light transition">Inventory</a>
-    {% if user.role in ['owner','ops_manager'] %}
+    {% if user.role.value in ['owner','ops_manager'] %}
     <a href="/reports"     class="text-sm hover:text-steel-light transition">Reports</a>
     {% endif %}
   </div>
   <div class="flex items-center gap-4">
-    <span class="text-xs text-gray-300">{{ user.first_name }} {{ user.last_name }} · {{ user.role.replace('_',' ').title() }}</span>
+    <span class="text-xs text-gray-300">{{ user.first_name }} {{ user.last_name }} · {{ user.role.value.replace('_',' ').title() }}</span>
     <a href="/auth/logout" class="text-xs bg-steel-mid hover:bg-blue-700 px-3 py-1 rounded transition">Sign Out</a>
   </div>
 </nav>

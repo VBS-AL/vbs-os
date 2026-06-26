@@ -31,7 +31,7 @@ def list_customers(
     customers = query.order_by(Customer.name).all()
     return templates.TemplateResponse(
         "customers/list.html",
-        {"request": request, "customers": customers, "q": q, "current_user": current_user},
+        {"request": request, "customers": customers, "q": q, "user": current_user},
     )
 
 
@@ -43,7 +43,7 @@ def new_customer_form(
 ):
     return templates.TemplateResponse(
         "customers/new.html",
-        {"request": request, "next": next, "error": None, "current_user": current_user},
+        {"request": request, "next": next, "error": None, "user": current_user},
     )
 
 
@@ -64,7 +64,7 @@ def create_customer(
     if not name:
         return templates.TemplateResponse(
             "customers/new.html",
-            {"request": request, "next": next, "error": "Name is required.", "current_user": current_user},
+            {"request": request, "next": next, "error": "Name is required.", "user": current_user},
             status_code=422,
         )
     c = Customer(
@@ -93,7 +93,7 @@ def customer_detail(
         raise HTTPException(status_code=404, detail="Customer not found")
     return templates.TemplateResponse(
         "customers/detail.html",
-        {"request": request, "customer": c, "current_user": current_user},
+        {"request": request, "customer": c, "user": current_user},
     )
 
 

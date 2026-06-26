@@ -21,6 +21,7 @@ class Customer(Base):
     )
 
     orders = relationship("Order", back_populates="customer")
+    quotes = relationship("Quote", back_populates="customer")
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
 
 
