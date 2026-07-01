@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ quote.quote_number }} — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <div class="flex items-center gap-3 mb-6">
+    <a href="/quotes/{{ quote.id }}" class="text-gray-400 hover:text-steel-mid text-sm">← Quote</a>
+    <h1 class="text-2xl font-bold text-steel-dark">Edit {{ quote.quote_number }}</h1>
+  </div>
+
+  <form method="POST" action="/quotes/{{ quote.id }}/edit" id="quote-form">
+    <div class="bg-white rounded-xl shadow p-6 mb-4">
+      <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide mb-4">Customer & Job Info</h2>
+      <div class="grid grid-cols-2 gap-4">
+
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+          <div class="flex items-center gap-3">
+            <span class="font-semibold text-steel-dark">{{ quote.customer.name }}</span>
+            {% if quote.customer.company %}<span class="text-gray-400 text-sm">{{ quote.customer.company }}</span>{% endif %}
+          </div>
+          <input type="hidden" name="customer_id" value="{{ quote.customer_id }}"/>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Job Type</label>
+          <select name="job_type" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for j in job_types %}
+            <option value="{{ j.value }}" {% if j.value == quote.job_type %}selected{% endif %}>{{ j.value.replace('_',' ').title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <select name="priority" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for p in priorities %}
+            <option value="{{ p.value }}" {% if p.value == quote.priority %}selected{% endif %}>{{ p.value.title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Paint Spec (job-level)</label>
+          <select name="paint_spec" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">— None —</option>
+            {% for p in paint_options %}
+            <option value="{{ p }}" {% if p == quote.paint_spec %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="flex items-center gap-6 pt-5">
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" name="drawings_required" value="1" class="rounded border-gray-300"
+              {% if quote.drawings_required %}checked{% endif %}/>
+            Drawings Required
+          </label>
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description / Scope</label>
+          <textarea name="description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ quote.description or '' }}</textarea>
+        </div>
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Internal Notes</label>
+          <textarea name="notes" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ quote.notes or '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line Items -->
+    <div class="bg-white rounded-xl shadow p-6 mb-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Line Items</h2>
+        <button type="button" onclick="addLine()" class="text-sm text-steel-mid hover:text-steel-dark font-medium">+ Add Line</button>
+      </div>
+      <div id="lines-container" class="space-y-3"></div>
+      <p id="no-lines" class="text-sm text-gray-400 text-center py-4 hidden">No line items yet.</p>
+    </div>
+
+    <div class="flex justify-end gap-3">
+      <a href="/quotes/{{ quote.id }}" class="px-5 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Cancel</a>
+      <button type="submit" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-6 py-2 rounded-lg transition">Save Changes</button>
+    </div>
+  </form>
+</div>
+
+<script>
+let lineCount = 0;
+const paintOptions = {{ paint_options | tojson }};
+const existingLines = [
+  {% for li in quote.line_items | sort(attribute='line_number') %}
+  { description: {{ li.description | tojson }}, quantity: {{ li.quantity }}, unit_price: {{ li.unit_price or 0 }}, paint: {{ (li.paint_override or 'Same as Job') | tojson }}, notes: {{ (li.notes or '') | tojson }} }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+function addLine(desc='', qty=1, price='', paint='Same as Job', notes='') {
+  const idx = lineCount++;
+  const paintOpts = ['Same as Job', ...paintOptions].map(p =>
+    `<option value="${p}" ${p === paint ? 'selected' : ''}>${p}</option>`
+  ).join('');
+  const row = document.createElement('div');
+  row.className = 'line-item grid grid-cols-12 gap-2 items-end bg-gray-50 rounded-lg p-3';
+  row.innerHTML = `
+    <div class="col-span-4">
+      <label class="block text-xs text-gray-500 mb-1">Description *</label>
+      <input type="text" name="li_desc_${idx}" value="${desc}" required placeholder="Item description…"
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-1">
+      <label class="block text-xs text-gray-500 mb-1">Qty</label>
+      <input type="number" name="li_qty_${idx}" min="1" value="${qty}" required
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-1">Unit Price ($)</label>
+      <input type="number" name="li_price_${idx}" step="1" min="0" value="${price}" placeholder="0.00"
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-1">Paint Spec</label>
+      <select name="li_paint_${idx}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+        ${paintOpts}
+      </select>
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-1">Notes</label>
+      <input type="text" name="li_notes_${idx}" value="${notes}" placeholder="Optional…"
+        class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+    </div>
+    <div class="col-span-1 flex justify-end">
+      <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
+        class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+    </div>`;
+  document.getElementById('lines-container').appendChild(row);
+  updateNoLines();
+}
+
+function updateNoLines() {
+  const el = document.getElementById('no-lines');
+  el.classList.toggle('hidden', !!document.querySelectorAll('.line-item').length);
+}
+
+// Pre-populate existing line items
+existingLines.forEach(li => {
+  addLine(li.description || '', li.quantity || 1, li.unit_price || '', li.paint || 'Same as Job', li.notes || '');
+});
+</script>
+{% endblock %}

@@ -59,6 +59,7 @@
         <th class="px-4 py-3 text-left">Status</th>
         <th class="px-4 py-3 text-left">Priority</th>
         <th class="px-4 py-3 text-left">Due</th>
+        {% if can_see_financials %}<th class="px-4 py-3 text-right">Total</th>{% endif %}
         <th class="px-4 py-3 text-left">Created</th>
       </tr>
     </thead>
@@ -87,7 +88,12 @@
           {% else %}<span class="text-gray-400">Standard</span>{% endif %}
         </td>
         <td class="px-4 py-3 text-gray-500">{{ o.promised_date or '—' }}</td>
-        <td class="px-4 py-3 text-gray-400 text-xs">{{ o.created_at.strftime('%b %-d') if o.created_at else '—' }}</td>
+        {% if can_see_financials %}
+        <td class="px-4 py-3 text-right font-medium">
+          {% set ns = namespace(t=0) %}{% for li in o.line_items %}{% set ns.t = ns.t + ((li.unit_price or 0) * li.quantity) %}{% endfor %}${{ '%.2f'|format(ns.t) }}
+        </td>
+        {% endif %}
+        <td class="px-4 py-3 text-gray-400 text-xs">{{ o.created_at.strftime('%b %d').replace(' 0',' ') if o.created_at else '—' }}</td>
       </tr>
       {% else %}
       <tr>

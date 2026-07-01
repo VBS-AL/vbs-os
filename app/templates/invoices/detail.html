@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}{{ inv.invoice_number }} — Invoice{% endblock %}
+{% block content %}
+{% if not can_see_financials %}
+<div class="max-w-xl mx-auto mt-20 text-center text-gray-400">You don't have permission to view invoices.</div>
+{% else %}
+
+<div class="max-w-4xl mx-auto">
+
+  <!-- Header -->
+  <div class="flex items-start justify-between mb-6">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-gray-400 mb-1">
+        <a href="/invoices" class="hover:text-steel-mid">Invoices</a>
+        <span>/</span>
+        <a href="/orders/{{ inv.order.id }}" class="hover:text-steel-mid font-mono">{{ inv.order.order_number }}</a>
+      </div>
+      <h1 class="text-2xl font-bold text-steel-dark">Invoice {{ inv.invoice_number }}</h1>
+      <p class="text-gray-500 text-sm mt-0.5">{{ inv.order.customer.name if inv.order.customer else '—' }}</p>
+    </div>
+    <div class="text-right">
+      <a href="/invoices/{{ inv.id }}/print" target="_blank"
+        class="inline-block mb-2 text-sm px-4 py-1.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition">
+        🖨 Print / PDF
+      </a>
+      <br/>
+      <span class="inline-block px-3 py-1 rounded-full text-sm font-medium
+        {% if inv.payment_status.value == 'paid' %}bg-green-100 text-green-800
+        {% elif inv.payment_status.value == 'overdue' %}bg-red-100 text-red-800
+        {% elif inv.payment_status.value == 'partial' %}bg-yellow-100 text-yellow-800
+        {% elif inv.payment_status.value == 'void' %}bg-gray-100 text-gray-500
+        {% else %}bg-blue-100 text-blue-800{% endif %}">
+        {{ inv.payment_status.value.title() }}
+      </span>
+      <div class="text-xs text-gray-400 mt-1">Due {{ inv.due_date.strftime('%b %d, %Y') if inv.due_date else '—' }}</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-4">
+
+    <!-- Left: invoice detail -->
+    <div class="col-span-2 space-y-4">
+
+      <!-- Line Items -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Materials</h2>
+        {% if inv.order.line_items %}
+        <table class="w-full text-sm mb-2">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left pb-2">Description</th>
+              <th class="text-right pb-2 pr-4">Qty</th>
+              <th class="text-right pb-2 pr-4">Unit Price</th>
+              <th class="text-right pb-2">Total</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            {% for li in inv.order.line_items %}
+            <tr>
+              <td class="py-2">{{ li.description }}</td>
+              <td class="text-right pr-4 py-2">{{ li.quantity }}</td>
+              <td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
+              <td class="text-right py-2">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-sm text-gray-400">No line items.</p>
+        {% endif %}
+      </div>
+
+      <!-- Labor -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Labor</h2>
+        {% if inv.order.labor_entries %}
+        <table class="w-full text-sm">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left pb-2">Date</th>
+              <th class="text-left pb-2">Department</th>
+              <th class="text-right pb-2 pr-4">Hours</th>
+              <th class="text-right pb-2 pr-4">Rate</th>
+              <th class="text-right pb-2">Billed</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            {% for e in inv.order.labor_entries %}
+            <tr>
+              <td class="py-2 text-gray-500">{{ e.work_date.strftime('%b %d') if e.work_date else '—' }}</td>
+              <td class="py-2">{{ e.billing_dept.value.replace('_',' ').title() }}</td>
+              <td class="text-right pr-4 py-2">{{ e.hours }}</td>
+              <td class="text-right pr-4 py-2">${{ e.billing_rate }}/hr</td>
+              <td class="text-right py-2">${{ '%.2f'|format(e.billed_value) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-sm text-gray-400">No labor entries.</p>
+        {% endif %}
+      </div>
+
+      <!-- Payment History -->
+      {% if inv.payments %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Payments Received</h2>
+        <table class="w-full text-sm">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left pb-2">Date</th>
+              <th class="text-left pb-2">Method</th>
+              <th class="text-left pb-2">Reference</th>
+              <th class="text-right pb-2">Amount</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            {% for p in inv.payments %}
+            <tr>
+              <td class="py-2 text-gray-500">{{ p.payment_date.strftime('%b %d, %Y') if p.payment_date else '—' }}</td>
+              <td class="py-2">{{ {'ach': 'ACH', 'cash': 'Cash', 'check': 'Check', 'credit_card': 'Credit Card', 'wire': 'Wire Transfer'}.get(p.method.value, p.method.value.title()) }}</td>
+              <td class="py-2 text-gray-500">{{ p.reference or '—' }}</td>
+              <td class="text-right py-2 font-medium text-green-700">${{ '%.2f'|format(p.amount) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Right: totals + record payment -->
+    <div class="space-y-4">
+
+      <!-- Totals -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Summary</h2>
+        <div class="space-y-2 text-sm">
+          {% set mat_total = namespace(v=0) %}
+          {% for li in inv.order.line_items %}{% set mat_total.v = mat_total.v + ((li.unit_price or 0) * li.quantity) %}{% endfor %}
+          <div class="flex justify-between text-gray-600">
+            <span>Materials</span><span>${{ '%.2f'|format(mat_total.v) }}</span>
+          </div>
+          {% set lab_total = namespace(v=0) %}
+          {% for e in inv.order.labor_entries %}{% set lab_total.v = lab_total.v + e.billed_value %}{% endfor %}
+          <div class="flex justify-between text-gray-600">
+            <span>Labor</span><span>${{ '%.2f'|format(lab_total.v) }}</span>
+          </div>
+          <div class="flex justify-between text-gray-600 border-t border-gray-100 pt-2">
+            <span>Subtotal</span><span>${{ '%.2f'|format(inv.subtotal) }}</span>
+          </div>
+          {% if inv.tax > 0 %}
+          <div class="flex justify-between text-gray-600">
+            <span>Tax</span><span>${{ '%.2f'|format(inv.tax) }}</span>
+          </div>
+          {% endif %}
+          <div class="flex justify-between font-bold text-steel-dark border-t border-gray-200 pt-2 text-base">
+            <span>Total</span><span>${{ '%.2f'|format(inv.total) }}</span>
+          </div>
+          <div class="flex justify-between text-green-700">
+            <span>Paid</span><span>${{ '%.2f'|format(inv.amount_paid or 0) }}</span>
+          </div>
+          <div class="flex justify-between font-semibold {% if inv.balance_due > 0 %}text-red-600{% else %}text-gray-400{% endif %} border-t border-gray-200 pt-2">
+            <span>Balance Due</span><span>${{ '%.2f'|format(inv.balance_due) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Record Payment -->
+      {% if inv.payment_status.value not in ['paid','void'] and user.role.value in ['owner','ops_manager'] %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Record Payment</h2>
+        <form method="POST" action="/invoices/{{ inv.id }}/payment" class="space-y-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Amount ($)</label>
+            <input type="number" name="amount" step="0.01" min="0.01"
+              value="{{ '%.2f'|format(inv.balance_due) }}"
+              class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Method</label>
+            <select name="method" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+              {% for m in payment_methods %}
+              <option value="{{ m.value }}">{{ {'ach': 'ACH', 'cash': 'Cash', 'check': 'Check', 'credit_card': 'Credit Card', 'wire': 'Wire Transfer'}.get(m.value, m.value.title()) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Date</label>
+            <input type="date" name="payment_date" value="{{ today }}"
+              class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Reference # (optional)</label>
+            <input type="text" name="reference" placeholder="Check #, transaction ID…"
+              class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+          </div>
+          <button type="submit"
+            class="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2 rounded-lg transition">
+            Record Payment
+          </button>
+        </form>
+      </div>
+      {% endif %}
+
+      <!-- Void -->
+      {% if inv.payment_status.value not in ['paid','void'] and user.role.value == 'owner' %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <form method="POST" action="/invoices/{{ inv.id }}/void"
+          onsubmit="return confirm('Void this invoice? The order will revert to Delivered.')">
+          <button type="submit" class="w-full text-sm py-2 px-4 rounded-lg border border-red-300 text-red-500 hover:bg-red-50 transition">
+            Void Invoice
+          </button>
+        </form>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

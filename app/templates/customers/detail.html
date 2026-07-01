@@ -32,8 +32,36 @@
               <input type="email" name="email" value="{{ customer.email or '' }}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
             </div>
             <div class="col-span-2">
-              <label class="block text-xs text-gray-500 mb-1">Address</label>
-              <input type="text" name="address" value="{{ customer.address or '' }}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              <label class="block text-xs text-gray-500 mb-1">Street Address</label>
+              <input type="text" name="address_line1" value="{{ customer.address_line1 or '' }}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+            </div>
+            <div class="col-span-2 grid grid-cols-5 gap-3">
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">City</label>
+                <input type="text" name="city" value="{{ customer.city or '' }}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">State/Prov</label>
+                <input type="text" name="state" maxlength="3" value="{{ customer.state or '' }}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm uppercase"/>
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">Postal Code</label>
+                <input type="text" name="zip_code" value="{{ customer.zip_code or '' }}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+            </div>
+            <div class="col-span-2">
+              <label class="block text-xs text-gray-500 mb-1">Default Payment Terms</label>
+              <select name="payment_terms" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                {% set pt = customer.payment_terms if customer.payment_terms is not none else 0 %}
+                <option value="0" {% if pt == 0 %}selected{% endif %}>Due on Receipt</option>
+                <option value="3" {% if pt == 3 %}selected{% endif %}>Net 3</option>
+                <option value="7" {% if pt == 7 %}selected{% endif %}>Net 7</option>
+                <option value="15" {% if pt == 15 %}selected{% endif %}>Net 15</option>
+                <option value="30" {% if pt == 30 %}selected{% endif %}>Net 30</option>
+                <option value="45" {% if pt == 45 %}selected{% endif %}>Net 45</option>
+                <option value="60" {% if pt == 60 %}selected{% endif %}>Net 60</option>
+                <option value="90" {% if pt == 90 %}selected{% endif %}>Net 90</option>
+              </select>
             </div>
             <div class="col-span-2">
               <label class="block text-xs text-gray-500 mb-1">Notes</label>
@@ -62,26 +90,17 @@
             <tr class="cursor-pointer hover:bg-steel-light" onclick="window.location='/orders/{{ o.id }}'">
               <td class="py-1.5 font-mono text-steel-mid">{{ o.order_number }}</td>
               <td class="py-1.5 capitalize">{{ o.status.value.replace('_',' ') }}</td>
-              <td class="py-1.5 text-gray-400 text-xs">{{ o.promised_date or '—' }}</td>
+              <td class="py-1.5 text-gray-400">{{ o.promised_date or '—' }}</td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
         {% else %}
-        <p class="text-sm text-gray-400">No orders yet.</p>
+        <div class="text-sm text-gray-400 italic">No orders yet.</div>
         {% endif %}
-        <div class="mt-3">
-          <a href="/orders/new?customer_id={{ customer.id }}" class="text-xs text-steel-mid hover:underline">+ New order for this customer</a>
-        </div>
       </div>
 
-    </div>
-    <div>
-      <div class="bg-steel-light rounded-xl p-5 text-sm">
-        <div class="font-semibold text-steel-dark text-lg">{{ customer.orders|length }}</div>
-        <div class="text-gray-500">Total Orders</div>
-      </div>
-    </div>
-  </div>
+    </div><!-- /right column -->
+  </div><!-- /grid -->
 </div>
 {% endblock %}

@@ -12,10 +12,12 @@
     <p class="text-xs text-gray-500 uppercase tracking-wide">Active Orders</p>
     <p class="text-3xl font-bold text-steel-dark mt-1">{{ active_orders|length }}</p>
   </div>
+  {% if can_see_financials %}
   <div class="bg-white rounded-xl shadow p-5 border-l-4 border-red-400">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Overdue Invoices</p>
     <p class="text-3xl font-bold text-red-600 mt-1">{{ overdue_invoices }}</p>
   </div>
+  {% endif %}
   <div class="bg-white rounded-xl shadow p-5 border-l-4 border-yellow-400">
     <p class="text-xs text-gray-500 uppercase tracking-wide">On Hold</p>
     <p class="text-3xl font-bold text-yellow-600 mt-1">

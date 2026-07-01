@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Quotes — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-steel-dark">Quotes</h1>
+    <a href="/quotes/new" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-4 py-2 rounded-lg transition">+ New Quote</a>
+  </div>
+
+  <div class="flex gap-2 mb-4 flex-wrap">
+    <a href="/quotes" class="text-xs px-3 py-1.5 rounded-full border transition {% if not filter_status %}bg-steel-dark text-white border-steel-dark{% else %}border-gray-300 text-gray-600 hover:border-steel-mid{% endif %}">All</a>
+    {% for s in statuses %}
+    <a href="/quotes?status={{ s.value }}" class="text-xs px-3 py-1.5 rounded-full border transition
+      {% if filter_status == s.value %}bg-steel-dark text-white border-steel-dark{% else %}border-gray-300 text-gray-600 hover:border-steel-mid{% endif %}">
+      {{ s.value.title() }}
+    </a>
+    {% endfor %}
+  </div>
+
+  <div class="bg-white rounded-xl shadow overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-steel-light text-xs font-semibold text-steel-dark uppercase tracking-wide">
+        <tr>
+          {% macro sort_link(label, key, align='left') %}
+            {% set next_dir = 'desc' if (sort_by == key and sort_dir == 'asc') else 'asc' %}
+            <th class="px-5 py-3 text-{{ align }}">
+              <a href="?{% for k,v in request.query_params.items() %}{% if k not in ['sort_by','sort_dir'] %}{{ k }}={{ v }}&{% endif %}{% endfor %}sort_by={{ key }}&sort_dir={{ next_dir }}"
+                 class="hover:text-steel-mid inline-flex items-center gap-1 {% if sort_by == key %}text-steel-mid{% endif %}">
+                {{ label }}
+                {% if sort_by == key %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}<span class="text-gray-300">⇅</span>{% endif %}
+              </a>
+            </th>
+          {% endmacro %}
+          {{ sort_link('Quote #', 'quote_number') }}
+          {{ sort_link('Customer', 'customer') }}
+          {{ sort_link('Status', 'status') }}
+          {{ sort_link('Job Type', 'job_type') }}
+          {% if can_see_financials %}{{ sort_link('Est. Total', 'total', 'right') }}{% endif %}
+          {{ sort_link('Valid Until', 'valid_until') }}
+          {{ sort_link('Created', 'created') }}
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for qt in quotes %}
+        <tr class="hover:bg-gray-50 cursor-pointer transition" onclick="window.location='/quotes/{{ qt.id }}'">
+          <td class="px-5 py-3 font-mono font-semibold text-steel-mid">{{ qt.quote_number }}</td>
+          <td class="px-5 py-3 font-medium">{{ qt.customer.name if qt.customer else '—' }}</td>
+          <td class="px-5 py-3 text-center">
+            <span class="px-2 py-0.5 rounded text-xs font-medium
+              {% if qt.status.value == 'converted' %}bg-green-100 text-green-700
+              {% elif qt.status.value == 'declined' %}bg-red-100 text-red-700
+              {% elif qt.status.value == 'expired' %}bg-gray-100 text-gray-500
+              {% elif qt.status.value == 'sent' %}bg-blue-100 text-blue-700
+              {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+              {{ qt.status.value.title() }}
+            </span>
+          </td>
+          <td class="px-5 py-3 text-gray-500">{{ qt.job_type.replace('_',' ').title() if qt.job_type else '—' }}</td>
+          {% if can_see_financials %}
+          <td class="px-5 py-3 text-right font-medium">
+            {% if qt.total_estimated %}${{ '%.2f'|format(qt.total_estimated) }}{% else %}<span class="text-gray-400">—</span>{% endif %}
+          </td>
+          {% endif %}
+          <td class="px-5 py-3 text-gray-500">
+            {% if qt.valid_until %}
+              <span class="{% if qt.valid_until < today and qt.status.value == 'sent' %}text-red-500 font-semibold{% endif %}">
+                {{ qt.valid_until.strftime('%b %d, %Y') }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-5 py-3 text-gray-400 text-xs">{{ qt.created_at.strftime('%b %d').replace(' 0',' ') if qt.created_at else '—' }}</td>
+          <td class="px-5 py-3 text-right">
+            <a href="/quotes/{{ qt.id }}" class="text-xs text-steel-mid hover:underline">View →</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="{% if can_see_financials %}8{% else %}7{% endif %}" class="px-5 py-12 text-center text-gray-400">
+            No quotes found.
+            <a href="/quotes/new" class="text-steel-mid hover:underline ml-1">Create one.</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

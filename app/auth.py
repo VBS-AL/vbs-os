@@ -68,3 +68,6 @@ def require_roles(*roles: UserRole):
 require_management = require_roles(UserRole.owner, UserRole.ops_manager)
 require_ops_up     = require_roles(UserRole.owner, UserRole.ops_manager)
 require_foreman_up = require_roles(UserRole.owner, UserRole.ops_manager, UserRole.shop_foreman)
+
+def financials_visible(user) -> bool:
+    return user.role.value in ["owner", "ops_manager"]

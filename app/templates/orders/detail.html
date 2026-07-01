@@ -45,13 +45,59 @@
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Order Details</h2>
         <div class="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-          <div class="flex justify-between"><span class="text-gray-500">Order #</span><span class="font-mono font-semibold">{{ order.order_number }}</span></div>
-          <div class="flex justify-between"><span class="text-gray-500">Invoice #</span><span class="font-mono">{{ order.order_number }}</span></div>
-          <div class="flex justify-between"><span class="text-gray-500">Description</span><span class="text-right max-w-xs truncate">{{ order.description or '—' }}</span></div>
-          <div class="flex justify-between"><span class="text-gray-500">Promised</span><span>{{ order.promised_date or '—' }}</span></div>
-          <div class="flex justify-between"><span class="text-gray-500">Drawings</span><span>{{ 'Yes' if order.drawings_required else 'No' }}</span></div>
-          <div class="flex justify-between"><span class="text-gray-500">Paint Spec</span><span>{{ order.paint_spec or '—' }}</span></div>
-          <div class="flex justify-between"><span class="text-gray-500">Rework Count</span><span class="{% if order.rework_count > 0 %}text-red-600 font-semibold{% endif %}">{{ order.rework_count }}</span></div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Order #</span>
+            <span class="font-mono font-semibold">{{ order.order_number }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Invoice #</span>
+            <span class="font-mono">{{ order.invoice.invoice_number if order.invoice else '—' }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Description</span>
+            <span class="text-right max-w-xs truncate">{{ order.description or '—' }}</span>
+          </div>
+          <!-- Promised Date with inline owner-only edit -->
+          <div class="flex flex-col">
+            <div class="flex justify-between items-center">
+              <span class="text-gray-500">Promised</span>
+              <div class="flex items-center gap-2">
+                <span>{{ order.promised_date or '—' }}</span>
+                {% if user.role.value == 'owner' %}
+                <button onclick="document.getElementById('promised-date-form').classList.toggle('hidden')"
+                  class="text-xs text-steel-mid hover:underline">
+                  {% if order.promised_date %}edit{% else %}set{% endif %}
+                </button>
+                {% elif not order.promised_date %}
+                <form method="POST" action="/orders/{{ order.id }}/promised-date" class="flex gap-1 items-center">
+                  <input type="date" name="promised_date" class="border border-gray-300 rounded px-2 py-0.5 text-xs"/>
+                  <button type="submit" class="text-xs bg-steel-dark text-white px-2 py-0.5 rounded hover:bg-steel-mid">Set</button>
+                </form>
+                {% endif %}
+              </div>
+            </div>
+            {% if user.role.value == 'owner' %}
+            <div id="promised-date-form" class="hidden mt-1">
+              <form method="POST" action="/orders/{{ order.id }}/promised-date" class="flex gap-2 items-center">
+                <input type="date" name="promised_date" value="{{ order.promised_date or '' }}"
+                  class="border border-gray-300 rounded px-2 py-0.5 text-xs flex-1"/>
+                <button type="submit" class="text-xs bg-steel-dark text-white px-2 py-0.5 rounded hover:bg-steel-mid">Save</button>
+              </form>
+            </div>
+            {% endif %}
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Drawings</span>
+            <span>{{ 'Yes' if order.drawings_required else 'No' }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Paint Spec</span>
+            <span>{{ order.paint_spec or '—' }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Rework Count</span>
+            <span class="{% if order.rework_count > 0 %}text-red-600 font-semibold{% endif %}">{{ order.rework_count }}</span>
+          </div>
         </div>
         {% if order.notes %}
         <div class="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-600">{{ order.notes }}</div>
@@ -74,8 +120,8 @@
             <tr>
               <th class="text-left pb-2">Description</th>
               <th class="text-right pb-2 pr-4">Qty</th>
-              <th class="text-right pb-2 pr-4">Unit Price</th>
-              <th class="text-right pb-2">Total</th>
+              {% if can_see_financials %}<th class="text-right pb-2 pr-4">Unit Price</th>{% endif %}
+              {% if can_see_financials %}<th class="text-right pb-2">Total</th>{% endif %}
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
@@ -86,17 +132,21 @@
                 {% if li.paint_override %}<span class="text-xs text-gray-400 ml-1">(paint: {{ li.paint_override }})</span>{% endif %}
               </td>
               <td class="text-right pr-4 py-2">{{ li.quantity }}</td>
-              <td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
-              <td class="text-right py-2 font-medium">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>
+              {% if can_see_financials %}<td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>{% endif %}
+              {% if can_see_financials %}<td class="text-right py-2 font-medium">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>{% endif %}
             </tr>
             {% endfor %}
           </tbody>
+          {% if can_see_financials %}
           <tfoot class="border-t border-gray-200">
             <tr>
+              {% set mat_ns = namespace(v=0) %}
+              {% for li in order.line_items %}{% set mat_ns.v = mat_ns.v + ((li.unit_price or 0) * li.quantity) %}{% endfor %}
               <td colspan="3" class="text-right pt-2 text-sm text-gray-500 font-medium">Material Subtotal</td>
-              <td class="text-right pt-2 font-bold">${{ '%.2f'|format(order.line_items | map(attribute='unit_price') | select | sum or 0) }}</td>
+              <td class="text-right pt-2 font-bold">${{ '%.2f'|format(mat_ns.v) }}</td>
             </tr>
           </tfoot>
+          {% endif %}
         </table>
         {% else %}
         <p class="text-sm text-gray-400">No line items.</p>
@@ -104,17 +154,26 @@
       </div>
 
       <!-- Labor -->
-      <div class="bg-white rounded-xl shadow p-5">
+      <div class="bg-white rounded-xl shadow p-5" id="labor">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Labor Log</h2>
-          {% if user.role.value in ['owner','ops_manager','shop_foreman'] %}
+          {% if user.role.value in ['owner','ops_manager','shop_foreman'] and order.status.value in ['in_production','qa_review','ready'] %}
           <button onclick="toggleLaborForm()" class="text-xs text-steel-mid hover:underline">+ Log Labor</button>
           {% endif %}
         </div>
 
+        <!-- Rework banner -->
+        {% if has_qa_fail %}
+        <div class="mb-3 bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
+          ⚠ Active QA failure — labor logged now will be flagged as <strong>Rework</strong>.
+        </div>
+        {% endif %}
+
         <!-- Labor entry form (hidden by default) -->
+        {% if user.role.value in ['owner','ops_manager','shop_foreman'] and order.status.value in ['in_production','qa_review','ready'] %}
         <div id="labor-form" class="hidden bg-steel-light rounded-lg p-4 mb-4">
           <form method="POST" action="/orders/{{ order.id }}/labor">
+            <input type="hidden" name="is_rework" value="{{ 1 if has_qa_fail else 0 }}"/>
             <div class="grid grid-cols-3 gap-3">
               <div>
                 <label class="block text-xs text-gray-500 mb-1">Work Date</label>
@@ -126,7 +185,7 @@
                 <select name="billing_dept" required class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
                   <option value="general_labor">General Labor ($80/hr)</option>
                   <option value="steel_fabrication">Steel Fabrication ($100/hr)</option>
-                  <option value="aluminum_structural">Aluminum & Structural ($120/hr)</option>
+                  <option value="aluminum_structural">Aluminum &amp; Structural ($120/hr)</option>
                 </select>
               </div>
               <div>
@@ -135,8 +194,9 @@
                   class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
               </div>
               <div class="col-span-2">
-                <label class="block text-xs text-gray-500 mb-1">Notes</label>
-                <input type="text" name="notes" placeholder="Optional" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+                <label class="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+                <input type="text" name="notes" placeholder="Optional"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
               </div>
               <div class="flex items-end">
                 <button type="submit" class="w-full bg-steel-dark text-white text-sm py-1.5 rounded-md hover:bg-steel-mid transition">Log</button>
@@ -144,6 +204,7 @@
             </div>
           </form>
         </div>
+        {% endif %}
 
         <div id="labor-list">
           {% if order.labor_entries %}
@@ -153,25 +214,32 @@
                 <th class="text-left pb-2">Employee</th>
                 <th class="text-left pb-2">Dept</th>
                 <th class="text-right pb-2 pr-4">Hrs</th>
-                <th class="text-right pb-2">Total</th>
+                {% if can_see_financials %}<th class="text-right pb-2">Total</th>{% endif %}
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
               {% for l in order.labor_entries %}
-              <tr>
-                <td class="py-1.5">{{ l.employee.first_name }} {{ l.employee.last_name or '' }}</td>
+              <tr class="{% if l.is_rework %}bg-orange-50{% endif %}">
+                <td class="py-1.5">
+                  {% if l.is_rework %}
+                  <span class="inline-block px-1.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded mr-1">Rework</span>
+                  {% endif %}
+                  {{ l.employee.first_name if l.employee else '—' }} {{ l.employee.last_name if l.employee else '' }}
+                </td>
                 <td class="py-1.5 text-gray-500 capitalize">{{ l.billing_dept.value.replace('_',' ') }}</td>
                 <td class="py-1.5 text-right pr-4">{{ l.hours }}</td>
-                <td class="py-1.5 text-right font-medium">${{ '%.2f'|format(l.billed_value or 0) }}</td>
+                {% if can_see_financials %}<td class="py-1.5 text-right font-medium">${{ '%.2f'|format(l.billed_value or 0) }}</td>{% endif %}
               </tr>
               {% endfor %}
             </tbody>
+            {% if can_see_financials %}
             <tfoot class="border-t border-gray-200">
               <tr>
                 <td colspan="3" class="text-right pt-2 text-sm text-gray-500 font-medium">Labor Total</td>
                 <td class="text-right pt-2 font-bold">${{ '%.2f'|format(total_labor or 0) }}</td>
               </tr>
             </tfoot>
+            {% endif %}
           </table>
           {% else %}
           <p class="text-sm text-gray-400">No labor logged.</p>
@@ -180,57 +248,72 @@
       </div>
 
       <!-- QA Records -->
-      <div class="bg-white rounded-xl shadow p-5">
+      <div class="bg-white rounded-xl shadow p-5" id="qa">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">QA / Inspection</h2>
-          {% if user.role.value in ['owner','ops_manager','shop_foreman'] %}
+          {% if user.role.value in ['owner','ops_manager','shop_foreman'] and order.status.value == 'qa_review' %}
           <button onclick="toggleQAForm()" class="text-xs text-steel-mid hover:underline">+ Add QA Record</button>
           {% endif %}
         </div>
 
+        <!-- QA entry form -->
+        {% if user.role.value in ['owner','ops_manager','shop_foreman'] and order.status.value == 'qa_review' %}
         <div id="qa-form" class="hidden bg-steel-light rounded-lg p-4 mb-4">
           <form method="POST" action="/orders/{{ order.id }}/qa">
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs text-gray-500 mb-1">Result</label>
-                <select name="result" required class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                <select name="result" required id="qa-result-select"
+                  onchange="handleQAResultChange(this.value)"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
                   <option value="pass">Pass</option>
                   <option value="fail">Fail — Rework Required</option>
                   <option value="conditional">Conditional Pass</option>
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-gray-500 mb-1">Failure Reason</label>
-                <input type="text" name="failure_reason" placeholder="If fail/conditional…"
+                <label class="block text-xs text-gray-500 mb-1" id="failure-reason-label">Failure / Condition Note</label>
+                <input type="text" name="failure_reason" id="failure-reason"
+                  placeholder="Required for Fail or Conditional…"
                   class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
               </div>
               <div class="col-span-2">
-                <label class="block text-xs text-gray-500 mb-1">Rework Notes</label>
-                <textarea name="rework_notes" rows="2" placeholder="What needs to be redone…"
+                <label class="block text-xs text-gray-500 mb-1" id="rework-notes-label">Rework Notes</label>
+                <textarea name="rework_notes" id="rework-notes" rows="2"
+                  placeholder="Required for Fail — what needs to be redone…"
                   class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"></textarea>
               </div>
               <div class="col-span-2 flex justify-end">
-                <button type="submit" class="bg-steel-dark text-white text-sm px-4 py-1.5 rounded-md hover:bg-steel-mid transition">Save QA Record</button>
+                <button type="submit"
+                  class="bg-steel-dark text-white text-sm px-4 py-1.5 rounded-md hover:bg-steel-mid transition">
+                  Save QA Record
+                </button>
               </div>
             </div>
           </form>
         </div>
+        {% endif %}
 
+        <!-- QA records list -->
         <div id="qa-list">
           {% if order.qa_records %}
           <div class="space-y-2">
-            {% for qa in order.qa_records %}
+            {% for qa in order.qa_records | sort(attribute='inspected_at') %}
             <div class="flex items-start gap-3 text-sm">
-              <span class="mt-0.5 px-2 py-0.5 rounded text-xs font-medium
-                {% if qa.result == 'pass' %}bg-green-100 text-green-700
-                {% elif qa.result == 'fail' %}bg-red-100 text-red-700
-                {% else %}bg-yellow-100 text-yellow-700{% endif %}">
-                {{ qa.result.title() }}
+              <span class="mt-0.5 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap
+                {% if qa.result.value == 'pass' %}bg-green-100 text-green-700
+                {% elif qa.result.value == 'fail' %}bg-red-100 text-red-700
+                {% elif qa.result.value == 'conditional' %}bg-yellow-100 text-yellow-700
+                {% else %}bg-gray-100 text-gray-700{% endif %}">
+                {% if qa.result.value == 'pass' %}Pass
+                {% elif qa.result.value == 'fail' %}Fail — Rework Required
+                {% elif qa.result.value == 'conditional' %}Conditional Pass
+                {% else %}{{ qa.result.value }}{% endif %}
               </span>
               <div>
                 <span class="font-medium">{{ qa.inspector.first_name if qa.inspector else '—' }}</span>
-                <span class="text-gray-400 ml-2 text-xs">{{ qa.created_at.strftime('%b %-d, %Y') if qa.created_at else '' }}</span>
-                {% if qa.failure_reason %}<p class="text-gray-500 text-xs mt-0.5">{{ qa.failure_reason }}</p>{% endif %}
+                <span class="text-gray-400 ml-2 text-xs">{{ qa.inspected_at.strftime('%b %d, %Y').replace(' 0',' ') if qa.inspected_at else '' }}</span>
+                {% if qa.failure_reason %}<p class="text-gray-600 text-xs mt-0.5">{{ qa.failure_reason }}</p>{% endif %}
                 {% if qa.rework_notes %}<p class="text-gray-400 text-xs">↳ {{ qa.rework_notes }}</p>{% endif %}
               </div>
             </div>
@@ -244,30 +327,100 @@
 
     </div><!-- /left column -->
 
-    <!-- Right column: status + customer -->
+    <!-- Right column: status + customer + stages -->
     <div class="space-y-4">
 
       <!-- Status Update -->
       {% if next_statuses %}
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Update Status</h2>
+        {% set status_labels = {
+          'confirmed': 'Resume — Back to Confirmed' if order.status.value == 'on_hold' else 'Confirm Order',
+          'in_production': 'Resume Production' if order.status.value == 'on_hold' else 'Start Production',
+          'qa_review': 'Send to QA / Inspection',
+          'ready': 'Mark as Ready',
+          'delivered': 'Mark as Delivered',
+          'invoiced': 'Mark as Invoiced',
+          'paid': 'Mark as Paid',
+          'on_hold': 'Place on Hold',
+          'cancelled': 'Cancel Order'
+        } %}
         {% for ns in next_statuses %}
-        <form method="POST" action="/orders/{{ order.id }}/status" class="mb-2">
-          <input type="hidden" name="new_status" value="{{ ns.value }}"/>
-          {% if ns.value == 'on_hold' %}
-          <input type="text" name="hold_reason" placeholder="Hold reason (required)…"
-            class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs mb-1" required/>
+          {% if ns.value == 'qa_review' and total_hours == 0 %}
+          <div class="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+            &#x26D4; Cannot send to QA — log labor before inspection.
+          </div>
+          {% elif ns.value == 'ready' and has_qa_fail %}
+          <div class="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+            &#x26D4; Cannot mark Ready — open QA failure must be resolved first.
+          </div>
+          {% elif ns.value == 'invoiced' and not order.invoice %}
+          <div class="mb-2 text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            &#x26A0; Generate the invoice below before marking as Invoiced.
+          </div>
+          {% elif (ns.value == 'qa_review' and total_hours == 0) or (ns.value == 'ready' and has_qa_fail) %}
+          {# button already shown as blocked above — skip the form #}
+          {% else %}
+          <form method="POST" action="/orders/{{ order.id }}/status" class="mb-2">
+            <input type="hidden" name="new_status" value="{{ ns.value }}"/>
+            {% if ns.value == 'on_hold' %}
+            <input type="text" name="hold_reason" placeholder="Hold reason (required)..."
+              class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs mb-1" required/>
+            {% endif %}
+            <button type="submit" class="w-full text-sm py-2 px-4 rounded-lg border transition
+              {% if ns.value == 'cancelled' %}border-red-300 text-red-600 hover:bg-red-50
+              {% elif ns.value in ['ready','paid','delivered'] %}bg-green-600 text-white hover:bg-green-700 border-green-600
+              {% else %}bg-steel-mid text-white hover:bg-steel-dark border-steel-mid{% endif %}">
+              &#x2192; {{ status_labels.get(ns.value, ns.value.replace('_',' ').title()) }}
+            </button>
+          </form>
           {% endif %}
-          <button type="submit" class="w-full text-sm py-2 px-4 rounded-lg border transition
-            {% if ns.value == 'cancelled' %}border-red-300 text-red-600 hover:bg-red-50
-            {% elif ns.value in ['ready','paid','delivered'] %}bg-green-600 text-white hover:bg-green-700 border-green-600
-            {% else %}bg-steel-mid text-white hover:bg-steel-dark border-steel-mid{% endif %}">
-            → {{ ns.value.replace('_',' ').title() }}
-          </button>
-        </form>
         {% endfor %}
       </div>
       {% endif %}
+
+      <!-- Invoice Generator (delivered + management) -->
+      {% if order.status.value == 'delivered' and can_see_financials %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Generate Invoice</h2>
+        {% if order.invoice %}
+        <div class="text-sm text-green-700 font-medium">
+          &#x2713; Invoice exists:
+          <a href="/invoices/{{ order.invoice.id }}" class="underline hover:text-green-900">{{ order.invoice.invoice_number }}</a>
+        </div>
+        {% else %}
+        <form method="POST" action="/invoices/generate/{{ order.id }}" class="space-y-3">
+          {% set cpt = order.customer.payment_terms if order.customer and order.customer.payment_terms is not none else 0 %}
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Payment Terms</label>
+            <select name="due_days" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+              <option value="0" {% if cpt == 0 %}selected{% endif %}>Due on Receipt</option>
+              <option value="3" {% if cpt == 3 %}selected{% endif %}>Net 3</option>
+              <option value="7" {% if cpt == 7 %}selected{% endif %}>Net 7</option>
+              <option value="15" {% if cpt == 15 %}selected{% endif %}>Net 15</option>
+              <option value="30" {% if cpt == 30 %}selected{% endif %}>Net 30</option>
+              <option value="45" {% if cpt == 45 %}selected{% endif %}>Net 45</option>
+              <option value="60" {% if cpt == 60 %}selected{% endif %}>Net 60</option>
+              <option value="90" {% if cpt == 90 %}selected{% endif %}>Net 90</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Tax Rate (%)</label>
+            <input type="number" name="tax_rate" step="0.1" min="0" value="0"
+              class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+            <textarea name="notes" rows="2" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"></textarea>
+          </div>
+          <button type="submit" class="w-full bg-steel-dark text-white text-sm font-medium py-2 rounded-lg hover:bg-steel-mid transition">
+            Generate Invoice
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+
 
       <!-- Customer -->
       {% if order.customer %}
@@ -279,7 +432,7 @@
           {% if order.customer.phone %}<div class="text-gray-500">{{ order.customer.phone }}</div>{% endif %}
           {% if order.customer.email %}<div class="text-gray-500">{{ order.customer.email }}</div>{% endif %}
         </div>
-        <a href="/customers/{{ order.customer.id }}" class="text-xs text-steel-mid hover:underline mt-2 inline-block">View profile →</a>
+        <a href="/customers/{{ order.customer.id }}" class="text-xs text-steel-mid hover:underline mt-2 inline-block">View profile &#x2192;</a>
       </div>
       {% endif %}
 
@@ -287,39 +440,69 @@
       {% if order.production_stages %}
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Production Stages</h2>
-        <div class="space-y-2">
-          {% for stage in order.production_stages %}
-          <div class="flex items-center gap-2 text-sm">
-            <span class="w-2 h-2 rounded-full flex-shrink-0
-              {% if stage.completed_at %}bg-green-400
-              {% elif stage.started_at %}bg-blue-400
-              {% else %}bg-gray-200{% endif %}"></span>
-            <span class="{% if stage.completed_at %}text-gray-400 line-through{% endif %}">{{ stage.name }}</span>
-            {% if stage.completed_at %}<span class="text-xs text-gray-400 ml-auto">✓</span>{% endif %}
+        <div class="space-y-1.5">
+          {% set non_del = order.production_stages | selectattr('stage_type.value', 'ne', 'delivery') | list %}
+          {% set del_stages = order.production_stages | selectattr('stage_type.value', 'eq', 'delivery') | list %}
+          {% for stage in (non_del | sort(attribute='id')) + del_stages %}
+          <div class="flex items-center gap-2 text-sm rounded px-1.5 py-1
+            {% if stage.status.value == 'blocked' %}bg-red-50{% endif %}">
+            {% if stage.status.value == 'blocked' %}
+            <span class="text-red-500 font-bold flex-shrink-0">&#x2715;</span>
+            {% elif stage.completed_at %}
+            <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
+            {% elif stage.started_at %}
+            <span class="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"></span>
+            {% else %}
+            <span class="w-2 h-2 rounded-full bg-gray-200 flex-shrink-0"></span>
+            {% endif %}
+            <span class="flex-1 {% if stage.completed_at %}text-gray-400 line-through{% elif stage.status.value == 'blocked' %}text-red-600 font-medium{% endif %}">
+              {% if stage.stage_type.value == 'qa_qc' %}QA / Inspection{% else %}{{ stage.stage_type.value.replace('_',' ').title() }}{% endif %}
+              {% if stage.notes %}<span class="text-xs text-gray-500 font-normal ml-0.5">({{ stage.notes }})</span>{% endif %}
+            </span>
+            {% if stage.completed_at %}
+            <span class="text-xs text-gray-400">&#x2713;</span>
+            {% elif stage.status.value == 'blocked' %}
+            <span class="text-xs text-red-400">Blocked</span>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
       </div>
       {% endif %}
 
-      <!-- Quick info -->
+      <!-- View Invoice (invoiced or paid) -->
+      {% if order.invoice and order.status.value in ['invoiced', 'paid'] and can_see_financials %}
+      <div class="bg-white rounded-xl shadow p-4">
+        <a href="/invoices/{{ order.invoice.id }}"
+          class="flex items-center justify-between text-sm text-steel-mid hover:text-steel-dark font-medium">
+          <span>View Invoice</span>
+          <span class="font-mono">{{ order.invoice.invoice_number }} &#x2192;</span>
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- Financial Summary -->
+      {% if can_see_financials %}
       <div class="bg-steel-light rounded-xl p-5 text-sm">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-2">Summary</h2>
         <div class="space-y-1 text-gray-600">
+          {% set mat_sum = namespace(v=0) %}
+          {% for li in order.line_items %}{% set mat_sum.v = mat_sum.v + ((li.unit_price or 0) * li.quantity) %}{% endfor %}
           <div class="flex justify-between">
             <span>Material</span>
-            <span class="font-medium">${{ '%.2f'|format(order.line_items | map(attribute='unit_price') | select | sum or 0) }}</span>
+            <span class="font-medium">${{ '%.2f'|format(mat_sum.v) }}</span>
           </div>
           <div class="flex justify-between">
-            <span>Labor</span>
+            <span>Labor ({{ total_hours }}h)</span>
             <span class="font-medium">${{ '%.2f'|format(total_labor or 0) }}</span>
           </div>
           <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-semibold text-steel-dark">
             <span>Est. Total</span>
-            <span>${{ '%.2f'|format((order.line_items | map(attribute='unit_price') | select | sum or 0) + (total_labor or 0)) }}</span>
+            <span>${{ '%.2f'|format(mat_sum.v + (total_labor or 0)) }}</span>
           </div>
         </div>
       </div>
+      {% endif %}
 
     </div><!-- /right column -->
   </div><!-- /grid -->
@@ -328,12 +511,32 @@
 <script>
 function toggleLaborForm() {
   const f = document.getElementById('labor-form');
+  if (!f) return;
   f.classList.toggle('hidden');
+  if (!f.classList.contains('hidden')) {
+    const dp = document.getElementById('labor-date-picker');
+    if (dp && !dp.value) dp.value = '{{ today }}';
+  }
 }
 function toggleQAForm() {
   const f = document.getElementById('qa-form');
+  if (!f) return;
   f.classList.toggle('hidden');
+}
+function handleQAResultChange(val) {
+  const fr = document.getElementById('failure-reason');
+  const rn = document.getElementById('rework-notes');
+  if (!fr || !rn) return;
+  if (val === 'fail') {
+    fr.required = true; rn.required = true;
+    fr.style.borderColor = '#ef4444'; rn.style.borderColor = '#ef4444';
+  } else if (val === 'conditional') {
+    fr.required = true; rn.required = false;
+    fr.style.borderColor = '#f59e0b'; rn.style.borderColor = '';
+  } else {
+    fr.required = false; rn.required = false;
+    fr.style.borderColor = ''; rn.style.borderColor = '';
+  }
 }
 </script>
 {% endblock %}
-                                                                                     

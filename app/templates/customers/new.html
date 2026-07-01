@@ -16,29 +16,59 @@
     </div>
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">Company</label>
-      <input type="text" name="company" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+      <input type="text" name="company" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
     </div>
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-        <input type="tel" name="phone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+        <input type="tel" name="phone" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-        <input type="email" name="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+        <input type="email" name="email" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
       </div>
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
-      <input type="text" name="address" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+      <input type="text" name="address_line1" required placeholder="123 Main St" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+    </div>
+    <div class="grid grid-cols-5 gap-3">
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
+        <input type="text" name="city" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">State/Prov</label>
+        <input type="text" name="state" required maxlength="3" placeholder="ON" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm uppercase"/>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
+        <input type="text" name="zip_code" required placeholder="A1B 2C3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+      </div>
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-      <textarea name="notes" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Default Payment Terms</label>
+      <select name="payment_terms" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <option value="0" selected>Due on Receipt</option>
+        <option value="3">Net 3</option>
+        <option value="7">Net 7</option>
+        <option value="15">Net 15</option>
+        <option value="30">Net 30</option>
+        <option value="45">Net 45</option>
+        <option value="60">Net 60</option>
+        <option value="90">Net 90</option>
+      </select>
     </div>
-    <div class="flex justify-end gap-3 pt-2">
-      <a href="{{ next }}" class="px-5 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Cancel</a>
-      <button type="submit" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-6 py-2 rounded-lg transition">Save Customer</button>
+    <div>
+      <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Notes</label>
+      <textarea name="notes" rows="3" placeholder="Internal notes..."
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid"></textarea>
+    </div>
+    <div class="pt-2">
+      <button type="submit"
+        class="w-full bg-steel-dark text-white font-medium py-2 rounded-lg hover:bg-steel-mid transition text-sm">
+        Create Customer
+      </button>
     </div>
   </form>
 </div>

@@ -12,8 +12,12 @@ class Customer(Base):
     company: Mapped[str | None] = mapped_column(String(200))
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str | None] = mapped_column(String(200))
-    address: Mapped[str | None] = mapped_column(String(500))
+    address_line1: Mapped[str | None] = mapped_column(String(300))
+    city: Mapped[str | None] = mapped_column(String(100))
+    state: Mapped[str | None] = mapped_column(String(50))
+    zip_code: Mapped[str | None] = mapped_column(String(20))
     notes: Mapped[str | None] = mapped_column(String(2000))
+    payment_terms: Mapped[int | None] = mapped_column(Integer, nullable=True)  # days: 0=due on receipt
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -34,6 +38,8 @@ class Contact(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     title: Mapped[str | None] = mapped_column(String(100))
     phone: Mapped[str | None] = mapped_column(String(30))
-    email: Mapped[str | None] = mapped_column(String(200))
+    email: Mapped[str |None] = mapped_column(String(200))
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
 
     customer = relationship("Customer", back_populates="contacts")

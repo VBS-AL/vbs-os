@@ -21,28 +21,47 @@
   <table class="w-full text-sm">
     <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
       <tr>
-        <th class="px-4 py-3 text-left">Name</th>
-        <th class="px-4 py-3 text-left">Company</th>
+        {% macro sort_link(label, key, align='left') %}
+          {% set next_dir = 'desc' if (sort_by == key and sort_dir == 'asc') else 'asc' %}
+          <th class="px-4 py-3 text-{{ align }}">
+            <a href="?{% for k,v in request.query_params.items() %}{% if k not in ['sort_by','sort_dir'] %}{{ k }}={{ v }}&{% endif %}{% endfor %}sort_by={{ key }}&sort_dir={{ next_dir }}"
+               class="hover:text-steel-mid inline-flex items-center gap-1 {% if sort_by == key %}text-steel-mid{% endif %}">
+              {{ label }}
+              {% if sort_by == key %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}<span class="text-gray-300">⇅</span>{% endif %}
+            </a>
+          </th>
+        {% endmacro %}
+        {{ sort_link('Name', 'name') }}
+        {{ sort_link('Company', 'company') }}
         <th class="px-4 py-3 text-left">Phone</th>
         <th class="px-4 py-3 text-left">Email</th>
-        <th class="px-4 py-3 text-left">Orders</th>
+        {{ sort_link('City', 'city') }}
+        {{ sort_link('Orders', 'orders', 'right') }}
+        {{ sort_link('Total Value', 'total_value', 'right') }}
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for c in customers %}
-      <tr class="hover:bg-steel-light cursor-pointer transition" onclick="window.location='/customers/{{ c.id }}'">
-        <td class="px-4 py-3 font-medium">{{ c.name }}</td>
+      <tr class="hover:bg-steel-light cursor-pointer" onclick="window.location='/customers/{{ c.id }}'">
+        <td class="px-4 py-3 font-medium text-steel-dark">
+          <a href="/customers/{{ c.id }}" class="hover:underline">{{ c.name }}</a>
+        </td>
         <td class="px-4 py-3 text-gray-500">{{ c.company or '—' }}</td>
         <td class="px-4 py-3 text-gray-500">{{ c.phone or '—' }}</td>
         <td class="px-4 py-3 text-gray-500">{{ c.email or '—' }}</td>
-        <td class="px-4 py-3 text-gray-400">{{ c.orders|length }}</td>
+        <td class="px-4 py-3 text-gray-500">{{ c.city or '—' }}</td>
+        <td class="px-4 py-3 text-right text-gray-500">{{ c.orders|length }}</td>
+        {% if can_see_financials %}
+        <td class="px-4 py-3 text-right font-medium">
+          {% set ns = namespace(t=0) %}
+          {% for o in c.orders %}{% for li in o.line_items %}{% set ns.t = ns.t + ((li.unit_price or 0) * li.quantity) %}{% endfor %}{% endfor %}
+          ${{ '%.2f'|format(ns.t) }}
+        </td>
+        {% endif %}
       </tr>
       {% else %}
       <tr>
-        <td colspan="5" class="px-4 py-12 text-center text-gray-400">
-          No customers found.
-          <a href="/customers/new" class="text-steel-mid hover:underline ml-1">Add one.</a>
-        </td>
+        <td colspan="7" class="px-4 py-8 text-center text-gray-400 italic">No customers found.</td>
       </tr>
       {% endfor %}
     </tbody>

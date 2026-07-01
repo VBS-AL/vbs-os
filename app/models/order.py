@@ -43,6 +43,7 @@ class Order(Base):
     ship_date           = Column(Date, nullable=True)
     hold_reason         = Column(Text, nullable=True)
     hold_owner          = Column(String, nullable=True)
+    previous_status     = Column(SAEnum(OrderStatus), nullable=True)  # status before on_hold
     rework_count        = Column(Integer, default=0)
     notification_sent   = Column(Boolean, default=False)
     notification_method = Column(String, nullable=True)

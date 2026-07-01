@@ -7,10 +7,13 @@ from contextlib import asynccontextmanager
 
 from app.database import Base, engine, get_db
 from app.models import *   # registers all models
-from app.auth import get_current_user
+from app.auth import get_current_user, financials_visible
 from app.routers import auth as auth_router
 from app.routers import orders as orders_router
 from app.routers import customers as customers_router
+from app.routers import users as users_router
+from app.routers import invoices as invoices_router
+from app.routers import quotes as quotes_router
 
 # ── Number sequencing helpers ─────────────────────────────────────────────
 import re
@@ -60,6 +63,9 @@ templates = Jinja2Templates(directory="app/templates")
 app.include_router(auth_router.router)
 app.include_router(orders_router.router)
 app.include_router(customers_router.router)
+app.include_router(users_router.router)
+app.include_router(invoices_router.router)
+app.include_router(quotes_router.router)
 
 # ── Root redirect ─────────────────────────────────────────────────────────
 @app.get("/")
@@ -85,4 +91,5 @@ async def dashboard(request: Request, user=Depends(get_current_user), db: Sessio
         "user": user,
         "active_orders": active_orders,
         "overdue_invoices": overdue_invoices,
+        "can_see_financials": financials_visible(user),
     })
