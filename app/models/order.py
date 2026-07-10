@@ -10,16 +10,16 @@ class JobType(str, enum.Enum):
     structural  = "structural"
 
 class OrderStatus(str, enum.Enum):
-    draft       = "draft"
-    confirmed   = "confirmed"
+    draft         = "draft"
+    confirmed     = "confirmed"
     in_production = "in_production"
-    on_hold     = "on_hold"
-    qa_review   = "qa_review"
-    ready       = "ready"
-    delivered   = "delivered"
-    invoiced    = "invoiced"
-    paid        = "paid"
-    cancelled   = "cancelled"
+    on_hold       = "on_hold"
+    qa_review     = "qa_review"
+    ready         = "ready"
+    delivered     = "delivered"
+    invoiced      = "invoiced"
+    paid          = "paid"
+    cancelled     = "cancelled"
 
 class Priority(str, enum.Enum):
     standard = "standard"
@@ -30,7 +30,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id                  = Column(Integer, primary_key=True, index=True)
-    order_number        = Column(String, unique=True, index=True)  # VBS-O-YY-#####
+    order_number        = Column(String, unique=True, index=True)
     customer_id         = Column(Integer, ForeignKey("customers.id"), nullable=False)
     quote_id            = Column(Integer, ForeignKey("quotes.id"), nullable=True)
     job_type            = Column(SAEnum(JobType), nullable=False)
@@ -38,12 +38,12 @@ class Order(Base):
     priority            = Column(SAEnum(Priority), default=Priority.standard)
     description         = Column(Text, nullable=True)
     drawings_required   = Column(Boolean, default=False)
-    paint_spec          = Column(String, nullable=True)   # job-level paint spec
+    paint_spec          = Column(String, nullable=True)
     promised_date       = Column(Date, nullable=True)
     ship_date           = Column(Date, nullable=True)
     hold_reason         = Column(Text, nullable=True)
     hold_owner          = Column(String, nullable=True)
-    previous_status     = Column(SAEnum(OrderStatus), nullable=True)  # status before on_hold
+    previous_status     = Column(SAEnum(OrderStatus), nullable=True)
     rework_count        = Column(Integer, default=0)
     notification_sent   = Column(Boolean, default=False)
     notification_method = Column(String, nullable=True)
@@ -61,19 +61,25 @@ class Order(Base):
     drawing_records     = relationship("DrawingRecord", back_populates="order")
     invoice             = relationship("Invoice", back_populates="order", uselist=False)
     scrap_records       = relationship("ScrapRecord", back_populates="order")
+    work_sessions       = relationship("WorkSession", back_populates="order")
 
 class OrderLineItem(Base):
     __tablename__ = "order_line_items"
 
-    id              = Column(Integer, primary_key=True, index=True)
-    order_id        = Column(Integer, ForeignKey("orders.id"), nullable=False)
-    line_number     = Column(Integer, nullable=False)
-    description     = Column(Text, nullable=False)
-    quantity        = Column(Float, nullable=False, default=1)
-    unit            = Column(String, nullable=True)
-    material        = Column(String, nullable=True)
-    paint_override  = Column(String, nullable=True)  # optional line-item paint override
-    unit_price      = Column(Float, nullable=True)
-    notes           = Column(Text, nullable=True)
+    id                    = Column(Integer, primary_key=True, index=True)
+    order_id              = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    line_number           = Column(Integer, nullable=False)
+    description           = Column(Text, nullable=False)
+    quantity              = Column(Float, nullable=False, default=1)
+    unit                  = Column(String, nullable=True)
+    material              = Column(String, nullable=True)
+    paint_override        = Column(String, nullable=True)
+    unit_price            = Column(Float, nullable=True)
+    notes                 = Column(Text, nullable=True)
+    inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
+    estimated_labor_hours = Column(Float, nullable=True)
+    estimated_labor_dept  = Column(String, nullable=True)
+    is_delivery_surcharge = Column(Boolean, default=False)
 
-    order           = relationship("Order", back_populates="line_items")
+    order                 = relationship("Order", back_populates="line_items")
+    inventory_item        = relationship("InventoryItem")

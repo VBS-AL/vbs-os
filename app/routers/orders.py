@@ -13,6 +13,7 @@ from app.models.order import Order, OrderLineItem, OrderStatus, JobType, Priorit
 from app.models.customer import Customer
 from app.models.production import ProductionStage, StageType, StageStatus, QARecord, QAResult
 from app.models.labor import LaborEntry, BillingDept, BILLING_RATES
+from app.models.work_session import WorkSession, SessionStatus
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 templates = Jinja2Templates(directory="app/templates")
@@ -51,8 +52,12 @@ async def order_list(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Order).options(joinedload(Order.customer), joinedload(Order.line_items))
-    if status:
+    query = db.query(Order).options(joinedload(Order.customer), joinedload(Order.line_items), joinedload(Order.labor_entries))
+    if status == "active":
+        query = query.filter(Order.status.notin_([OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled]))
+    elif status == "wip":
+        query = query.filter(Order.status.in_([OrderStatus.in_production, OrderStatus.on_hold, OrderStatus.qa_review, OrderStatus.ready]))
+    elif status:
         query = query.filter(Order.status == status)
     if job_type:
         query = query.filter(Order.job_type == job_type)
@@ -64,10 +69,12 @@ async def order_list(
         )
     sort_map = {
         "order_number": Order.order_number,
-        "status": Order.status,
-        "priority": Order.priority,
-        "promised_date": Order.promised_date,
-        "created_at": Order.created_at,
+        "status":       Order.status,
+        "priority":     Order.priority,
+        "promised_date":Order.promised_date,
+        "job_type":     Order.job_type,
+        "created":      Order.created_at,
+        "created_at":   Order.created_at,
     }
     if sort_by and sort_by in sort_map:
         col = sort_map[sort_by]
@@ -103,9 +110,22 @@ async def create_order(
     customer_id: int = Form(...), job_type: str = Form(...), priority: str = Form("standard"),
     description: str = Form(""), drawings_required: bool = Form(False), paint_spec: str = Form(""),
     promised_date: str = Form(""), notes: str = Form(""),
+    delivery_surcharge: str = Form(""),
     user: User = Depends(require_user), db: Session = Depends(get_db),
 ):
     form = await request.form()
+
+    if not promised_date:
+        customers = db.query(Customer).filter(Customer.is_active == True).order_by(Customer.name).all()
+        return templates.TemplateResponse("orders/new.html", {
+            "request": request, "user": user,
+            "customers": customers,
+            "job_types": JobType, "priorities": Priority,
+            "error": "A promised date is required on every order.",
+            "today": date.today().isoformat(),
+            "can_see_financials": financials_visible(user),
+        }, status_code=422)
+
     order_num = next_order_number(db)
     order = Order(
         order_number=order_num, customer_id=customer_id, job_type=job_type, priority=priority,
@@ -120,6 +140,10 @@ async def create_order(
     while f"li_desc_{idx}" in form:
         desc = form.get(f"li_desc_{idx}", "").strip()
         if desc:
+            inv_id_raw = form.get(f"li_inv_id_{idx}", "").strip()
+            inv_id = int(inv_id_raw) if inv_id_raw else None
+            labor_hrs = float(form.get(f"li_labor_{idx}") or 0) or None
+            labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
             db.add(OrderLineItem(
                 order_id=order.id, line_number=idx + 1, description=desc,
                 quantity=float(form.get(f"li_qty_{idx}", 1) or 1),
@@ -127,8 +151,22 @@ async def create_order(
                 material=form.get(f"li_material_{idx}", "").strip() or None,
                 unit_price=float(form.get(f"li_price_{idx}") or 0) or None,
                 paint_override=form.get(f"li_paint_{idx}", "").strip() or None,
+                inventory_item_id=inv_id,
+                estimated_labor_hours=labor_hrs,
+                estimated_labor_dept=labor_dept,
             ))
         idx += 1
+
+    # Delivery surcharge
+    surcharge_amount = float(delivery_surcharge) if delivery_surcharge else None
+    if surcharge_amount and surcharge_amount > 0:
+        db.add(OrderLineItem(
+            order_id=order.id, line_number=idx + 1,
+            description="Delivery",
+            quantity=1, unit_price=surcharge_amount,
+            is_delivery_surcharge=True,
+        ))
+
     for s in [StageType.material_receiving, StageType.drawings if drawings_required else None, StageType.fabrication, StageType.qa_qc, StageType.delivery]:
         if s:
             db.add(ProductionStage(order_id=order.id, stage_type=s))
@@ -137,8 +175,11 @@ async def create_order(
 
 @router.get("/{order_id}", response_class=HTMLResponse)
 async def order_detail(request: Request, order_id: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    from app.models.inventory import InventoryItem as InvItem
     order = db.query(Order).options(
-        joinedload(Order.customer), joinedload(Order.line_items), joinedload(Order.production_stages),
+        joinedload(Order.customer),
+        joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
+        joinedload(Order.production_stages).joinedload(ProductionStage.assigned_to),
         joinedload(Order.labor_entries).joinedload(LaborEntry.employee),
         joinedload(Order.qa_records), joinedload(Order.drawing_records), joinedload(Order.invoice),
     ).filter(Order.id == order_id).first()
@@ -151,12 +192,35 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
     if order.status == OrderStatus.on_hold:
         resume = order.previous_status
         if resume is None:
-            # Legacy orders: infer from labor entries
             resume = OrderStatus.in_production if order.labor_entries else OrderStatus.confirmed
         next_statuses = [resume] + next_statuses
     total_labor = sum(e.billed_value for e in order.labor_entries)
     total_hours = sum(e.hours for e in order.labor_entries)
     employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
+
+    # Active work sessions
+    active_sessions = db.query(WorkSession).options(
+        joinedload(WorkSession.employee)
+    ).filter(
+        WorkSession.order_id == order_id,
+        WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+    ).all()
+    active_session_by_stage = {s.stage_id: s for s in active_sessions}
+
+    # Inventory shortage detection (shown when inv_block=1 redirect arrives)
+    inv_block = request.query_params.get("inv_block") == "1"
+    inv_shortages = []
+    if inv_block or order.status == OrderStatus.confirmed:
+        for li in order.line_items:
+            if li.inventory_item and (li.inventory_item.quantity_on_hand or 0) < (li.quantity or 0):
+                inv_shortages.append({
+                    "name":  li.inventory_item.name,
+                    "sku":   li.inventory_item.sku,
+                    "have":  li.inventory_item.quantity_on_hand or 0,
+                    "need":  li.quantity,
+                    "unit":  li.inventory_item.unit,
+                })
+
     return templates.TemplateResponse("orders/detail.html", {
         "request": request, "user": user, "order": order,
         "next_statuses": next_statuses, "has_qa_fail": has_qa_fail,
@@ -164,6 +228,10 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
         "employees": employees, "billing_depts": BillingDept, "billing_rates": BILLING_RATES,
         "qa_results": QAResult, "stage_types": StageType, "today": date.today().isoformat(),
         "can_see_financials": financials_visible(user),
+        "active_session_by_stage": active_session_by_stage,
+        "now_utc": datetime.utcnow(),
+        "inv_block": inv_block,
+        "inv_shortages": inv_shortages,
     })
 
 @router.post("/{order_id}/promised-date")
@@ -250,6 +318,57 @@ async def update_status(
             if stage.stage_type == StageType.delivery:
                 stage.status = StageStatus.complete
                 stage.completed_at = now
+    # ── Inventory availability check ──────────────────────────────────────
+    from app.models.inventory import InventoryItem as InvItem, InventoryAdjustment, AdjustmentReason
+    if target == OrderStatus.in_production and order.status == OrderStatus.confirmed:
+        shortages = []
+        for li in order.line_items:
+            if li.inventory_item_id:
+                inv = db.query(InvItem).filter(InvItem.id == li.inventory_item_id).first()
+                if inv and (inv.quantity_on_hand or 0) < (li.quantity or 0):
+                    shortages.append(inv.sku or inv.name)
+        if shortages:
+            return RedirectResponse(
+                f"/orders/{order_id}?inv_block=1",
+                status_code=302,
+            )
+
+    # ── Inventory auto-deduct / auto-reverse ──────────────────────────────
+    if target == OrderStatus.in_production and order.status == OrderStatus.confirmed:
+        # Deduct stock for all inventory-linked line items
+        for li in order.line_items:
+            if li.inventory_item_id:
+                inv = db.query(InvItem).filter(InvItem.id == li.inventory_item_id).first()
+                if inv:
+                    inv.quantity_on_hand = (inv.quantity_on_hand or 0) - li.quantity
+                    db.add(InventoryAdjustment(
+                        item_id=inv.id,
+                        delta=-li.quantity,
+                        reason=AdjustmentReason.used,
+                        order_id=order.id,
+                        notes=f"Auto-deducted for order {order.order_number}",
+                        recorded_by_id=user.id,
+                    ))
+    if target == OrderStatus.cancelled:
+        # Reverse any prior deductions tied to this order
+        prior = db.query(InventoryAdjustment).filter(
+            InventoryAdjustment.order_id == order.id,
+            InventoryAdjustment.reason == AdjustmentReason.used,
+            InventoryAdjustment.delta < 0,
+        ).all()
+        for deduction in prior:
+            inv = db.query(InvItem).filter(InvItem.id == deduction.item_id).first()
+            if inv:
+                inv.quantity_on_hand = (inv.quantity_on_hand or 0) + abs(deduction.delta)
+                db.add(InventoryAdjustment(
+                    item_id=inv.id,
+                    delta=abs(deduction.delta),
+                    reason=AdjustmentReason.correction,
+                    order_id=order.id,
+                    notes=f"Auto-reversed: order {order.order_number} cancelled",
+                    recorded_by_id=user.id,
+                ))
+
     if target == OrderStatus.on_hold:
         order.previous_status = order.status  # remember where we came from
         order.hold_reason = hold_reason.strip()

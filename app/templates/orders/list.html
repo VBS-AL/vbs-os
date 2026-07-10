@@ -5,7 +5,25 @@
 <div class="flex items-center justify-between mb-6">
   <div>
     <h1 class="text-2xl font-bold text-steel-dark">Orders</h1>
-    <p class="text-sm text-gray-500 mt-0.5">{{ orders|length }} order{{ 's' if orders|length != 1 }}</p>
+    <p class="text-sm text-gray-500 mt-0.5">{{ orders|length }} order{{ 's' if orders|length != 1 }}
+      {% if filters.status %}
+        {% set label_map = {
+          'active': 'Active (all)',
+          'wip': 'Active WIP — In Shop',
+          'confirmed': 'Confirmed',
+          'in_production': 'In Production',
+          'qa_review': 'QA / Inspection',
+          'ready': 'Ready to Deliver',
+          'on_hold': 'On Hold',
+          'delivered': 'Delivered',
+          'invoiced': 'Invoiced',
+          'paid': 'Paid',
+          'cancelled': 'Cancelled'
+        } %}
+        <span class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-steel-mid text-white">{{ label_map.get(filters.status, filters.status) }}</span>
+        <a href="/orders" class="ml-1 text-xs text-gray-400 hover:text-gray-600">✕ clear</a>
+      {% endif %}
+    </p>
   </div>
   <a href="/orders/new" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">+ New Order</a>
 </div>
@@ -14,7 +32,8 @@
 <form method="GET" class="bg-white rounded-xl shadow p-4 mb-6 flex flex-wrap gap-3 items-end">
   <div class="flex-1 min-w-[160px]">
     <label class="block text-xs text-gray-500 mb-1">Search</label>
-    <input name="q" value="{{ filters.q or '' }}" placeholder="Order # or customer…"
+    <input name="q" id="order-quick-filter" value="{{ filters.q or '' }}" placeholder="Order # or customer…"
+      autocomplete="off"
       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
   </div>
   <div>
@@ -52,20 +71,43 @@
 <div class="bg-white rounded-xl shadow overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      {% macro sort_link(label, key, align='left') %}
+        {% set next_dir = 'desc' if (sort_by == key and sort_dir == 'asc') else 'asc' %}
+        <th class="px-4 py-3 text-{{ align }}">
+          <a href="?{% for k,v in request.query_params.items() %}{% if k not in ['sort_by','sort_dir'] %}{{ k }}={{ v }}&{% endif %}{% endfor %}sort_by={{ key }}&sort_dir={{ next_dir }}"
+             class="hover:text-steel-mid inline-flex items-center gap-1 {% if sort_by == key %}text-steel-mid{% endif %}">
+            {{ label }}
+            {% if sort_by == key %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}<span class="text-gray-300">⇅</span>{% endif %}
+          </a>
+        </th>
+      {% endmacro %}
       <tr>
-        <th class="px-4 py-3 text-left">Order #</th>
-        <th class="px-4 py-3 text-left">Customer</th>
-        <th class="px-4 py-3 text-left">Type</th>
-        <th class="px-4 py-3 text-left">Status</th>
-        <th class="px-4 py-3 text-left">Priority</th>
-        <th class="px-4 py-3 text-left">Due</th>
-        {% if can_see_financials %}<th class="px-4 py-3 text-right">Total</th>{% endif %}
-        <th class="px-4 py-3 text-left">Created</th>
+        {{ sort_link('Order #', 'order_number') }}
+        {{ sort_link('Customer', 'customer') }}
+        {{ sort_link('Type', 'job_type') }}
+        {{ sort_link('Status', 'status') }}
+        {{ sort_link('Priority', 'priority') }}
+        {{ sort_link('Due', 'promised_date') }}
+        {% if can_see_financials %}
+        <th class="px-4 py-3 text-right">
+          <a href="?{% for k,v in request.query_params.items() %}{% if k not in ['sort_by','sort_dir'] %}{{ k }}={{ v }}&{% endif %}{% endfor %}sort_by=total&sort_dir={{ 'desc' if (sort_by == 'total' and sort_dir == 'asc') else 'asc' }}"
+             class="hover:text-steel-mid inline-flex items-center justify-end gap-1 {% if sort_by == 'total' %}text-steel-mid{% endif %}">
+            Total
+            <span class="font-normal text-xs whitespace-nowrap">
+              <span class="text-indigo-400">●</span><span class="text-gray-400">est</span>
+              <span class="text-green-500 ml-1">●</span><span class="text-gray-400">actual</span>
+            </span>
+            {% if sort_by == 'total' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}<span class="text-gray-300">⇅</span>{% endif %}
+          </a>
+        </th>
+        {% endif %}
+        {{ sort_link('Created', 'created') }}
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for o in orders %}
-      <tr class="hover:bg-steel-light cursor-pointer transition" onclick="window.location='/orders/{{ o.id }}'">
+      <tr class="hover:bg-steel-light cursor-pointer transition order-row" onclick="window.location='/orders/{{ o.id }}'"
+          data-search="{{ o.order_number }} {{ o.customer.name if o.customer else '' }} {{ o.status.value }} {{ o.job_type.value }}">
         <td class="px-4 py-3 font-mono font-semibold text-steel-mid">{{ o.order_number }}</td>
         <td class="px-4 py-3 font-medium">{{ o.customer.name if o.customer else '—' }}</td>
         <td class="px-4 py-3 text-gray-600 capitalize">{{ o.job_type.value.replace('_',' ') }}</td>
@@ -89,8 +131,23 @@
         </td>
         <td class="px-4 py-3 text-gray-500">{{ o.promised_date or '—' }}</td>
         {% if can_see_financials %}
+        {% set lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% set ns = namespace(mat=0, est_labor=0, actual_labor=0) %}
+        {% for li in o.line_items %}
+          {% set ns.mat = ns.mat + (li.unit_price or 0) * li.quantity %}
+          {% if li.estimated_labor_hours and li.estimated_labor_dept and li.estimated_labor_dept in lr %}
+            {% set ns.est_labor = ns.est_labor + li.estimated_labor_hours * lr[li.estimated_labor_dept] %}
+          {% endif %}
+        {% endfor %}
+        {% for le in o.labor_entries %}
+          {% set ns.actual_labor = ns.actual_labor + (le.billed_value or 0) %}
+        {% endfor %}
         <td class="px-4 py-3 text-right font-medium">
-          {% set ns = namespace(t=0) %}{% for li in o.line_items %}{% set ns.t = ns.t + ((li.unit_price or 0) * li.quantity) %}{% endfor %}${{ '%.2f'|format(ns.t) }}
+          {% if ns.actual_labor > 0 %}
+            <span class="text-green-600">${{ '%.2f'|format(ns.mat + ns.actual_labor) }}</span>
+          {% else %}
+            <span class="text-indigo-500">${{ '%.2f'|format(ns.mat + ns.est_labor) }}</span>
+          {% endif %}
         </td>
         {% endif %}
         <td class="px-4 py-3 text-gray-400 text-xs">{{ o.created_at.strftime('%b %d').replace(' 0',' ') if o.created_at else '—' }}</td>
@@ -106,4 +163,17 @@
     </tbody>
   </table>
 </div>
+
+<script>
+(function() {
+  const input = document.getElementById('order-quick-filter');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    const q = this.value.toLowerCase().trim();
+    document.querySelectorAll('tr.order-row').forEach(function(row) {
+      row.style.display = (!q || row.dataset.search.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+})();
+</script>
 {% endblock %}

@@ -63,16 +63,26 @@
         </tr>
       </thead>
       <tbody>
-        {% set ns = namespace(total=0) %}
-        {% for li in quote.line_items %}
-        {% set ns.total = ns.total + ((li.unit_price or 0) * li.quantity) %}
+        {% set ns = namespace(total=0, delivery=0) %}
+        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% for li in quote.line_items | sort(attribute='line_number') %}
+        {% if li.is_delivery_surcharge %}
+          {% set ns.delivery = ns.delivery + (li.unit_price or 0) * li.quantity %}
+          {% set ns.total = ns.total + (li.unit_price or 0) * li.quantity %}
+        {% else %}
+        {% set mat = (li.unit_price or 0) * li.quantity %}
+        {% set labor = (li.estimated_labor_hours or 0) * labor_rates.get(li.estimated_labor_dept or '', 0) %}
+        {% set line_total = mat + labor %}
+        {% set unit_price = line_total / li.quantity if li.quantity else 0 %}
+        {% set ns.total = ns.total + line_total %}
         <tr class="border-b border-gray-100">
           <td class="py-2">{{ li.description }}</td>
-          <td class="py-2 text-gray-500 text-xs">{{ li.paint_spec or quote.paint_spec or '—' }}</td>
+          <td class="py-2 text-gray-500 text-xs">{{ li.paint_override or quote.paint_spec or '—' }}</td>
           <td class="text-right pr-4 py-2">{{ li.quantity }}</td>
-          <td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
-          <td class="text-right py-2">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>
+          <td class="text-right pr-4 py-2">${{ '%.2f'|format(unit_price) }}</td>
+          <td class="text-right py-2">${{ '%.2f'|format(line_total) }}</td>
         </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -80,6 +90,11 @@
 
   <div class="flex justify-end mb-8">
     <div class="w-64 text-sm space-y-2">
+      {% if ns.delivery > 0 %}
+      <div class="flex justify-between text-gray-600 border-t border-gray-200 pt-2">
+        <span>🚚 Delivery</span><span>${{ '%.2f'|format(ns.delivery) }}</span>
+      </div>
+      {% endif %}
       <div class="flex justify-between font-bold text-lg border-t-2 border-gray-800 pt-2">
         <span>Estimated Total</span><span>${{ '%.2f'|format(ns.total) }}</span>
       </div>

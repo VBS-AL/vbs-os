@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }} — Inventory{% endblock %}
+{% block content %}
+
+<!-- Header -->
+<div class="flex items-start justify-between mb-6">
+  <div>
+    <p class="text-xs font-mono text-gray-400 mb-1">{{ item.sku or '—' }}</p>
+    <h1 class="text-2xl font-bold text-steel-dark">{{ item.name }}</h1>
+    <p class="text-sm text-gray-500">{{ category_labels[item.category.value] }}</p>
+  </div>
+  <a href="/inventory/{{ item.id }}/edit"
+     class="bg-steel-dark text-white text-sm px-4 py-2 rounded-lg hover:bg-steel-mid transition">
+    Edit Item
+  </a>
+</div>
+
+<div class="grid grid-cols-3 gap-6">
+
+  <!-- Left: details -->
+  <div class="col-span-2 space-y-6">
+
+    <!-- Stock card -->
+    <div class="bg-white rounded-xl shadow p-6">
+      <h2 class="font-semibold text-steel-dark mb-4">Stock Level</h2>
+      {% set is_low = item.reorder_threshold is not none and item.quantity_on_hand <= item.reorder_threshold %}
+      <div class="flex items-end gap-6 mb-4">
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wide">On Hand</p>
+          <p class="text-4xl font-bold {% if is_low %}text-red-600{% else %}text-steel-dark{% endif %} mt-1">
+            {{ item.quantity_on_hand|round(2) }}
+          </p>
+          <p class="text-sm text-gray-400">{{ item.unit }}</p>
+        </div>
+        {% if item.reorder_threshold %}
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Reorder At</p>
+          <p class="text-2xl font-semibold text-gray-600 mt-1">{{ item.reorder_threshold|round(2) }}</p>
+          <p class="text-sm text-gray-400">{{ item.unit }}</p>
+        </div>
+        {% endif %}
+        {% if can_see_financials and item.cost_per_unit %}
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Stock Value</p>
+          <p class="text-2xl font-semibold text-emerald-700 mt-1">
+            ${{ "{:,.2f}".format(item.quantity_on_hand * item.cost_per_unit) }}
+          </p>
+          <p class="text-sm text-gray-400">${{ "%.2f"|format(item.cost_per_unit) }} / {{ item.unit }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% if is_low %}
+      <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-700 font-medium">
+        ⚠ Stock is at or below reorder threshold
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Adjust stock -->
+    <div class="bg-white rounded-xl shadow p-6">
+      <h2 class="font-semibold text-steel-dark mb-4">Adjust Stock</h2>
+      <form method="post" action="/inventory/{{ item.id }}/adjust" class="space-y-4">
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="action" value="add" checked class="text-steel-mid">
+            <span class="text-sm font-medium text-green-700">Add Stock</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="action" value="remove" class="text-steel-mid">
+            <span class="text-sm font-medium text-red-600">Remove Stock</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Amount ({{ item.unit }})</label>
+            <input type="number" name="amount" step="1" min="1" required
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Reason</label>
+            <select name="reason" required
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+              {% for r in reasons %}
+              <option value="{{ r.value }}">{{ reason_labels[r.value] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+            <input type="text" name="notes" placeholder="Optional note…"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          </div>
+        </div>
+        <button type="submit"
+                class="bg-steel-dark text-white px-5 py-2 rounded-lg text-sm hover:bg-steel-mid transition font-medium">
+          Record Adjustment
+        </button>
+      </form>
+    </div>
+
+    <!-- Adjustment history -->
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <div class="px-6 py-4 border-b">
+        <h2 class="font-semibold text-steel-dark">Adjustment History</h2>
+      </div>
+      <table class="w-full text-sm">
+        <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-4 py-3 text-left">Date</th>
+            <th class="px-4 py-3 text-left">Reason</th>
+            <th class="px-4 py-3 text-right">Change</th>
+            <th class="px-4 py-3 text-left">Notes</th>
+            <th class="px-4 py-3 text-left">Recorded By</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for adj in item.adjustments %}
+          <tr>
+            <td class="px-4 py-3 text-gray-500 text-xs">
+              {{ adj.created_at.strftime('%b %d, %Y %I:%M %p') if adj.created_at else '—' }}
+            </td>
+            <td class="px-4 py-3">{{ reason_labels[adj.reason.value] }}</td>
+            <td class="px-4 py-3 text-right font-medium {% if adj.delta > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+              {{ '+' if adj.delta > 0 else '' }}{{ adj.delta|round(2) }} {{ item.unit }}
+            </td>
+            <td class="px-4 py-3 text-gray-500">{{ adj.notes or '—' }}</td>
+            <td class="px-4 py-3 text-gray-500">
+              {{ adj.recorded_by.first_name ~ ' ' ~ adj.recorded_by.last_name if adj.recorded_by else '—' }}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No adjustments recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Right: info sidebar -->
+  <div class="space-y-4">
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-steel-dark mb-3 text-sm">Item Info</h3>
+      <dl class="space-y-2 text-sm">
+        {% if item.description %}
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Description</dt>
+          <dd class="text-gray-700 mt-0.5">{{ item.description }}</dd>
+        </div>
+        {% endif %}
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Unit</dt>
+          <dd class="text-gray-700 mt-0.5">{{ item.unit }}</dd>
+        </div>
+        {% if item.location %}
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Shop Location</dt>
+          <dd class="text-gray-700 mt-0.5">{{ item.location }}</dd>
+        </div>
+        {% endif %}
+        {% if can_see_financials and item.cost_per_unit %}
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Cost / Unit</dt>
+          <dd class="text-gray-700 mt-0.5">${{ "%.2f"|format(item.cost_per_unit) }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    {% if item.supplier_name %}
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-steel-dark mb-3 text-sm">Supplier</h3>
+      <dl class="space-y-2 text-sm">
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Name</dt>
+          <dd class="text-gray-700 mt-0.5">{{ item.supplier_name }}</dd>
+        </div>
+        {% if item.supplier_contact %}
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Contact</dt>
+          <dd class="text-gray-700 mt-0.5">{{ item.supplier_contact }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+    {% endif %}
+
+    {% if item.notes %}
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-steel-dark mb-2 text-sm">Notes</h3>
+      <p class="text-sm text-gray-600">{{ item.notes }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

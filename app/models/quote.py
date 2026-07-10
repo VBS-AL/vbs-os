@@ -50,10 +50,15 @@ class QuoteLineItem(Base):
     unit            = Column(String, nullable=True)
     material        = Column(String, nullable=True)
     unit_price      = Column(Float, nullable=True)
-    paint_override  = Column(String, nullable=True)  # None = inherit job paint_spec
-    notes           = Column(Text, nullable=True)
+    paint_override        = Column(String, nullable=True)  # None = inherit job paint_spec
+    notes                 = Column(Text, nullable=True)
+    inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
+    estimated_labor_hours = Column(Float, nullable=True)
+    estimated_labor_dept  = Column(String, nullable=True)  # BillingDept value
+    is_delivery_surcharge = Column(Boolean, default=False)
 
     quote           = relationship("Quote", back_populates="line_items")
+    inventory_item  = relationship("InventoryItem")
 
 class QuoteRevision(Base):
     __tablename__ = "quote_revisions"

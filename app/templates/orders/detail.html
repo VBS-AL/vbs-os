@@ -115,35 +115,80 @@
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Line Items</h2>
         {% if order.line_items %}
+        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
         <table class="w-full text-sm">
           <thead class="text-xs text-gray-500 border-b border-gray-100">
             <tr>
               <th class="text-left pb-2">Description</th>
-              <th class="text-right pb-2 pr-4">Qty</th>
-              {% if can_see_financials %}<th class="text-right pb-2 pr-4">Unit Price</th>{% endif %}
-              {% if can_see_financials %}<th class="text-right pb-2">Total</th>{% endif %}
+              <th class="text-right pb-2 pr-2">Qty</th>
+              {% if can_see_financials %}<th class="text-right pb-2 pr-2">Unit Price</th>{% endif %}
+              {% if can_see_financials %}<th class="text-right pb-2 pr-2">Materials</th>{% endif %}
+              {% if can_see_financials %}<th class="text-left pb-2 pl-2">Est. Labor</th>{% endif %}
+              {% if can_see_financials %}<th class="text-right pb-2">Est. Labor $</th>{% endif %}
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
+            {% set ns = namespace(mat_total=0, labor_total=0, surcharge=0) %}
             {% for li in order.line_items %}
+            {% if li.is_delivery_surcharge %}
+              {% set ns.surcharge = ns.surcharge + (li.unit_price or 0) * li.quantity %}
+            {% else %}
+            {% set mat_line = (li.unit_price or 0) * li.quantity %}
+            {% set ns.mat_total = ns.mat_total + mat_line %}
+            {% if li.estimated_labor_hours and li.estimated_labor_dept and li.estimated_labor_dept in labor_rates %}
+              {% set labor_line = li.estimated_labor_hours * labor_rates[li.estimated_labor_dept] %}
+              {% set ns.labor_total = ns.labor_total + labor_line %}
+            {% else %}
+              {% set labor_line = 0 %}
+            {% endif %}
             <tr>
               <td class="py-2">
                 {{ li.description }}
+                {% if li.inventory_item %}<span class="ml-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 font-mono">{{ li.inventory_item.sku }}</span>{% endif %}
                 {% if li.paint_override %}<span class="text-xs text-gray-400 ml-1">(paint: {{ li.paint_override }})</span>{% endif %}
               </td>
-              <td class="text-right pr-4 py-2">{{ li.quantity }}</td>
-              {% if can_see_financials %}<td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>{% endif %}
-              {% if can_see_financials %}<td class="text-right py-2 font-medium">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>{% endif %}
+              <td class="text-right pr-2 py-2">{{ li.quantity }}</td>
+              {% if can_see_financials %}
+              <td class="text-right pr-2 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
+              <td class="text-right pr-2 py-2 font-medium">${{ '%.2f'|format(mat_line) }}</td>
+              <td class="text-left pl-2 py-2 text-xs text-gray-500">
+                {% if li.estimated_labor_hours %}
+                  {{ li.estimated_labor_hours }}h
+                  {% if li.estimated_labor_dept %}
+                    · {% if li.estimated_labor_dept == 'general_labor' %}Gen Labor
+                    {% elif li.estimated_labor_dept == 'steel_fabrication' %}Steel Fab
+                    {% elif li.estimated_labor_dept == 'aluminum_structural' %}Aluminum
+                    {% endif %}
+                  {% endif %}
+                {% else %}—{% endif %}
+              </td>
+              <td class="text-right py-2 text-indigo-600 font-medium">
+                {% if labor_line > 0 %}${{ '%.2f'|format(labor_line) }}{% else %}—{% endif %}
+              </td>
+              {% endif %}
             </tr>
+            {% endif %}
             {% endfor %}
           </tbody>
           {% if can_see_financials %}
-          <tfoot class="border-t border-gray-200">
+          <tfoot class="border-t border-gray-200 text-sm">
             <tr>
-              {% set mat_ns = namespace(v=0) %}
-              {% for li in order.line_items %}{% set mat_ns.v = mat_ns.v + ((li.unit_price or 0) * li.quantity) %}{% endfor %}
-              <td colspan="3" class="text-right pt-2 text-sm text-gray-500 font-medium">Material Subtotal</td>
-              <td class="text-right pt-2 font-bold">${{ '%.2f'|format(mat_ns.v) }}</td>
+              <td colspan="3" class="text-right pt-2 text-gray-500">Materials Subtotal</td>
+              <td class="text-right pt-2 font-medium pr-2">${{ '%.2f'|format(ns.mat_total) }}</td>
+              <td class="text-right pt-2 text-gray-500">Est. Labor Subtotal</td>
+              <td class="text-right pt-2 font-medium text-indigo-600">${{ '%.2f'|format(ns.labor_total) }}</td>
+            </tr>
+            {% if ns.surcharge > 0 %}
+            <tr>
+              <td colspan="5" class="text-right pt-1 text-gray-500">
+                <span class="inline-flex items-center gap-1">🚚 Delivery</span>
+              </td>
+              <td class="text-right pt-1 font-medium text-gray-700">${{ '%.2f'|format(ns.surcharge) }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td colspan="5" class="text-right pt-1 pb-1 text-gray-700 font-semibold">Est. Total</td>
+              <td class="text-right pt-1 pb-1 font-bold text-steel-dark">${{ '%.2f'|format(ns.mat_total + ns.labor_total + ns.surcharge) }}</td>
             </tr>
           </tfoot>
           {% endif %}
@@ -161,6 +206,52 @@
           <button onclick="toggleLaborForm()" class="text-xs text-steel-mid hover:underline">+ Log Labor</button>
           {% endif %}
         </div>
+
+        <!-- Estimated Labor summary -->
+        {% set lr2 = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% set est_hrs = namespace(v=0) %}
+        {% set est_cost = namespace(v=0) %}
+        {% for li in order.line_items %}
+          {% if li.estimated_labor_hours and li.estimated_labor_dept and li.estimated_labor_dept in lr2 %}
+            {% set est_hrs.v = est_hrs.v + li.estimated_labor_hours %}
+            {% set est_cost.v = est_cost.v + li.estimated_labor_hours * lr2[li.estimated_labor_dept] %}
+          {% endif %}
+        {% endfor %}
+        {% if est_hrs.v > 0 %}
+        <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 mb-4 text-sm">
+          <div class="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">Estimated (from Quote)</div>
+          <table class="w-full text-xs">
+            <tbody class="divide-y divide-indigo-100">
+              {% for li in order.line_items %}
+              {% if li.estimated_labor_hours and li.estimated_labor_dept %}
+              <tr>
+                <td class="py-1 text-gray-600">{{ li.description }}</td>
+                <td class="py-1 text-indigo-600 text-center">
+                  {% if li.estimated_labor_dept == 'general_labor' %}Gen Labor
+                  {% elif li.estimated_labor_dept == 'steel_fabrication' %}Steel Fab
+                  {% elif li.estimated_labor_dept == 'aluminum_structural' %}Aluminum
+                  {% endif %}
+                </td>
+                <td class="py-1 text-right text-gray-600">{{ li.estimated_labor_hours }}h</td>
+                {% if can_see_financials %}
+                <td class="py-1 text-right font-medium text-indigo-600">${{ '%.2f'|format(li.estimated_labor_hours * lr2[li.estimated_labor_dept]) }}</td>
+                {% endif %}
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+            <tfoot class="border-t border-indigo-200">
+              <tr>
+                <td colspan="2" class="pt-1.5 text-right font-semibold text-indigo-700">Est. Total</td>
+                <td class="pt-1.5 text-right font-semibold text-indigo-700">{{ est_hrs.v }}h</td>
+                {% if can_see_financials %}
+                <td class="pt-1.5 text-right font-bold text-indigo-700">${{ '%.2f'|format(est_cost.v) }}</td>
+                {% endif %}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        {% endif %}
 
         <!-- Rework banner -->
         {% if has_qa_fail %}
@@ -206,13 +297,24 @@
         </div>
         {% endif %}
 
+        <!-- Actual labor entries -->
         <div id="labor-list">
           {% if order.labor_entries %}
+          <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 {% if est_hrs.v > 0 %}mt-2{% endif %}">Actual Logged</div>
           <table class="w-full text-sm">
+            {% set stage_label_map = {
+              'material_receiving': 'Mat. Receiving',
+              'drawings': 'Drawings',
+              'fabrication': 'Fabrication',
+              'welding': 'Welding',
+              'finishing': 'Finishing',
+              'qa_qc': 'QA / Inspection',
+              'delivery': 'Delivery'
+            } %}
             <thead class="text-xs text-gray-500 border-b border-gray-100">
               <tr>
                 <th class="text-left pb-2">Employee</th>
-                <th class="text-left pb-2">Dept</th>
+                <th class="text-left pb-2">Stage / Dept</th>
                 <th class="text-right pb-2 pr-4">Hrs</th>
                 {% if can_see_financials %}<th class="text-right pb-2">Total</th>{% endif %}
               </tr>
@@ -226,8 +328,16 @@
                   {% endif %}
                   {{ l.employee.first_name if l.employee else '—' }} {{ l.employee.last_name if l.employee else '' }}
                 </td>
-                <td class="py-1.5 text-gray-500 capitalize">{{ l.billing_dept.value.replace('_',' ') }}</td>
-                <td class="py-1.5 text-right pr-4">{{ l.hours }}</td>
+                <td class="py-1.5 text-gray-500 text-xs">
+                  {% if l.stage %}
+                  <span class="text-steel-mid font-medium">{{ stage_label_map.get(l.stage.stage_type.value, l.stage.stage_type.value) }}</span>
+                  <span class="text-gray-400 ml-1">· {{ l.billing_dept.value.replace('_',' ').title() }}</span>
+                  <span class="ml-1 inline-block px-1 py-0.5 rounded bg-green-50 text-green-600 text-xs font-medium">⏱ Timer</span>
+                  {% else %}
+                  {{ l.billing_dept.value.replace('_',' ').title() }}
+                  {% endif %}
+                </td>
+                <td class="py-1.5 text-right pr-4">{{ '%.2f'|format(l.hours) }}</td>
                 {% if can_see_financials %}<td class="py-1.5 text-right font-medium">${{ '%.2f'|format(l.billed_value or 0) }}</td>{% endif %}
               </tr>
               {% endfor %}
@@ -235,14 +345,23 @@
             {% if can_see_financials %}
             <tfoot class="border-t border-gray-200">
               <tr>
-                <td colspan="3" class="text-right pt-2 text-sm text-gray-500 font-medium">Labor Total</td>
+                <td colspan="3" class="text-right pt-2 text-sm text-gray-500 font-medium">Actual Total</td>
                 <td class="text-right pt-2 font-bold">${{ '%.2f'|format(total_labor or 0) }}</td>
               </tr>
+              {% if est_cost.v > 0 %}
+              {% set variance = (total_labor or 0) - est_cost.v %}
+              <tr>
+                <td colspan="3" class="text-right pt-1 text-xs text-gray-400">vs. Estimate</td>
+                <td class="text-right pt-1 text-xs font-semibold {% if variance > 0 %}text-red-600{% elif variance < 0 %}text-green-600{% else %}text-gray-500{% endif %}">
+                  {% if variance > 0 %}+{% endif %}${{ '%.2f'|format(variance) }}
+                </td>
+              </tr>
+              {% endif %}
             </tfoot>
             {% endif %}
           </table>
           {% else %}
-          <p class="text-sm text-gray-400">No labor logged.</p>
+          <p class="text-sm text-gray-400 {% if est_hrs.v > 0 %}mt-2{% endif %}">No labor logged.</p>
           {% endif %}
         </div>
       </div>
@@ -345,6 +464,39 @@
           'on_hold': 'Place on Hold',
           'cancelled': 'Cancel Order'
         } %}
+        {% if inv_block and inv_shortages %}
+        <div class="mb-3 bg-red-50 border border-red-300 rounded-lg p-4">
+          <div class="flex items-start gap-2">
+            <span class="text-red-500 text-lg">⛔</span>
+            <div>
+              <p class="text-sm font-semibold text-red-700 mb-2">Cannot start production — insufficient inventory:</p>
+              <ul class="space-y-1">
+                {% for s in inv_shortages %}
+                <li class="text-sm text-red-600">
+                  <span class="font-mono text-xs text-red-400 mr-1">{{ s.sku }}</span>
+                  <span class="font-medium">{{ s.name }}</span>
+                  — need <strong>{{ s.need }} {{ s.unit }}</strong>, have <strong>{{ s.have }} {{ s.unit }}</strong>
+                </li>
+                {% endfor %}
+              </ul>
+              <p class="text-xs text-red-500 mt-2">Restock the items above, then try again.</p>
+            </div>
+          </div>
+        </div>
+        {% elif inv_shortages %}
+        <div class="mb-3 bg-amber-50 border border-amber-300 rounded-lg p-3">
+          <p class="text-xs font-semibold text-amber-700 mb-1">⚠ Low inventory on this order:</p>
+          <ul class="space-y-0.5">
+            {% for s in inv_shortages %}
+            <li class="text-xs text-amber-700">
+              <span class="font-medium">{{ s.name }}</span>
+              — have {{ s.have }} {{ s.unit }}, need {{ s.need }} {{ s.unit }}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
         {% for ns in next_statuses %}
           {% if ns.value == 'qa_review' and total_hours == 0 %}
           <div class="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -360,6 +512,11 @@
           </div>
           {% elif (ns.value == 'qa_review' and total_hours == 0) or (ns.value == 'ready' and has_qa_fail) %}
           {# button already shown as blocked above — skip the form #}
+          {% elif ns.value == 'in_production' and inv_shortages %}
+          <button disabled
+                  class="w-full mb-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200">
+            ⛔ Start Production — Inventory Shortage
+          </button>
           {% else %}
           <form method="POST" action="/orders/{{ order.id }}/status" class="mb-2">
             <input type="hidden" name="new_status" value="{{ ns.value }}"/>
@@ -439,30 +596,72 @@
       <!-- Production Stages -->
       {% if order.production_stages %}
       <div class="bg-white rounded-xl shadow p-5">
-        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Production Stages</h2>
-        <div class="space-y-1.5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Production Stages</h2>
+          <a href="/production" class="text-xs text-steel-mid hover:underline">Board ↗</a>
+        </div>
+        <div class="space-y-2">
           {% set non_del = order.production_stages | selectattr('stage_type.value', 'ne', 'delivery') | list %}
           {% set del_stages = order.production_stages | selectattr('stage_type.value', 'eq', 'delivery') | list %}
           {% for stage in (non_del | sort(attribute='id')) + del_stages %}
-          <div class="flex items-center gap-2 text-sm rounded px-1.5 py-1
-            {% if stage.status.value == 'blocked' %}bg-red-50{% endif %}">
-            {% if stage.status.value == 'blocked' %}
-            <span class="text-red-500 font-bold flex-shrink-0">&#x2715;</span>
-            {% elif stage.completed_at %}
-            <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
-            {% elif stage.started_at %}
-            <span class="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"></span>
+          <div class="rounded-lg px-2.5 py-2 {% if stage.status.value == 'blocked' %}bg-red-50 border border-red-100{% elif stage.status.value == 'in_progress' %}bg-blue-50 border border-blue-100{% elif stage.completed_at %}bg-gray-50{% else %}bg-white{% endif %}">
+            <div class="flex items-center gap-2">
+              <!-- Status dot -->
+              {% if stage.status.value == 'blocked' %}
+              <span class="text-red-500 font-bold text-xs flex-shrink-0">✕</span>
+              {% elif stage.completed_at %}
+              <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
+              {% elif stage.started_at %}
+              <span class="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"></span>
+              {% else %}
+              <span class="w-2 h-2 rounded-full bg-gray-200 flex-shrink-0"></span>
+              {% endif %}
+              <!-- Stage name -->
+              <span class="text-sm flex-1 {% if stage.completed_at %}text-gray-400 line-through{% elif stage.status.value == 'blocked' %}text-red-600 font-medium{% elif stage.status.value == 'in_progress' %}text-blue-700 font-medium{% else %}text-gray-600{% endif %}">
+                {% if stage.stage_type.value == 'qa_qc' %}QA / Inspection{% else %}{{ stage.stage_type.value.replace('_',' ').title() }}{% endif %}
+              </span>
+              <!-- Status label -->
+              {% if stage.status.value == 'blocked' %}
+              <span class="text-xs text-red-500 font-medium">Blocked</span>
+              {% elif stage.status.value == 'in_progress' %}
+              <span class="text-xs text-blue-600 font-medium">In Progress</span>
+              {% elif stage.completed_at %}
+              <span class="text-xs text-gray-400">✓ Done</span>
+              {% endif %}
+            </div>
+            <!-- Assigned employee (if set) -->
+            {% if stage.assigned_to %}
+            <div class="flex items-center gap-1.5 mt-1.5 ml-4">
+              <span class="w-5 h-5 rounded-full bg-steel-mid text-white text-xs flex items-center justify-center font-bold flex-shrink-0">
+                {{ stage.assigned_to.first_name[0] }}{{ (stage.assigned_to.last_name or '')[0] }}
+              </span>
+              <span class="text-xs text-gray-500">{{ stage.assigned_to.first_name }} {{ stage.assigned_to.last_name or '' }}</span>
+            </div>
             {% else %}
-            <span class="w-2 h-2 rounded-full bg-gray-200 flex-shrink-0"></span>
+            <div class="ml-4 mt-1 text-xs text-yellow-500">⚠ Unassigned</div>
             {% endif %}
-            <span class="flex-1 {% if stage.completed_at %}text-gray-400 line-through{% elif stage.status.value == 'blocked' %}text-red-600 font-medium{% endif %}">
-              {% if stage.stage_type.value == 'qa_qc' %}QA / Inspection{% else %}{{ stage.stage_type.value.replace('_',' ').title() }}{% endif %}
-              {% if stage.notes %}<span class="text-xs text-gray-500 font-normal ml-0.5">({{ stage.notes }})</span>{% endif %}
-            </span>
-            {% if stage.completed_at %}
-            <span class="text-xs text-gray-400">&#x2713;</span>
-            {% elif stage.status.value == 'blocked' %}
-            <span class="text-xs text-red-400">Blocked</span>
+            <!-- Active timer indicator -->
+            {% if active_session_by_stage and stage.id in active_session_by_stage %}
+            {% set ws = active_session_by_stage[stage.id] %}
+            <div class="flex items-center gap-1.5 mt-1.5 ml-4">
+              {% if ws.status.value == 'active' %}
+              <span class="relative flex h-2 w-2 flex-shrink-0">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+              <span class="text-xs text-green-600 font-medium">
+                ⏱ {{ ws.employee.first_name }} {{ ws.employee.last_name or '' }} — clocked in
+              </span>
+              {% else %}
+              <span class="text-yellow-500 text-xs">⏸</span>
+              <span class="text-xs text-yellow-600 font-medium">
+                {{ ws.employee.first_name }} {{ ws.employee.last_name or '' }} — paused
+              </span>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if stage.notes %}
+            <p class="text-xs text-gray-400 ml-4 mt-0.5">{{ stage.notes }}</p>
             {% endif %}
           </div>
           {% endfor %}
@@ -487,19 +686,43 @@
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-2">Summary</h2>
         <div class="space-y-1 text-gray-600">
           {% set mat_sum = namespace(v=0) %}
-          {% for li in order.line_items %}{% set mat_sum.v = mat_sum.v + ((li.unit_price or 0) * li.quantity) %}{% endfor %}
+          {% set est_labor_sum = namespace(v=0) %}
+          {% set lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+          {% for li in order.line_items %}
+            {% set mat_sum.v = mat_sum.v + ((li.unit_price or 0) * li.quantity) %}
+            {% if li.estimated_labor_hours and li.estimated_labor_dept and li.estimated_labor_dept in lr %}
+              {% set est_labor_sum.v = est_labor_sum.v + li.estimated_labor_hours * lr[li.estimated_labor_dept] %}
+            {% endif %}
+          {% endfor %}
           <div class="flex justify-between">
-            <span>Material</span>
+            <span>Materials</span>
             <span class="font-medium">${{ '%.2f'|format(mat_sum.v) }}</span>
           </div>
           <div class="flex justify-between">
-            <span>Labor ({{ total_hours }}h)</span>
-            <span class="font-medium">${{ '%.2f'|format(total_labor or 0) }}</span>
+            <span class="text-indigo-600">Est. Labor</span>
+            <span class="font-medium text-indigo-600">${{ '%.2f'|format(est_labor_sum.v) }}</span>
           </div>
+          {% if total_labor %}
+          <div class="flex justify-between text-green-700">
+            <span>Actual Labor ({{ total_hours }}h)</span>
+            <span class="font-medium">${{ '%.2f'|format(total_labor) }}</span>
+          </div>
+          {% endif %}
           <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-semibold text-steel-dark">
             <span>Est. Total</span>
+            <span>${{ '%.2f'|format(mat_sum.v + est_labor_sum.v) }}</span>
+          </div>
+          {% if total_labor %}
+          <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-bold text-steel-dark">
+            <span>Actual Total</span>
             <span>${{ '%.2f'|format(mat_sum.v + (total_labor or 0)) }}</span>
           </div>
+          {% set overall_variance = (mat_sum.v + (total_labor or 0)) - (mat_sum.v + est_labor_sum.v) %}
+          <div class="flex justify-between text-xs font-semibold {% if overall_variance > 0 %}text-red-600{% elif overall_variance < 0 %}text-green-600{% else %}text-gray-400{% endif %}">
+            <span>vs. Estimate</span>
+            <span>{% if overall_variance > 0 %}+{% endif %}${{ '%.2f'|format(overall_variance) }}</span>
+          </div>
+          {% endif %}
         </div>
       </div>
       {% endif %}

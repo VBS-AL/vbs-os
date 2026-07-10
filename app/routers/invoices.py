@@ -93,6 +93,7 @@ async def generate_invoice(
     order = db.query(Order).options(
         joinedload(Order.line_items),
         joinedload(Order.labor_entries),
+        joinedload(Order.quote),
     ).filter(Order.id == order_id).first()
 
     if not order:
@@ -101,12 +102,17 @@ async def generate_invoice(
     if order.invoice:
         return RedirectResponse(f"/invoices/{order.invoice.id}", status_code=302)
 
-    # Calculate totals
+    # Calculate actuals
     material_total = sum((li.unit_price or 0) * li.quantity for li in order.line_items)
     labor_total = sum(e.billed_value for e in order.labor_entries)
     subtotal = material_total + labor_total
     tax = round(subtotal * (tax_rate / 100), 2)
-    total = round(subtotal + tax, 2)
+    actual_total = round(subtotal + tax, 2)
+
+    # Estimate is always the floor — if actuals come in under estimate, bill the estimate
+    estimate_floor = float(order.quote.total_estimated or 0) if order.quote and order.quote.total_estimated else 0.0
+    floor_applied = estimate_floor > 0 and actual_total < estimate_floor
+    total = estimate_floor if floor_applied else actual_total
 
     today = date.today()
     inv = Invoice(
@@ -117,9 +123,9 @@ async def generate_invoice(
         payment_status=PaymentStatus.unpaid,
         subtotal=round(subtotal, 2),
         tax=tax,
-        total=total,
+        total=round(total, 2),
         amount_paid=0,
-        balance_due=total,
+        balance_due=round(total, 2),
         notes=notes.strip() or None,
         created_by_id=user.id,
     )

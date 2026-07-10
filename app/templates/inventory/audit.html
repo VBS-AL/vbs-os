@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Physical Count — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <div class="mb-6">
+    <nav class="text-sm text-gray-400 mb-1">
+      <a href="/inventory" class="hover:text-steel-mid">Inventory</a> / Physical Count
+    </nav>
+    <h1 class="text-2xl font-bold text-steel-dark">Physical Count / Audit</h1>
+    <p class="text-gray-500 text-sm mt-1">Upload counted quantities — the system updates stock levels and logs every change.</p>
+  </div>
+
+  {% if error %}
+  <div class="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-6 text-sm">{{ error }}</div>
+  {% endif %}
+
+  <!-- Step 1 -->
+  <div class="bg-white rounded-xl shadow p-6 mb-4">
+    <div class="flex items-start gap-4">
+      <div class="w-8 h-8 rounded-full bg-steel-dark text-white flex items-center justify-center text-sm font-bold flex-shrink-0">1</div>
+      <div class="flex-1">
+        <h2 class="font-semibold text-steel-dark mb-1">Download your count sheet</h2>
+        <p class="text-sm text-gray-500 mb-3">
+          This sheet is pre-filled with all your current inventory items and their system quantities.
+          Walk the floor, count each item, and fill in the <span class="font-semibold text-amber-600">Counted Qty</span> column.
+        </p>
+        <a href="/inventory/template/audit"
+           class="inline-flex items-center gap-2 bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+          ↓ Download Count Sheet (.xlsx)
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="bg-white rounded-xl shadow p-6 mb-4">
+    <div class="flex items-start gap-4">
+      <div class="w-8 h-8 rounded-full bg-steel-dark text-white flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
+      <div class="flex-1">
+        <h2 class="font-semibold text-steel-dark mb-1">Fill in counted quantities</h2>
+        <div class="text-sm text-gray-500 space-y-1">
+          <p>Only fill in the <span class="font-semibold text-amber-600">Counted Qty</span> column — don't edit any other columns.</p>
+          <p>Leave a row blank if you didn't count that item — it will be skipped.</p>
+          <p>Every change is logged as an adjustment with the old and new quantities.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="bg-white rounded-xl shadow p-6">
+    <div class="flex items-start gap-4">
+      <div class="w-8 h-8 rounded-full bg-steel-dark text-white flex items-center justify-center text-sm font-bold flex-shrink-0">3</div>
+      <div class="flex-1">
+        <h2 class="font-semibold text-steel-dark mb-3">Upload your completed sheet</h2>
+        <form method="POST" action="/inventory/audit" enctype="multipart/form-data" class="space-y-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Completed count sheet (.xlsx)</label>
+            <input type="file" name="file" accept=".xlsx" required
+                   class="block w-full text-sm text-gray-700 border border-gray-200 rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-steel-dark file:text-white hover:file:bg-steel-mid cursor-pointer"/>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+            ⚠ This will immediately update stock levels. Make sure your count is final before uploading.
+          </div>
+          <div class="flex gap-3">
+            <button type="submit"
+                    class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">
+              Upload &amp; Apply Count
+            </button>
+            <a href="/inventory" class="text-sm text-gray-400 hover:text-gray-600 py-2">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

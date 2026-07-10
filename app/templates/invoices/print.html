@@ -85,58 +85,49 @@
     </div>
   </div>
 
-  <!-- Materials -->
+  <!-- Line Items (customer view — no unit price or labor detail) -->
   {% if inv.order.line_items %}
   <div class="mb-6">
-    <div class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Materials</div>
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Services & Materials</div>
     <table class="w-full text-sm border-collapse">
       <thead>
         <tr class="border-b-2 border-gray-200">
           <th class="text-left py-2 font-semibold text-gray-700">Description</th>
+          <th class="text-left py-2 font-semibold text-gray-700">Finish</th>
           <th class="text-right py-2 pr-4 font-semibold text-gray-700">Qty</th>
           <th class="text-right py-2 pr-4 font-semibold text-gray-700">Unit Price</th>
           <th class="text-right py-2 font-semibold text-gray-700">Total</th>
         </tr>
       </thead>
       <tbody>
+        {% set ns = namespace(delivery=0) %}
+        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
         {% for li in inv.order.line_items %}
+        {% if li.is_delivery_surcharge %}
+          {% set ns.delivery = ns.delivery + (li.unit_price or 0) * li.quantity %}
+        {% else %}
+        {% set mat = (li.unit_price or 0) * li.quantity %}
+        {% set labor = (li.estimated_labor_hours or 0) * labor_rates.get(li.estimated_labor_dept or '', 0) %}
+        {% set line_total = mat + labor %}
+        {% set unit_price = line_total / li.quantity if li.quantity else 0 %}
         <tr class="border-b border-gray-100">
-          <td class="py-2">
-            {{ li.description }}
-            {% if li.paint_override %}<span class="text-gray-400 text-xs ml-1">({{ li.paint_override }})</span>{% endif %}
-          </td>
+          <td class="py-2">{{ li.description }}</td>
+          <td class="py-2 text-gray-500 text-xs">{{ li.paint_override or '—' }}</td>
           <td class="text-right pr-4 py-2">{{ li.quantity }}</td>
-          <td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
-          <td class="text-right py-2">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>
+          <td class="text-right pr-4 py-2">${{ '%.2f'|format(unit_price) }}</td>
+          <td class="text-right py-2">${{ '%.2f'|format(line_total) }}</td>
         </tr>
+        {% endif %}
         {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-
-  <!-- Labor -->
-  {% if inv.order.labor_entries %}
-  <div class="mb-6">
-    <div class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Labor</div>
-    <table class="w-full text-sm border-collapse">
-      <thead>
-        <tr class="border-b-2 border-gray-200">
-          <th class="text-left py-2 font-semibold text-gray-700">Description</th>
-          <th class="text-right py-2 pr-4 font-semibold text-gray-700">Hours</th>
-          <th class="text-right py-2 pr-4 font-semibold text-gray-700">Rate</th>
-          <th class="text-right py-2 font-semibold text-gray-700">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for e in inv.order.labor_entries %}
+        {% if inv.order.labor_entries %}
+        {% set actual_labor = inv.order.labor_entries | sum(attribute='billed_value') %}
         <tr class="border-b border-gray-100">
-          <td class="py-2">{{ e.billing_dept.value.replace('_',' ').title() }}</td>
-          <td class="text-right pr-4 py-2">{{ e.hours }}</td>
-          <td class="text-right pr-4 py-2">${{ e.billing_rate }}/hr</td>
-          <td class="text-right py-2">${{ '%.2f'|format(e.billed_value) }}</td>
+          <td class="py-2 text-gray-600">Fabrication & Labor Services</td>
+          <td class="py-2">—</td>
+          <td class="text-right pr-4 py-2">—</td>
+          <td class="text-right py-2">${{ '%.2f'|format(actual_labor) }}</td>
         </tr>
-        {% endfor %}
+        {% endif %}
       </tbody>
     </table>
   </div>
@@ -148,6 +139,11 @@
       <div class="flex justify-between text-gray-600">
         <span>Subtotal</span><span>${{ '%.2f'|format(inv.subtotal) }}</span>
       </div>
+      {% if ns.delivery > 0 %}
+      <div class="flex justify-between text-gray-600">
+        <span>🚚 Delivery</span><span>${{ '%.2f'|format(ns.delivery) }}</span>
+      </div>
+      {% endif %}
       {% if inv.tax > 0 %}
       <div class="flex justify-between text-gray-600">
         <span>Tax</span><span>${{ '%.2f'|format(inv.tax) }}</span>

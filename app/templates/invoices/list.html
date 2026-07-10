@@ -24,6 +24,13 @@
     </div>
   </div>
 
+  <!-- Quick filter -->
+  <div class="mb-4">
+    <input id="invoice-quick-filter" type="text" placeholder="Filter by invoice #, customer, status…"
+      autocomplete="off"
+      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none bg-white shadow-sm"/>
+  </div>
+
   <div class="bg-white rounded-xl shadow overflow-hidden">
     <table class="w-full text-sm">
       <thead class="bg-steel-light text-xs font-semibold text-steel-dark uppercase tracking-wide">
@@ -50,7 +57,8 @@
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for inv in invoices %}
-        <tr class="hover:bg-gray-50 transition">
+        <tr class="hover:bg-gray-50 transition invoice-row"
+            data-search="{{ inv.invoice_number }} {{ inv.order.customer.name if inv.order and inv.order.customer else '' }} {{ inv.payment_status.value }}">
           <td class="px-5 py-3 font-mono font-semibold text-steel-mid">{{ inv.invoice_number }}</td>
           <td class="px-5 py-3 font-medium">{{ inv.order.customer.name if inv.order and inv.order.customer else '—' }}</td>
           <td class="px-5 py-3 text-gray-500">{{ inv.invoice_date.strftime('%b %d, %Y') if inv.invoice_date else '—' }}</td>
@@ -85,5 +93,17 @@
   </div>
 </div>
 
+<script>
+(function() {
+  const input = document.getElementById('invoice-quick-filter');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    const q = this.value.toLowerCase().trim();
+    document.querySelectorAll('tr.invoice-row').forEach(function(row) {
+      row.style.display = (!q || row.dataset.search.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

@@ -1,0 +1,48 @@
+{% set total_stock_value = namespace(v=0) %}
+{% for item in items %}
+{% set is_low = item.reorder_threshold is not none and item.quantity_on_hand <= item.reorder_threshold %}
+{% set stock_val = (item.quantity_on_hand or 0) * (item.cost_per_unit or 0) %}
+{% set total_stock_value.v = total_stock_value.v + stock_val %}
+<tr class="hover:bg-steel-light cursor-pointer {% if is_low %}bg-red-50{% endif %}"
+    onclick="window.location='/inventory/{{ item.id }}'">
+  <td class="px-4 py-3 font-mono text-xs text-gray-500">{{ item.sku or '—' }}</td>
+  <td class="px-4 py-3 font-medium text-steel-dark">{{ item.name }}</td>
+  <td class="px-4 py-3 text-gray-600">{{ category_labels[item.category.value] }}</td>
+  <td class="px-4 py-3 text-gray-500">{{ item.location or '—' }}</td>
+  <td class="px-4 py-3 text-right font-medium {% if is_low %}text-red-600{% else %}text-gray-700{% endif %}">
+    {{ item.quantity_on_hand|round(2) }} {{ item.unit }}
+  </td>
+  <td class="px-4 py-3 text-right text-gray-500">
+    {{ item.reorder_threshold|round(2) ~ ' ' ~ item.unit if item.reorder_threshold else '—' }}
+  </td>
+  {% if can_see_financials %}
+  <td class="px-4 py-3 text-right text-gray-500">
+    {{ '$' ~ '%.2f'|format(item.cost_per_unit) if item.cost_per_unit else '—' }}
+  </td>
+  <td class="px-4 py-3 text-right font-medium text-steel-dark">
+    {% if item.cost_per_unit and (item.quantity_on_hand or 0) > 0 %}
+    ${{ '{:,.2f}'.format(stock_val) }}
+    {% else %}—{% endif %}
+  </td>
+  {% endif %}
+  <td class="px-4 py-3">
+    {% if (item.quantity_on_hand or 0) <= 0 %}
+    <span class="px-2 py-0.5 rounded-full text-xs font-bold uppercase bg-red-100 text-red-600">Out of Stock</span>
+    {% elif is_low %}
+    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-black">Low Stock</span>
+    {% else %}
+    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">In Stock</span>
+    {% endif %}
+  </td>
+</tr>
+{% else %}
+<tr><td colspan="9" class="px-4 py-10 text-center text-gray-400">No inventory items found.</td></tr>
+{% endfor %}
+{% if items and can_see_financials %}
+<tr class="bg-steel-light border-t-2 border-steel-mid">
+  <td colspan="6" class="px-4 py-3 text-xs font-semibold text-steel-dark uppercase tracking-wide">Total Stock Value</td>
+  <td class="px-4 py-3 text-right"></td>
+  <td class="px-4 py-3 text-right font-bold text-steel-dark">${{ '{:,.2f}'.format(total_stock_value.v) }}</td>
+  <td class="px-4 py-3"></td>
+</tr>
+{% endif %}

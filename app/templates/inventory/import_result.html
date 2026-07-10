@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Import Results — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <div class="mb-6">
+    <nav class="text-sm text-gray-400 mb-1">
+      <a href="/inventory" class="hover:text-steel-mid">Inventory</a> /
+      <a href="/inventory/import" class="hover:text-steel-mid">Import</a> / Results
+    </nav>
+    <h1 class="text-2xl font-bold text-steel-dark">Import Complete</h1>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+      <div class="text-3xl font-bold text-green-700">{{ created|length }}</div>
+      <div class="text-sm text-green-600 mt-1">Items Created</div>
+    </div>
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+      <div class="text-3xl font-bold text-blue-700">{{ updated|length }}</div>
+      <div class="text-sm text-blue-600 mt-1">Items Updated</div>
+    </div>
+    <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+      <div class="text-3xl font-bold text-red-700">{{ errors|length }}</div>
+      <div class="text-sm text-red-600 mt-1">Errors</div>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="bg-white rounded-xl shadow p-5 mb-4">
+    <h2 class="text-sm font-semibold text-red-700 uppercase tracking-wide mb-3">⚠ Errors (rows skipped)</h2>
+    <ul class="space-y-1">
+      {% for e in errors %}
+      <li class="text-sm text-red-600 bg-red-50 rounded px-3 py-1.5">{{ e }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if created %}
+  <div class="bg-white rounded-xl shadow p-5 mb-4">
+    <h2 class="text-sm font-semibold text-green-700 uppercase tracking-wide mb-3">✓ Created ({{ created|length }})</h2>
+    <div class="divide-y divide-gray-100">
+      {% for item in created %}
+      <div class="flex justify-between py-2 text-sm">
+        <span class="font-medium text-steel-dark">{{ item.name }}</span>
+        <span class="font-mono text-xs text-gray-400">{{ item.sku }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if updated %}
+  <div class="bg-white rounded-xl shadow p-5 mb-4">
+    <h2 class="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-3">↻ Updated ({{ updated|length }})</h2>
+    <div class="divide-y divide-gray-100">
+      {% for item in updated %}
+      <div class="flex justify-between py-2 text-sm">
+        <span class="font-medium text-steel-dark">{{ item.name }}</span>
+        <span class="font-mono text-xs text-gray-400">{{ item.sku }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="flex gap-3 mt-6">
+    <a href="/inventory" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">
+      View Inventory
+    </a>
+    <a href="/inventory/import" class="text-sm text-gray-400 hover:text-gray-600 py-2">Import another file</a>
+  </div>
+</div>
+{% endblock %}

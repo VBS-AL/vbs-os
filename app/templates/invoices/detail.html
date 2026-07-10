@@ -56,12 +56,14 @@
           </thead>
           <tbody class="divide-y divide-gray-50">
             {% for li in inv.order.line_items %}
+            {% if not li.is_delivery_surcharge %}
             <tr>
               <td class="py-2">{{ li.description }}</td>
               <td class="text-right pr-4 py-2">{{ li.quantity }}</td>
               <td class="text-right pr-4 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
               <td class="text-right py-2">${{ '%.2f'|format((li.unit_price or 0) * li.quantity) }}</td>
             </tr>
+            {% endif %}
             {% endfor %}
           </tbody>
         </table>
@@ -138,7 +140,14 @@
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Summary</h2>
         <div class="space-y-2 text-sm">
           {% set mat_total = namespace(v=0) %}
-          {% for li in inv.order.line_items %}{% set mat_total.v = mat_total.v + ((li.unit_price or 0) * li.quantity) %}{% endfor %}
+          {% set del_total = namespace(v=0) %}
+          {% for li in inv.order.line_items %}
+            {% if li.is_delivery_surcharge %}
+              {% set del_total.v = del_total.v + (li.unit_price or 0) * li.quantity %}
+            {% else %}
+              {% set mat_total.v = mat_total.v + (li.unit_price or 0) * li.quantity %}
+            {% endif %}
+          {% endfor %}
           <div class="flex justify-between text-gray-600">
             <span>Materials</span><span>${{ '%.2f'|format(mat_total.v) }}</span>
           </div>
@@ -147,12 +156,24 @@
           <div class="flex justify-between text-gray-600">
             <span>Labor</span><span>${{ '%.2f'|format(lab_total.v) }}</span>
           </div>
+          {% if del_total.v > 0 %}
+          <div class="flex justify-between text-gray-600">
+            <span>🚚 Delivery</span><span>${{ '%.2f'|format(del_total.v) }}</span>
+          </div>
+          {% endif %}
           <div class="flex justify-between text-gray-600 border-t border-gray-100 pt-2">
             <span>Subtotal</span><span>${{ '%.2f'|format(inv.subtotal) }}</span>
           </div>
           {% if inv.tax > 0 %}
           <div class="flex justify-between text-gray-600">
             <span>Tax</span><span>${{ '%.2f'|format(inv.tax) }}</span>
+          </div>
+          {% endif %}
+          {% set actual_calc = (inv.subtotal or 0) + (inv.tax or 0) %}
+          {% if inv.total > actual_calc + 0.01 %}
+          <div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 mt-1 text-xs text-amber-800">
+            <span class="font-semibold">Estimate floor applied.</span>
+            Actuals (${{ '%.2f'|format(actual_calc) }}) were below the original estimate — billed at estimate price.
           </div>
           {% endif %}
           <div class="flex justify-between font-bold text-steel-dark border-t border-gray-200 pt-2 text-base">

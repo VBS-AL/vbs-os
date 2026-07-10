@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Add Inventory Item — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-steel-dark">Add Inventory Item</h1>
+</div>
+
+<form method="post" action="/inventory/new" class="max-w-3xl space-y-6">
+
+  <!-- Identity -->
+  <div class="bg-white rounded-xl shadow p-6">
+    <h2 class="font-semibold text-steel-dark mb-4">Item Details</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">SKU</label>
+        <input type="text" name="sku" value="{{ next_sku }}" required
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid font-mono">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Category</label>
+        <select name="category" required
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          {% for cat in categories %}
+          <option value="{{ cat.value }}">{{ category_labels[cat.value] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Name <span class="text-red-400">*</span></label>
+        <input type="text" name="name" required placeholder="e.g. 2x2 Square Tube 11ga"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Description</label>
+        <textarea name="description" rows="2" placeholder="Additional details about this item…"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stock -->
+  <div class="bg-white rounded-xl shadow p-6">
+    <h2 class="font-semibold text-steel-dark mb-4">Stock & Location</h2>
+    <div class="grid grid-cols-3 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Unit of Measure <span class="text-red-400">*</span></label>
+        <select name="unit" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          <option value="">— Select —</option>
+          <option value="ft">ft — Feet</option>
+          <option value="lbs">lbs — Pounds</option>
+          <option value="ea">ea — Each</option>
+          <option value="pcs">pcs — Pieces</option>
+          <option value="in">in — Inches</option>
+          <option value="sq ft">sq ft — Square Feet</option>
+          <option value="gal">gal — Gallons</option>
+          <option value="box">box — Box</option>
+          <option value="roll">roll — Roll</option>
+          <option value="bag">bag — Bag</option>
+          <option value="can">can — Can</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Quantity on Hand</label>
+        <input type="number" name="quantity_on_hand" value="0" step="1" min="0"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Reorder Threshold</label>
+        <input type="number" name="reorder_threshold" step="1" min="0" placeholder="Alert below this"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div class="col-span-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Shop Location</label>
+        <input type="hidden" name="location" id="location-value">
+        <div class="grid grid-cols-3 gap-2">
+          <select id="loc-area" onchange="buildLocation()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+            <option value="">Area</option>
+            <option value="Structural Steel">Structural Steel</option>
+            <option value="Plate">Plate</option>
+            <option value="Beam">Beam</option>
+          </select>
+          <select id="loc-rack" onchange="buildLocation()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+            <option value="">Rack</option>
+            <option value="Rack A">Rack A</option>
+            <option value="Rack B">Rack B</option>
+            <option value="Rack C">Rack C</option>
+            <option value="Rack D">Rack D</option>
+            <option value="Rack E">Rack E</option>
+            <option value="Rack F">Rack F</option>
+            <option value="Rack TBD">Rack TBD</option>
+          </select>
+          <select id="loc-row" onchange="buildLocation()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+            <option value="">Row</option>
+            {% for n in range(1, 21) %}<option value="Row {{ n }}">Row {{ n }}</option>{% endfor %}
+            <option value="Row TBD">Row TBD</option>
+          </select>
+        </div>
+        <p id="location-preview" class="text-xs text-gray-400 mt-1"></p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Cost per Unit</label>
+        <div class="relative">
+          <span class="absolute left-3 top-2 text-gray-400 text-sm">$</span>
+          <input type="number" name="cost_per_unit" step="0.01" min="0" placeholder="0.00"
+                 class="w-full border border-gray-200 rounded-lg pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier -->
+  <div class="bg-white rounded-xl shadow p-6">
+    <h2 class="font-semibold text-steel-dark mb-4">Supplier</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Supplier Name</label>
+        <input type="text" name="supplier_name" placeholder="Supplier / vendor name"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Supplier Contact</label>
+        <input type="text" name="supplier_contact" placeholder="Phone or email"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+        <textarea name="notes" rows="2"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-3">
+    <button type="submit" class="bg-steel-dark text-white px-6 py-2 rounded-lg hover:bg-steel-mid transition text-sm font-medium">
+      Save Item
+    </button>
+    <a href="/inventory" class="px-6 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</a>
+  </div>
+</form>
+
+<script>
+function buildLocation() {
+  const area = document.getElementById('loc-area').value;
+  const rack = document.getElementById('loc-rack').value;
+  const row  = document.getElementById('loc-row').value;
+  const parts = [area, rack, row].filter(Boolean);
+  const val = parts.join(' / ');
+  document.getElementById('location-value').value = val;
+  document.getElementById('location-preview').textContent = val ? '📍 ' + val : '';
+}
+</script>
+{% endblock %}

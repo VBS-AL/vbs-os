@@ -20,15 +20,17 @@ class LaborEntry(Base):
 
     id              = Column(Integer, primary_key=True, index=True)
     order_id        = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    stage_id        = Column(Integer, ForeignKey("production_stages.id"), nullable=True)
     employee_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
     billing_dept    = Column(SAEnum(BillingDept), nullable=False)
     hours           = Column(Float, nullable=False)
-    billing_rate    = Column(Float, nullable=False)   # snapshot at time of entry
-    billed_value    = Column(Float, nullable=False)   # hours * rate
+    billing_rate    = Column(Float, nullable=False)
+    billed_value    = Column(Float, nullable=False)
     work_date       = Column(Date, nullable=False)
-    is_rework       = Column(Integer, default=0)      # 0=normal, 1=rework
+    is_rework       = Column(Integer, default=0)
     notes           = Column(Text, nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     order           = relationship("Order", back_populates="labor_entries")
     employee        = relationship("User", back_populates="labor_entries")
+    stage           = relationship("ProductionStage", foreign_keys=[stage_id])

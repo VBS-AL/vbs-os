@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Margin & Estimating — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <nav class="text-sm text-gray-400 mb-1"><a href="/reports" class="hover:text-steel-mid">Reports</a> / Margin &amp; Estimating</nav>
+    <h1 class="text-2xl font-bold text-steel-dark">Margin &amp; Estimating</h1>
+    <p class="text-gray-500 text-sm">All invoiced orders — gross margin and quote accuracy.</p>
+  </div>
+  <a href="/users" class="text-sm border border-gray-300 text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-50 transition">
+    ⚙ Set Employee Cost Rates →
+  </a>
+</div>
+
+{% if not rates_configured %}
+<div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 mb-6 text-sm">
+  ⚠ <span class="font-semibold">No employee cost rates set yet.</span>
+  Labor cost shows as $0 until you set each employee's hourly cost rate on the
+  <a href="/users" class="underline font-medium">Team page</a> (edit any employee → Internal Cost Rate).
+</div>
+{% endif %}
+
+<!-- Summary cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="bg-white rounded-xl shadow p-5">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Avg Gross Margin</div>
+    {% if avg_margin is not none %}
+    <div class="text-3xl font-bold {% if avg_margin >= 30 %}text-green-600{% elif avg_margin >= 15 %}text-amber-600{% else %}text-red-600{% endif %}">
+      {{ avg_margin }}%
+    </div>
+    {% else %}
+    <div class="text-2xl font-bold text-gray-300">—</div>
+    {% endif %}
+  </div>
+  <div class="bg-white rounded-xl shadow p-5">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Total Revenue</div>
+    <div class="text-2xl font-bold text-steel-dark">${{ '{:,.0f}'.format(total_rev) }}</div>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Total Gross Profit</div>
+    <div class="text-2xl font-bold {% if total_profit >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+      ${{ '{:,.0f}'.format(total_profit) }}
+    </div>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Estimate Accuracy</div>
+    {% if est_rows_count > 0 %}
+    <div class="text-2xl font-bold {% if avg_variance and avg_variance > 0 %}text-green-600{% elif avg_variance and avg_variance < -5 %}text-red-600{% else %}text-steel-dark{% endif %}">
+      {% if avg_variance is not none %}{{ '+' if avg_variance > 0 else '' }}{{ avg_variance }}%{% else %}—{% endif %}
+    </div>
+    <div class="text-xs text-gray-400 mt-1">avg vs. estimate · {{ over_count }} over / {{ under_count }} under</div>
+    {% else %}
+    <div class="text-2xl font-bold text-gray-300">—</div>
+    <div class="text-xs text-gray-400 mt-1">No quote-linked orders yet</div>
+    {% endif %}
+  </div>
+</div>
+
+{% macro sort_th(label, key, align='left') %}
+  {% set next_dir = 'desc' if (sort_by == key and sort_dir == 'asc') else 'asc' %}
+  <th class="px-4 py-3 text-{{ align }} whitespace-nowrap">
+    <a href="?sort_by={{ key }}&sort_dir={{ next_dir }}"
+       class="hover:text-steel-mid inline-flex items-center gap-1 {% if sort_by == key %}text-steel-mid{% endif %}">
+      {{ label }}
+      {% if sort_by == key %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}<span class="text-gray-300">⇅</span>{% endif %}
+    </a>
+  </th>
+{% endmacro %}
+
+<!-- Per-order margin table -->
+<div class="bg-white rounded-xl shadow overflow-hidden mb-6">
+  <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+    <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Per-Order Margin</h2>
+    <span class="text-xs text-gray-400">{{ rows|length }} invoiced orders</span>
+  </div>
+  {% if rows %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+        <tr>
+          {{ sort_th('Order', 'order_number') }}
+          {{ sort_th('Customer', 'customer') }}
+          {{ sort_th('Revenue', 'revenue', 'right') }}
+          {{ sort_th('Mat. Cost', 'mat_cost', 'right') }}
+          {{ sort_th('Labor Cost', 'labor_cost', 'right') }}
+          {{ sort_th('Total Cost', 'total_cost', 'right') }}
+          {{ sort_th('Gross Profit', 'gross_profit', 'right') }}
+          {{ sort_th('Margin %', 'margin_pct', 'right') }}
+          {{ sort_th('Estimate', 'estimate', 'right') }}
+          {{ sort_th('Variance', 'variance_pct', 'right') }}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for r in rows %}
+        <tr class="hover:bg-steel-light">
+          <td class="px-4 py-3 font-mono text-xs">
+            <a href="/orders/{{ r.order.id }}" class="text-steel-mid hover:underline">{{ r.order.order_number }}</a>
+          </td>
+          <td class="px-4 py-3 font-medium text-steel-dark">{{ r.order.customer.name if r.order.customer else '—' }}</td>
+          <td class="px-4 py-3 text-right">${{ '{:,.2f}'.format(r.revenue) }}</td>
+          <td class="px-4 py-3 text-right text-gray-500">
+            ${{ '{:,.2f}'.format(r.mat_cost) }}
+            {% if r.partial_cost %}<span class="text-amber-500 ml-1" title="Some line items have no inventory cost data">*</span>{% endif %}
+          </td>
+          <td class="px-4 py-3 text-right text-gray-500">${{ '{:,.2f}'.format(r.labor_cost) }}</td>
+          <td class="px-4 py-3 text-right text-gray-600 font-medium">${{ '{:,.2f}'.format(r.total_cost) }}</td>
+          <td class="px-4 py-3 text-right font-semibold {% if r.gross_profit >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+            ${{ '{:,.2f}'.format(r.gross_profit) }}
+          </td>
+          <td class="px-4 py-3 text-right font-bold">
+            {% if r.margin_pct is not none %}
+            <span class="px-2 py-0.5 rounded-full text-xs
+              {% if r.margin_pct >= 30 %}bg-green-100 text-green-700
+              {% elif r.margin_pct >= 15 %}bg-amber-100 text-amber-700
+              {% elif r.margin_pct >= 0 %}bg-orange-100 text-orange-700
+              {% else %}bg-red-100 text-red-700{% endif %}">
+              {{ r.margin_pct }}%
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-4 py-3 text-right text-gray-400 text-xs">
+            {% if r.estimate %}${{ '{:,.2f}'.format(r.estimate) }}{% else %}—{% endif %}
+          </td>
+          <td class="px-4 py-3 text-right text-xs font-semibold">
+            {% if r.variance_pct is not none %}
+            <span class="{% if r.variance_pct > 0 %}text-green-600{% elif r.variance_pct < -5 %}text-red-600{% else %}text-gray-500{% endif %}">
+              {{ '+' if r.variance_pct > 0 else '' }}{{ r.variance_pct }}%
+            </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-4 py-2 bg-gray-50 text-xs text-gray-400 border-t border-gray-100">
+    * = one or more line items have no inventory cost linked — actual margin is lower than shown.
+  </div>
+  {% else %}
+  <div class="px-5 py-12 text-center text-gray-400">No invoiced orders yet.</div>
+  {% endif %}
+</div>
+
+<!-- Estimate accuracy detail -->
+{% set est_rows = rows | selectattr('estimate', 'ne', none) | list %}
+{% if est_rows %}
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <div class="px-5 py-3 border-b border-gray-100">
+    <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Quote Accuracy Detail</h2>
+    <p class="text-xs text-gray-400 mt-0.5">How close were your estimates? Positive = billed more than estimated (good). Negative = under-estimated.</p>
+  </div>
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-4 py-3 text-left">Order</th>
+        <th class="px-4 py-3 text-left">Customer</th>
+        <th class="px-4 py-3 text-right">Estimate</th>
+        <th class="px-4 py-3 text-right">Actual Billed</th>
+        <th class="px-4 py-3 text-right">$ Diff</th>
+        <th class="px-4 py-3 text-right">% Diff</th>
+        <th class="px-4 py-3 text-center">Result</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for r in est_rows | sort(attribute='variance_pct') %}
+      <tr class="hover:bg-steel-light">
+        <td class="px-4 py-3 font-mono text-xs">
+          <a href="/orders/{{ r.order.id }}" class="text-steel-mid hover:underline">{{ r.order.order_number }}</a>
+        </td>
+        <td class="px-4 py-3 font-medium">{{ r.order.customer.name if r.order.customer else '—' }}</td>
+        <td class="px-4 py-3 text-right text-gray-500">${{ '{:,.2f}'.format(r.estimate) }}</td>
+        <td class="px-4 py-3 text-right font-medium">${{ '{:,.2f}'.format(r.revenue) }}</td>
+        <td class="px-4 py-3 text-right font-semibold {% if r.variance >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+          {{ '+' if r.variance >= 0 else '' }}${{ '{:,.2f}'.format(r.variance) }}
+        </td>
+        <td class="px-4 py-3 text-right font-semibold {% if r.variance_pct >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+          {{ '+' if r.variance_pct >= 0 else '' }}{{ r.variance_pct }}%
+        </td>
+        <td class="px-4 py-3 text-center">
+          {% if r.variance_pct > 5 %}
+          <span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Over estimate</span>
+          {% elif r.variance_pct < -5 %}
+          <span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">Under estimate</span>
+          {% else %}
+          <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">On target</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

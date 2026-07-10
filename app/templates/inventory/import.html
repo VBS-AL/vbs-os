@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Import Inventory — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <div class="mb-6">
+    <nav class="text-sm text-gray-400 mb-1">
+      <a href="/inventory" class="hover:text-steel-mid">Inventory</a> / Import
+    </nav>
+    <h1 class="text-2xl font-bold text-steel-dark">Bulk Import</h1>
+    <p class="text-gray-500 text-sm mt-1">Create or update inventory items from an Excel file.</p>
+  </div>
+
+  {% if error %}
+  <div class="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-6 text-sm">{{ error }}</div>
+  {% endif %}
+
+  <!-- Step 1: Download template -->
+  <div class="bg-white rounded-xl shadow p-6 mb-4">
+    <div class="flex items-start gap-4">
+      <div class="w-8 h-8 rounded-full bg-steel-dark text-white flex items-center justify-center text-sm font-bold flex-shrink-0">1</div>
+      <div class="flex-1">
+        <h2 class="font-semibold text-steel-dark mb-1">Download the template</h2>
+        <p class="text-sm text-gray-500 mb-3">Fill in your items using this template. Leave SKU blank to auto-generate. Existing SKUs will be updated.</p>
+        <a href="/inventory/template/import"
+           class="inline-flex items-center gap-2 bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+          ↓ Download Import Template (.xlsx)
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Fill it out -->
+  <div class="bg-white rounded-xl shadow p-6 mb-4">
+    <div class="flex items-start gap-4">
+      <div class="w-8 h-8 rounded-full bg-steel-dark text-white flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
+      <div class="flex-1">
+        <h2 class="font-semibold text-steel-dark mb-1">Fill in your items</h2>
+        <div class="text-sm text-gray-500 space-y-1">
+          <p><span class="font-medium text-gray-700">Required:</span> Name, Category, Unit</p>
+          <p><span class="font-medium text-gray-700">Category must be one of:</span> plate, structural, beam, consumables, hardware</p>
+          <p><span class="font-medium text-gray-700">SKU:</span> leave blank to auto-generate, or use an existing SKU to update that item</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Upload -->
+  <div class="bg-white rounded-xl shadow p-6">
+    <div class="flex items-start gap-4">
+      <div class="w-8 h-8 rounded-full bg-steel-dark text-white flex items-center justify-center text-sm font-bold flex-shrink-0">3</div>
+      <div class="flex-1">
+        <h2 class="font-semibold text-steel-dark mb-3">Upload your file</h2>
+        <form method="POST" action="/inventory/import" enctype="multipart/form-data" class="space-y-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Excel file (.xlsx)</label>
+            <input type="file" name="file" accept=".xlsx" required
+                   class="block w-full text-sm text-gray-700 border border-gray-200 rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-steel-dark file:text-white hover:file:bg-steel-mid cursor-pointer"/>
+          </div>
+          <div class="flex gap-3">
+            <button type="submit"
+                    class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">
+              Upload &amp; Import
+            </button>
+            <a href="/inventory" class="text-sm text-gray-400 hover:text-gray-600 py-2">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

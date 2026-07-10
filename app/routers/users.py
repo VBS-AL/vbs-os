@@ -140,6 +140,7 @@ async def update_user(
     mobile_access: int = Form(0),
     is_active: int = Form(1),
     new_password: str = Form(""),
+    hourly_cost_rate: str = Form(""),
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
@@ -162,6 +163,13 @@ async def update_user(
     target.role = UserRole(role)
     target.mobile_access = bool(mobile_access)
     target.is_active = bool(is_active)
+
+    # hourly_cost_rate — owner-only field
+    if user.role == UserRole.owner:
+        try:
+            target.hourly_cost_rate = float(hourly_cost_rate) if hourly_cost_rate.strip() else None
+        except ValueError:
+            pass
 
     if new_password.strip():
         if len(new_password) < 6:

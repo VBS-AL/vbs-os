@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Reports — Van Buren Steel{% endblock %}
+{% block content %}
+
+<!-- Header + period filter -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+  <div>
+    <h1 class="text-2xl font-bold text-steel-dark">Reports</h1>
+    {% if period == 'custom' %}
+    <p class="text-gray-500 text-sm">{{ date_from }} – {{ date_to }}</p>
+    {% else %}
+    <p class="text-gray-500 text-sm">{{ period_label }} &mdash; since {{ start_date.strftime('%B %d, %Y') }}</p>
+    {% endif %}
+  </div>
+  <div class="flex flex-wrap gap-2 items-center">
+    <a href="/reports/margin"
+       class="px-3 py-1.5 rounded-md text-sm font-semibold transition bg-amber-500 hover:bg-amber-400 text-white">
+      📊 Margin &amp; Estimating →
+    </a>
+    {% for key, label in period_labels.items() %}
+    {% if key != 'custom' %}
+    <a href="?period={{ key }}"
+       class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+         {% if period == key %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+      {{ label }}
+    </a>
+    {% endif %}
+    {% endfor %}
+
+    <!-- Custom date range -->
+    <div class="relative">
+      <button type="button" onclick="document.getElementById('rpt-custom-picker').classList.toggle('hidden')"
+              class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+                {% if period == 'custom' %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+        📅 {% if period == 'custom' %}{{ date_from }} – {{ date_to }}{% else %}Custom Range{% endif %}
+      </button>
+      <div id="rpt-custom-picker" class="{% if period != 'custom' %}hidden{% endif %} absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-20 w-64">
+        <form method="get" action="/reports" class="flex flex-col gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">From</label>
+            <input type="date" name="date_from" value="{{ date_from }}"
+                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">To</label>
+            <input type="date" name="date_to" value="{{ date_to }}"
+                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          </div>
+          <button type="submit"
+                  class="bg-steel-dark text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-steel-mid transition">
+            Apply
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Revenue summary -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Revenue</p>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-500">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Collected</p>
+    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.0f}".format(revenue_collected) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Payments received</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-teal-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Invoiced</p>
+    <p class="text-3xl font-bold text-teal-700 mt-1">${{ "{:,.0f}".format(revenue_invoiced) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Invoices issued</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-orange-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Outstanding</p>
+    <p class="text-3xl font-bold text-orange-700 mt-1">${{ "{:,.0f}".format(outstanding) }}</p>
+    <p class="text-xs text-gray-400 mt-1">All open balances</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-red-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Overdue</p>
+    <p class="text-3xl font-bold text-red-600 mt-1">${{ "{:,.0f}".format(overdue) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Past due date</p>
+  </div>
+</div>
+
+<!-- Orders + Quotes side by side -->
+<div class="grid grid-cols-2 gap-6 mb-8">
+
+  <!-- Orders summary -->
+  <div>
+    <p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Orders</p>
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <table class="w-full text-sm">
+        <tbody class="divide-y divide-gray-100">
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Created</td>
+            <td class="px-5 py-3 text-right font-bold text-steel-dark">{{ orders_created }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Completed (Delivered / Paid)</td>
+            <td class="px-5 py-3 text-right font-bold text-green-700">{{ orders_completed }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Still Active</td>
+            <td class="px-5 py-3 text-right font-bold text-blue-700">{{ orders_active }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Cancelled</td>
+            <td class="px-5 py-3 text-right font-bold text-red-600">{{ orders_cancelled }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light bg-gray-50">
+            <td class="px-5 py-3 text-gray-600">Avg Invoice Value</td>
+            <td class="px-5 py-3 text-right font-bold text-gray-700">${{ "{:,.0f}".format(avg_order_value) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Quote performance -->
+  <div>
+    <p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Quote Performance</p>
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <table class="w-full text-sm">
+        <tbody class="divide-y divide-gray-100">
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Total Created</td>
+            <td class="px-5 py-3 text-right font-bold text-steel-dark">{{ q_total }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Sent to Customer</td>
+            <td class="px-5 py-3 text-right font-bold text-steel-dark">{{ q_sent }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Converted to Order</td>
+            <td class="px-5 py-3 text-right font-bold text-green-700">{{ q_converted }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Declined</td>
+            <td class="px-5 py-3 text-right font-bold text-red-600">{{ q_declined }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 text-gray-600">Expired</td>
+            <td class="px-5 py-3 text-right font-bold text-gray-500">{{ q_expired }}</td>
+          </tr>
+          <tr class="hover:bg-steel-light bg-gray-50">
+            <td class="px-5 py-3 text-gray-600">Conversion Rate</td>
+            <td class="px-5 py-3 text-right font-bold text-purple-700">
+              {% if conversion_rate is not none %}{{ conversion_rate }}%{% else %}—{% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Top customers -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Top Customers by Revenue</p>
+<div class="bg-white rounded-xl shadow overflow-hidden mb-8">
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-5 py-3 text-left">#</th>
+        <th class="px-5 py-3 text-left">Customer</th>
+        <th class="px-5 py-3 text-right">Invoices</th>
+        <th class="px-5 py-3 text-right">Total Invoiced</th>
+        <th class="px-5 py-3 text-right">Total Paid</th>
+        <th class="px-5 py-3 text-right">Balance</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in top_customers %}
+      <tr class="hover:bg-steel-light cursor-pointer" onclick="window.location='/customers/{{ row.id }}'">
+        <td class="px-5 py-3 text-gray-400 font-medium">{{ loop.index }}</td>
+        <td class="px-5 py-3 font-medium text-steel-dark">{{ row.name }}</td>
+        <td class="px-5 py-3 text-right text-gray-600">{{ row.invoice_count }}</td>
+        <td class="px-5 py-3 text-right font-medium">${{ "{:,.0f}".format(row.total_invoiced or 0) }}</td>
+        <td class="px-5 py-3 text-right text-green-700">${{ "{:,.0f}".format(row.total_paid or 0) }}</td>
+        <td class="px-5 py-3 text-right {% if (row.total_invoiced or 0) - (row.total_paid or 0) > 0 %}text-orange-600{% else %}text-gray-400{% endif %}">
+          ${{ "{:,.0f}".format((row.total_invoiced or 0) - (row.total_paid or 0)) }}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="px-5 py-8 text-center text-gray-400">No invoices in this period.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Labor by department -->
+{% if labor_rows %}
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Labor by Department</p>
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-5 py-3 text-left">Department</th>
+        <th class="px-5 py-3 text-right">Hours</th>
+        <th class="px-5 py-3 text-right">Billed Value</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in labor_rows %}
+      <tr class="hover:bg-steel-light">
+        <td class="px-5 py-3 font-medium text-gray-700">{{ dept_labels.get(row.billing_dept.value, row.billing_dept.value.title()) }}</td>
+        <td class="px-5 py-3 text-right text-gray-600">{{ "%.1f"|format(row.total_hours) }} hrs</td>
+        <td class="px-5 py-3 text-right font-medium">${{ "{:,.0f}".format(row.total_value or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -10,7 +10,8 @@
 <form method="GET" class="bg-white rounded-xl shadow p-4 mb-6 flex gap-3 items-end">
   <div class="flex-1">
     <label class="block text-xs text-gray-500 mb-1">Search</label>
-    <input name="q" value="{{ q }}" placeholder="Name, company, phone, email…"
+    <input name="q" id="customer-quick-filter" value="{{ q }}" placeholder="Name, company, phone, email…"
+      autocomplete="off"
       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
   </div>
   <button type="submit" class="bg-steel-mid text-white px-4 py-2 rounded-lg text-sm hover:bg-steel-dark transition">Search</button>
@@ -42,7 +43,8 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for c in customers %}
-      <tr class="hover:bg-steel-light cursor-pointer" onclick="window.location='/customers/{{ c.id }}'">
+      <tr class="hover:bg-steel-light cursor-pointer customer-row" onclick="window.location='/customers/{{ c.id }}'"
+          data-search="{{ c.name }} {{ c.company or '' }} {{ c.phone or '' }} {{ c.email or '' }} {{ c.city or '' }}">
         <td class="px-4 py-3 font-medium text-steel-dark">
           <a href="/customers/{{ c.id }}" class="hover:underline">{{ c.name }}</a>
         </td>
@@ -67,4 +69,17 @@
     </tbody>
   </table>
 </div>
+
+<script>
+(function() {
+  const input = document.getElementById('customer-quick-filter');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    const q = this.value.toLowerCase().trim();
+    document.querySelectorAll('tr.customer-row').forEach(function(row) {
+      row.style.display = (!q || row.dataset.search.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+})();
+</script>
 {% endblock %}

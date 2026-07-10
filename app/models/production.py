@@ -45,6 +45,8 @@ class ProductionStage(Base):
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
 
     order          = relationship("Order", back_populates="production_stages")
+    assigned_to    = relationship("User", foreign_keys=[assigned_to_id], back_populates="assigned_stages")
+    work_sessions  = relationship("WorkSession", back_populates="stage")
 
 class QARecord(Base):
     __tablename__ = "qa_records"

@@ -8,13 +8,21 @@
   </div>
 
   <div class="flex gap-2 mb-4 flex-wrap">
-    <a href="/quotes" class="text-xs px-3 py-1.5 rounded-full border transition {% if not filter_status %}bg-steel-dark text-white border-steel-dark{% else %}border-gray-300 text-gray-600 hover:border-steel-mid{% endif %}">All</a>
+    <a href="/quotes" class="text-xs px-3 py-1.5 rounded-full border transition {% if not filter_status %}bg-steel-dark text-white border-steel-dark{% else %}border-gray-300 text-gray-600 hover:border-steel-mid{% endif %}">Active</a>
     {% for s in statuses %}
     <a href="/quotes?status={{ s.value }}" class="text-xs px-3 py-1.5 rounded-full border transition
       {% if filter_status == s.value %}bg-steel-dark text-white border-steel-dark{% else %}border-gray-300 text-gray-600 hover:border-steel-mid{% endif %}">
       {{ s.value.title() }}
     </a>
     {% endfor %}
+    <a href="/quotes?status=all" class="text-xs px-3 py-1.5 rounded-full border transition {% if filter_status == 'all' %}bg-steel-dark text-white border-steel-dark{% else %}border-gray-300 text-gray-600 hover:border-steel-mid{% endif %}">All</a>
+  </div>
+
+  <!-- Quick filter -->
+  <div class="mb-4">
+    <input id="quote-quick-filter" type="text" placeholder="Filter by quote #, customer, status…"
+      autocomplete="off"
+      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none bg-white shadow-sm"/>
   </div>
 
   <div class="bg-white rounded-xl shadow overflow-hidden">
@@ -43,7 +51,8 @@
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for qt in quotes %}
-        <tr class="hover:bg-gray-50 cursor-pointer transition" onclick="window.location='/quotes/{{ qt.id }}'">
+        <tr class="hover:bg-gray-50 cursor-pointer transition quote-row" onclick="window.location='/quotes/{{ qt.id }}'"
+            data-search="{{ qt.quote_number }} {{ qt.customer.name if qt.customer else '' }} {{ qt.status.value }} {{ qt.job_type or '' }}">
           <td class="px-5 py-3 font-mono font-semibold text-steel-mid">{{ qt.quote_number }}</td>
           <td class="px-5 py-3 font-medium">{{ qt.customer.name if qt.customer else '—' }}</td>
           <td class="px-5 py-3 text-center">
@@ -86,4 +95,17 @@
     </table>
   </div>
 </div>
+
+<script>
+(function() {
+  const input = document.getElementById('quote-quick-filter');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    const q = this.value.toLowerCase().trim();
+    document.querySelectorAll('tr.quote-row').forEach(function(row) {
+      row.style.display = (!q || row.dataset.search.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+})();
+</script>
 {% endblock %}

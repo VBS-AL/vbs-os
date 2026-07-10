@@ -19,28 +19,99 @@
 <body class="bg-gray-50 text-gray-800 font-sans">
 
 {% if user %}
-<nav class="bg-steel-dark text-white px-6 py-3 flex items-center justify-between shadow">
-  <div class="flex items-center gap-6">
-    <span class="font-bold text-lg tracking-wide">VAN BUREN STEEL</span>
-    <a href="/dashboard" class="text-sm hover:text-steel-light transition">Dashboard</a>
-    <a href="/orders" class="text-sm hover:text-steel-light transition">Orders</a>
-    {% if can_see_financials %}<a href="/invoices" class="text-sm hover:text-steel-light transition">Invoices</a>{% endif %}
-    <a href="/quotes" class="text-sm hover:text-steel-light transition">Quotes</a>
-    <a href="/customers" class="text-sm hover:text-steel-light transition">Customers</a>
-    <a href="/inventory" class="text-sm hover:text-steel-light transition">Inventory</a>
-    {% if user.role.value in ["owner","ops_manager"] %}
-    <a href="/reports" class="text-sm hover:text-steel-light transition">Reports</a>
-    <a href="/users" class="text-sm hover:text-steel-light transition">Team</a>
-    {% endif %}
+<nav class="bg-steel-dark text-white shadow">
+  <!-- Main row -->
+  <div class="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+
+    <!-- Logo -->
+    <a href="/dashboard" class="font-bold text-base sm:text-lg tracking-wide whitespace-nowrap flex-shrink-0">VAN BUREN STEEL</a>
+
+    <!-- Desktop nav links -->
+    <div class="hidden lg:flex items-center gap-5 flex-1 ml-4">
+      <a href="/dashboard" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Dashboard</a>
+      <a href="/quotes"    class="text-sm hover:text-amber-300 transition whitespace-nowrap">Quotes</a>
+      <a href="/orders"    class="text-sm hover:text-amber-300 transition whitespace-nowrap">Orders</a>
+      {% if can_see_financials %}<a href="/invoices" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Invoices</a>{% endif %}
+      {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
+      <a href="/customers"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Customers</a>
+      {% endif %}
+      <a href="/inventory"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Inventory</a>
+      <a href="/production" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Production</a>
+      {% if user.role.value in ["owner","ops_manager"] %}
+      <a href="/reports" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Reports</a>
+      <a href="/users"   class="text-sm hover:text-amber-300 transition whitespace-nowrap">Team</a>
+      {% endif %}
+    </div>
+
+    <!-- Right side (always visible) -->
+    <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+      <a href="/production/queue"
+         class="text-xs bg-amber-500 hover:bg-amber-400 text-white font-semibold px-2.5 py-1.5 rounded-md transition whitespace-nowrap">
+        ⏱ My Queue
+      </a>
+      <span class="hidden sm:block text-xs text-gray-300 whitespace-nowrap">
+        {{ user.first_name }} {{ user.last_name or '' }} &middot; {{ user.role.value.replace("_"," ").title() }}
+      </span>
+      <a href="/auth/logout"
+         class="hidden sm:block text-xs bg-steel-mid hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-md transition whitespace-nowrap">
+        Logout
+      </a>
+      <!-- Hamburger (mobile/tablet only) -->
+      <button id="nav-hamburger" onclick="document.getElementById('nav-mobile').classList.toggle('hidden')"
+              class="lg:hidden flex flex-col justify-center gap-1 w-7 h-7 flex-shrink-0">
+        <span class="block h-0.5 bg-white rounded"></span>
+        <span class="block h-0.5 bg-white rounded"></span>
+        <span class="block h-0.5 bg-white rounded"></span>
+      </button>
+    </div>
+
   </div>
-  <div class="flex items-center gap-4">
-    <span class="text-xs text-gray-300">{{ user.first_name }} {{ user.last_name }} &middot; {{ user.role.value.replace("_"," ").title() }}</span>
-    <a href="/auth/logout" class="text-xs bg-steel-mid hover:bg-blue-700 text-white px-3 py-1.5 rounded-md transition">Logout</a>
+
+  <!-- Mobile dropdown menu -->
+  <div id="nav-mobile" class="hidden lg:hidden border-t border-blue-900 px-4 pb-3">
+    <div class="flex flex-col gap-1 pt-2">
+      <a href="/dashboard"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Dashboard</a>
+      <a href="/quotes"     class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Quotes</a>
+      <a href="/orders"     class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Orders</a>
+      {% if can_see_financials %}
+      <a href="/invoices"   class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Invoices</a>
+      {% endif %}
+      {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
+      <a href="/customers"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Customers</a>
+      {% endif %}
+      <a href="/inventory"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Inventory</a>
+      <a href="/production" class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Production</a>
+      {% if user.role.value in ["owner","ops_manager"] %}
+      <a href="/reports"    class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Reports</a>
+      <a href="/users"      class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Team</a>
+      {% endif %}
+      <!-- User info + logout at bottom of mobile menu -->
+      <div class="pt-2 flex items-center justify-between">
+        <span class="text-xs text-gray-400">
+          {{ user.first_name }} {{ user.last_name or '' }} &middot; {{ user.role.value.replace("_"," ").title() }}
+        </span>
+        <a href="/auth/logout" class="text-xs bg-steel-mid hover:bg-blue-700 text-white px-3 py-1.5 rounded-md transition">Logout</a>
+      </div>
+    </div>
   </div>
 </nav>
 {% endif %}
 
 <main class="px-6 py-6 max-w-screen-xl mx-auto">
+  <div id="back-btn-wrap" class="hidden mb-3">
+    <button onclick="history.back()" class="inline-flex items-center gap-1 text-sm text-steel-mid hover:text-steel-dark transition">
+      &#8592; Back
+    </button>
+  </div>
+  <script>
+    (function() {
+      var path = window.location.pathname;
+      var topLevel = ['/', '/dashboard', '/quotes', '/orders', '/invoices', '/customers', '/inventory', '/production', '/production/queue', '/reports', '/users'];
+    if (history.length > 1 && topLevel.indexOf(path) === -1) {
+        document.getElementById('back-btn-wrap').classList.remove('hidden');
+      }
+    })();
+  </script>
   {% block content %}{% endblock %}
 </main>
 

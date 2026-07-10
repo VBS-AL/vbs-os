@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Inventory — Van Buren Steel{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-steel-dark">Inventory</h1>
+    <p class="text-gray-500 text-sm">Stock levels and material tracking</p>
+  </div>
+  <div class="flex gap-2">
+    {% if can_see_financials %}<a href="/inventory/settings" class="border border-gray-300 text-gray-500 text-sm px-4 py-2 rounded-lg hover:bg-gray-50 transition">⚙ Markup Settings</a>{% endif %}
+    <a href="/inventory/audit" class="border border-steel-dark text-steel-dark text-sm px-4 py-2 rounded-lg hover:bg-steel-light transition">📋 Physical Count</a>
+    <a href="/inventory/import" class="border border-steel-dark text-steel-dark text-sm px-4 py-2 rounded-lg hover:bg-steel-light transition">↑ Import</a>
+    <a href="/inventory/new" class="bg-steel-dark text-white text-sm px-4 py-2 rounded-lg hover:bg-steel-mid transition">+ Add Item</a>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="bg-white rounded-xl shadow p-4 mb-6">
+  <form id="inv-filter-form" method="get" action="/inventory" class="flex flex-wrap gap-3 items-end w-full">
+    <!-- Hidden sort state (updated by JS when sort headers are clicked) -->
+    <input type="hidden" name="sort_by"  id="inv-sort-by"  value="{{ sort_by }}">
+    <input type="hidden" name="sort_dir" id="inv-sort-dir" value="{{ sort_dir }}">
+
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Search</label>
+      <input type="text" name="q" id="inv-search" value="{{ search }}" placeholder="Item name or SKU…" autocomplete="off"
+             hx-get="/inventory" hx-trigger="keyup changed delay:300ms" hx-target="#inventory-table-body"
+             hx-include="#inv-filter-form"
+             class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid w-[32rem]">
+    </div>
+
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Category</label>
+      <select name="category"
+              hx-get="/inventory" hx-trigger="change" hx-target="#inventory-table-body" hx-include="#inv-filter-form"
+              class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        <option value="">All Categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat.value }}" {% if category_filter == cat.value %}selected{% endif %}>
+          {{ category_labels[cat.value] }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">
+        Stock Status
+        {% if low_stock_count > 0 %}
+        <span class="ml-1 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">{{ low_stock_count }} low</span>
+        {% endif %}
+      </label>
+      <select name="stock_status"
+              hx-get="/inventory" hx-trigger="change" hx-target="#inventory-table-body" hx-include="#inv-filter-form"
+              class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        <option value=""  {% if stock_status == '' %}selected{% endif %}>All</option>
+        <option value="ok"  {% if stock_status == 'ok' %}selected{% endif %}>In Stock</option>
+        <option value="low" {% if stock_status == 'low' %}selected{% endif %}>Low Stock</option>
+        <option value="out" {% if stock_status == 'out' %}selected{% endif %}>Out of Stock</option>
+      </select>
+    </div>
+
+    <a href="/inventory"
+       class="px-4 py-2 bg-red-50 border border-red-300 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 transition">
+      ✕ Clear
+    </a>
+  </form>
+</div>
+
+<!-- Table -->
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        {% macro sort_th(label, key, align='left') %}
+          {% set next_dir = 'desc' if (sort_by == key and sort_dir == 'asc') else 'asc' %}
+          <th class="px-4 py-3 text-{{ align }}">
+            <button type="button"
+                    onclick="invSort('{{ key }}', '{{ next_dir }}')"
+                    class="hover:text-steel-mid inline-flex items-center gap-1 {% if sort_by == key %}text-steel-mid{% endif %} font-semibold uppercase tracking-wide text-xs">
+              {{ label }}
+              {% if sort_by == key %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}<span class="text-gray-300">⇅</span>{% endif %}
+            </button>
+          </th>
+        {% endmacro %}
+        {{ sort_th('SKU', 'sku') }}
+        {{ sort_th('Name', 'name') }}
+        {{ sort_th('Category', 'category') }}
+        {{ sort_th('Location', 'location') }}
+        {{ sort_th('On Hand', 'on_hand', 'right') }}
+        {{ sort_th('Reorder At', 'reorder', 'right') }}
+        {% if can_see_financials %}{{ sort_th('Unit Cost', 'cost', 'right') }}{% endif %}
+        {% if can_see_financials %}<th class="px-4 py-3 text-right text-xs uppercase tracking-wide font-semibold">Stock Value</th>{% endif %}
+        <th class="px-4 py-3 text-left">Status</th>
+      </tr>
+    </thead>
+    <tbody id="inventory-table-body" class="divide-y divide-gray-100">
+      {% include "inventory/_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function invSort(key, dir) {
+  document.getElementById('inv-sort-by').value  = key;
+  document.getElementById('inv-sort-dir').value = dir;
+  // Fire an HTMX GET directly with all form values
+  const form = document.getElementById('inv-filter-form');
+  htmx.ajax('GET', '/inventory', {
+    target: '#inventory-table-body',
+    values: Object.fromEntries(new FormData(form))
+  });
+}
+</script>
+{% endblock %}

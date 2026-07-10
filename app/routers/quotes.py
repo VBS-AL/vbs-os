@@ -11,6 +11,7 @@ from app.database import get_db
 from app.auth import require_user, require_management, financials_visible
 from app.models.user import User, UserRole
 from app.models.quote import Quote, QuoteLineItem, QuoteStatus, QuoteRevision
+from app.models.labor import BILLING_RATES, BillingDept
 from app.models.order import Order, OrderLineItem, OrderStatus, JobType, Priority
 from app.models.customer import Customer
 from app.models.production import ProductionStage, StageType
@@ -48,8 +49,13 @@ async def quote_list(
     db: Session = Depends(get_db),
 ):
     query = db.query(Quote).options(joinedload(Quote.customer))
-    if status:
+    if status == "all":
+        pass  # no status filter — show everything
+    elif status:
         query = query.filter(Quote.status == status)
+    else:
+        # default: active quotes only (draft, sent, accepted)
+        query = query.filter(Quote.status.in_([QuoteStatus.draft, QuoteStatus.sent, QuoteStatus.accepted]))
     if q:
         query = query.join(Customer).filter(
             or_(Quote.quote_number.ilike(f"%{q}%"),
@@ -120,6 +126,7 @@ async def create_quote(
     drawings_required: bool = Form(False),
     description: str = Form(""),
     notes: str = Form(""),
+    delivery_surcharge: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -168,6 +175,10 @@ async def create_quote(
             qty = float(form.get(f"li_qty_{idx}", 1) or 1)
             price = float(form.get(f"li_price_{idx}") or 0)
             paint_val = form.get(f"li_paint_{idx}", "").strip()
+            inv_id_raw = form.get(f"li_inv_id_{idx}", "").strip()
+            inv_id = int(inv_id_raw) if inv_id_raw else None
+            labor_hrs = float(form.get(f"li_labor_{idx}") or 0)
+            labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
             li = QuoteLineItem(
                 quote_id=quote.id,
                 line_number=idx + 1,
@@ -178,10 +189,30 @@ async def create_quote(
                 unit_price=price or None,
                 paint_override=None if paint_val in ("", "Same as Job") else paint_val,
                 notes=form.get(f"li_notes_{idx}", "").strip() or None,
+                inventory_item_id=inv_id,
+                estimated_labor_hours=labor_hrs or None,
+                estimated_labor_dept=labor_dept,
             )
             db.add(li)
             total += qty * price
+            if labor_hrs and labor_dept:
+                try:
+                    rate = BILLING_RATES.get(BillingDept(labor_dept), 0)
+                    total += labor_hrs * rate
+                except Exception:
+                    pass
         idx += 1
+
+    # Delivery surcharge
+    surcharge_amount = float(delivery_surcharge) if delivery_surcharge else None
+    if surcharge_amount and surcharge_amount > 0:
+        db.add(QuoteLineItem(
+            quote_id=quote.id, line_number=idx + 1,
+            description="Delivery",
+            quantity=1, unit_price=surcharge_amount,
+            is_delivery_surcharge=True,
+        ))
+        total += surcharge_amount
 
     quote.total_estimated = round(total, 2) if total else None
     db.commit()
@@ -205,11 +236,13 @@ async def quote_detail(
         raise HTTPException(404, "Quote not found")
     check_expiry(quote)
     db.commit()
+    billing_rates = {k.value: v for k, v in BILLING_RATES.items()}
     return templates.TemplateResponse("quotes/detail.html", {
         "request": request, "user": user, "quote": quote,
         "paint_options": PAINT_OPTIONS,
         "today": date.today(),
         "can_see_financials": financials_visible(user),
+        "billing_rates": billing_rates,
     })
 
 # ── Mark Sent ─────────────────────────────────────────────────────────────
@@ -227,7 +260,7 @@ async def mark_sent(
     quote.sent_at = datetime.now(timezone.utc)
     quote.valid_until = date.today() + timedelta(days=14)
     db.commit()
-    return RedirectResponse(f"/quotes/{quote_id}/print", status_code=302)
+    return RedirectResponse(f"/quotes/{quote_id}", status_code=302)
 
 # ── Print View ───────────────────────────────────────────────────────────
 @router.get("/{quote_id}/print", response_class=HTMLResponse)
@@ -251,6 +284,7 @@ async def print_quote(
 @router.post("/{quote_id}/accept")
 async def accept_quote(
     quote_id: int,
+    promised_date: str = Form(...),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -279,14 +313,14 @@ async def accept_quote(
         drawings_required=quote.drawings_required,
         description=quote.description,
         notes=f"[Converted from {quote.quote_number}]\n{quote.notes or ''}".strip(),
-        promised_date=None,   # must be finalized
+        promised_date=date.fromisoformat(promised_date) if promised_date else None,
         created_by_id=user.id,
     )
     db.add(order)
     db.flush()
 
-    # Transfer line items
-    for idx, li in enumerate(quote.line_items):
+    # Transfer line items (carry over inventory link and labor estimates)
+    for idx, li in enumerate(sorted(quote.line_items, key=lambda x: x.line_number)):
         db.add(OrderLineItem(
             order_id=order.id,
             line_number=idx + 1,
@@ -294,6 +328,9 @@ async def accept_quote(
             quantity=li.quantity,
             unit_price=li.unit_price,
             paint_override=None,
+            inventory_item_id=li.inventory_item_id,
+            estimated_labor_hours=li.estimated_labor_hours,
+            estimated_labor_dept=li.estimated_labor_dept,
         ))
 
     # Create production stages
@@ -411,6 +448,10 @@ async def edit_quote(
             qty = float(form.get(f"li_qty_{idx}", 1) or 1)
             price = float(form.get(f"li_price_{idx}") or 0)
             paint_val = form.get(f"li_paint_{idx}", "").strip()
+            inv_id_raw = form.get(f"li_inv_id_{idx}", "").strip()
+            inv_id = int(inv_id_raw) if inv_id_raw else None
+            labor_hrs = float(form.get(f"li_labor_{idx}") or 0)
+            labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
             db.add(QuoteLineItem(
                 quote_id=quote.id,
                 line_number=idx + 1,
@@ -421,9 +462,32 @@ async def edit_quote(
                 unit_price=price or None,
                 paint_override=None if paint_val in ("", "Same as Job") else paint_val,
                 notes=form.get(f"li_notes_{idx}", "").strip() or None,
+                inventory_item_id=inv_id,
+                estimated_labor_hours=labor_hrs or None,
+                estimated_labor_dept=labor_dept,
             ))
             total += qty * price
+            if labor_hrs and labor_dept:
+                try:
+                    rate = BILLING_RATES.get(BillingDept(labor_dept), 0)
+                    total += labor_hrs * rate
+                except Exception:
+                    pass
         idx += 1
+    # Delivery charge
+    surcharge_raw = form.get("delivery_surcharge", "").strip()
+    surcharge_amount = float(surcharge_raw) if surcharge_raw else None
+    if surcharge_amount and surcharge_amount > 0:
+        db.add(QuoteLineItem(
+            quote_id=quote.id,
+            line_number=idx + 1,
+            description="Delivery",
+            quantity=1,
+            unit_price=surcharge_amount,
+            is_delivery_surcharge=True,
+        ))
+        total += surcharge_amount
+
     quote.total_estimated = round(total, 2) if total else None
     db.commit()
     return RedirectResponse(f"/quotes/{quote_id}", status_code=302)

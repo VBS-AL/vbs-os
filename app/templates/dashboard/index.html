@@ -1,80 +1,280 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — Van Buren Steel{% endblock %}
 {% block content %}
-<div class="mb-6">
-  <h1 class="text-2xl font-bold text-steel-dark">Dashboard</h1>
-  <p class="text-gray-500 text-sm">Good to see you, {{ user.first_name }}.</p>
+
+<!-- Header + period filter -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+  <div>
+    <h1 class="text-2xl font-bold text-steel-dark">Dashboard</h1>
+    <p class="text-gray-500 text-sm">Good to see you, {{ user.first_name }}.</p>
+  </div>
+  <div class="flex flex-wrap gap-2 items-center">
+    {% for key, label in period_labels.items() %}
+    {% if key != 'custom' %}
+    <a href="?period={{ key }}"
+       class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+         {% if period == key %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+      {{ label }}
+    </a>
+    {% endif %}
+    {% endfor %}
+
+    <!-- Custom date range -->
+    <div class="relative">
+      <button type="button" onclick="document.getElementById('custom-range-picker').classList.toggle('hidden')"
+              class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+                {% if period == 'custom' %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+        📅 {% if period == 'custom' %}{{ date_from }} – {{ date_to }}{% else %}Custom Range{% endif %}
+      </button>
+      <div id="custom-range-picker" class="{% if period != 'custom' %}hidden{% endif %} absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-20 w-64">
+        <form method="get" action="/dashboard" class="flex flex-col gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">From</label>
+            <input type="date" name="date_from" value="{{ date_from }}"
+                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">To</label>
+            <input type="date" name="date_to" value="{{ date_to }}"
+                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          </div>
+          <button type="submit"
+                  class="bg-steel-dark text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-steel-mid transition">
+            Apply
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- Stat cards -->
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Active Orders</p>
-    <p class="text-3xl font-bold text-steel-dark mt-1">{{ active_orders|length }}</p>
-  </div>
-  {% if can_see_financials %}
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-red-400">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Overdue Invoices</p>
-    <p class="text-3xl font-bold text-red-600 mt-1">{{ overdue_invoices }}</p>
-  </div>
-  {% endif %}
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-yellow-400">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">On Hold</p>
-    <p class="text-3xl font-bold text-yellow-600 mt-1">
-      {{ active_orders | selectattr('status','equalto','on_hold') | list | length }}
-    </p>
-  </div>
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-green-400">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Ready to Deliver</p>
-    <p class="text-3xl font-bold text-green-600 mt-1">
-      {{ active_orders | selectattr('status','equalto','ready') | list | length }}
-    </p>
-  </div>
-</div>
-
-<!-- Active Orders table -->
-<div class="bg-white rounded-xl shadow overflow-hidden">
-  <div class="flex items-center justify-between px-6 py-4 border-b">
-    <h2 class="font-semibold text-steel-dark">Active Orders</h2>
-    <a href="/orders/new" class="bg-steel-dark text-white text-xs px-4 py-2 rounded-lg hover:bg-steel-mid transition">+ New Order</a>
+<!-- Overdue alert -->
+{% if overdue_orders %}
+<div class="bg-red-50 border border-red-200 rounded-xl mb-6 overflow-hidden">
+  <div class="flex items-center gap-2 px-5 py-3 bg-red-100 border-b border-red-200">
+    <span class="text-red-600 font-semibold text-sm">⚠ {{ overdue_orders|length }} order{{ 's' if overdue_orders|length != 1 }} past promised date</span>
   </div>
   <table class="w-full text-sm">
-    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
-      <tr>
-        <th class="px-4 py-3 text-left">Order #</th>
-        <th class="px-4 py-3 text-left">Customer</th>
-        <th class="px-4 py-3 text-left">Type</th>
-        <th class="px-4 py-3 text-left">Status</th>
-        <th class="px-4 py-3 text-left">Priority</th>
-        <th class="px-4 py-3 text-left">Due</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-gray-100">
-      {% for o in active_orders %}
-      <tr class="hover:bg-steel-light cursor-pointer" onclick="window.location='/orders/{{ o.id }}'">
-        <td class="px-4 py-3 font-mono font-medium text-steel-mid">{{ o.order_number }}</td>
-        <td class="px-4 py-3">{{ o.customer.name if o.customer else '—' }}</td>
-        <td class="px-4 py-3 capitalize">{{ o.job_type.replace('_',' ') }}</td>
-        <td class="px-4 py-3">
+    <tbody class="divide-y divide-red-100">
+      {% for o in overdue_orders %}
+      {% set days_late = (today - o.promised_date).days %}
+      <tr class="hover:bg-red-100 cursor-pointer transition" onclick="window.location='/orders/{{ o.id }}'">
+        <td class="px-5 py-2.5 font-mono font-medium text-steel-mid">{{ o.order_number }}</td>
+        <td class="px-5 py-2.5 text-gray-700">{{ o.customer.name if o.customer else '—' }}</td>
+        <td class="px-5 py-2.5">
           <span class="px-2 py-0.5 rounded-full text-xs font-medium
             {% if o.status.value == 'on_hold' %}bg-yellow-100 text-yellow-800
-            {% elif o.status.value == 'ready' %}bg-green-100 text-green-800
+            {% elif o.status.value == 'in_production' %}bg-blue-100 text-blue-800
             {% elif o.status.value == 'qa_review' %}bg-purple-100 text-purple-800
-            {% else %}bg-blue-100 text-blue-800{% endif %}">
+            {% else %}bg-gray-100 text-gray-700{% endif %}">
             {{ o.status.value.replace('_',' ').title() }}
           </span>
         </td>
-        <td class="px-4 py-3">
-          {% if o.priority.value == 'urgent' %}<span class="text-red-600 font-bold">Urgent</span>
-          {% elif o.priority.value == 'priority' %}<span class="text-yellow-600 font-medium">Priority</span>
-          {% else %}<span class="text-gray-400">Standard</span>{% endif %}
+        <td class="px-5 py-2.5 text-red-600 font-medium text-xs">
+          {{ days_late }} day{{ 's' if days_late != 1 }} overdue
         </td>
-        <td class="px-4 py-3 text-gray-500">{{ o.promised_date or '—' }}</td>
+        {% if o.priority.value == 'urgent' %}
+        <td class="px-5 py-2.5"><span class="text-red-600 font-bold text-xs">Urgent</span></td>
+        {% elif o.priority.value == 'priority' %}
+        <td class="px-5 py-2.5"><span class="text-yellow-600 font-medium text-xs">Priority</span></td>
+        {% else %}
+        <td class="px-5 py-2.5"></td>
+        {% endif %}
       </tr>
-      {% else %}
-      <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No active orders.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% endif %}
+
+<!-- Live stat cards -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Live — Right Now</p>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+  <a href="/orders?status=active" class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid hover:shadow-md hover:bg-steel-light transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Active Orders</p>
+    <p class="text-3xl font-bold text-steel-dark mt-1">{{ active_orders|length }}</p>
+  </a>
+  <a href="/orders?status=on_hold" class="bg-white rounded-xl shadow p-5 border-l-4 border-yellow-400 hover:shadow-md hover:bg-yellow-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">On Hold</p>
+    <p class="text-3xl font-bold text-yellow-600 mt-1">{{ on_hold_count }}</p>
+  </a>
+  <a href="/orders?status=ready" class="bg-white rounded-xl shadow p-5 border-l-4 border-green-400 hover:shadow-md hover:bg-green-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Ready to Deliver</p>
+    <p class="text-3xl font-bold text-green-600 mt-1">{{ ready_count }}</p>
+  </a>
+  {% if can_see_financials %}
+  <a href="/invoices" class="bg-white rounded-xl shadow p-5 border-l-4 border-red-400 hover:shadow-md hover:bg-red-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Overdue Invoices</p>
+    <p class="text-3xl font-bold text-red-600 mt-1">{{ overdue_count }}</p>
+  </a>
+  {% else %}
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-blue-300">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Quotes Sent</p>
+    <p class="text-3xl font-bold text-blue-600 mt-1">{{ quotes_sent }}</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Live financial value cards -->
+{% if can_see_financials %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <a href="/orders?status=active" class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid hover:shadow-md hover:bg-steel-light transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Active Orders Value</p>
+    <p class="text-2xl font-bold text-steel-dark mt-1">${{ "{:,.0f}".format(active_total) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Total pipeline</p>
+  </a>
+  <a href="/orders?status=on_hold" class="bg-white rounded-xl shadow p-5 border-l-4 border-yellow-400 hover:shadow-md hover:bg-yellow-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">On Hold Value</p>
+    <p class="text-2xl font-bold text-yellow-600 mt-1">${{ "{:,.0f}".format(on_hold_value) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Tied-up value</p>
+  </a>
+  <a href="/orders?status=ready" class="bg-white rounded-xl shadow p-5 border-l-4 border-green-400 hover:shadow-md hover:bg-green-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Ready to Invoice</p>
+    <p class="text-2xl font-bold text-green-600 mt-1">${{ "{:,.0f}".format(ready_value) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Waiting to go out</p>
+  </a>
+  <a href="/invoices" class="bg-white rounded-xl shadow p-5 border-l-4 border-red-400 hover:shadow-md hover:bg-red-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Overdue Amount</p>
+    <p class="text-2xl font-bold text-red-600 mt-1">${{ "{:,.0f}".format(overdue_amount) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Outstanding invoices</p>
+  </a>
+</div>
+{% endif %}
+
+<!-- Quote Pipeline -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Quote Pipeline</p>
+<div class="grid grid-cols-2 gap-4 mb-4">
+  <a href="/quotes?status=sent" class="bg-white rounded-xl shadow p-5 border-l-4 border-blue-400 hover:shadow-md hover:bg-blue-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Awaiting Customer Response</p>
+    <p class="text-3xl font-bold text-blue-600 mt-1">{{ pipeline_quotes_sent|length }}</p>
+    {% if can_see_financials and sent_value > 0 %}
+    <p class="text-xs text-gray-400 mt-1">Potential: ${{ "{:,.0f}".format(sent_value) }}</p>
+    {% endif %}
+  </a>
+  {% if can_see_financials %}
+  <a href="/quotes" class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-400 hover:shadow-md hover:bg-emerald-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Total Pipeline Value</p>
+    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.0f}".format(draft_value + sent_value) }}</p>
+    <p class="text-xs text-gray-400 mt-1">{{ pipeline_quotes_draft|length }} draft{{ 's' if pipeline_quotes_draft|length != 1 }} · {{ pipeline_quotes_sent|length }} sent</p>
+  </a>
+  {% else %}
+  <a href="/quotes?status=draft" class="bg-white rounded-xl shadow p-5 border-l-4 border-gray-300 hover:shadow-md hover:bg-gray-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Drafts — Not Yet Sent</p>
+    <p class="text-3xl font-bold text-gray-600 mt-1">{{ pipeline_quotes_draft|length }}</p>
+  </a>
+  {% endif %}
+</div>
+<div class="mb-8"></div>
+
+<!-- WIP Value (financials only) -->
+{% if can_see_financials %}
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Work in Progress — Value</p>
+<div class="grid grid-cols-3 gap-4 mb-8">
+  <a href="/orders?status=confirmed" class="bg-white rounded-xl shadow p-5 border-l-4 border-indigo-400 hover:shadow-md hover:bg-indigo-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Backlog (Confirmed, Not Started)</p>
+    <p class="text-3xl font-bold text-indigo-700 mt-1">${{ "{:,.0f}".format(wip_backlog) }}</p>
+    <div class="mt-2 flex justify-between text-xs text-gray-400">
+      <span>{{ pipeline.confirmed }} order{{ 's' if pipeline.confirmed != 1 }}</span>
+      <span>Materials: ${{ "{:,.0f}".format(wip_backlog_mat) }} · Labor: ${{ "{:,.0f}".format(wip_backlog - wip_backlog_mat) }}</span>
+    </div>
+  </a>
+  <a href="/orders?status=wip" class="bg-white rounded-xl shadow p-5 border-l-4 border-blue-500 hover:shadow-md hover:bg-blue-50 transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Active WIP (In Shop)</p>
+    <p class="text-3xl font-bold text-blue-700 mt-1">${{ "{:,.0f}".format(wip_in_shop) }}</p>
+    <div class="mt-2 flex justify-between text-xs text-gray-400">
+      <span>In Production · QA · On Hold · Ready</span>
+      <span>Materials: ${{ "{:,.0f}".format(wip_in_shop_mat) }} · Labor: ${{ "{:,.0f}".format(wip_in_shop - wip_in_shop_mat) }}</span>
+    </div>
+  </a>
+  <a href="/orders?status=active" class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-dark hover:shadow-md hover:bg-steel-light transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Total WIP Value</p>
+    <p class="text-3xl font-bold text-steel-dark mt-1">${{ "{:,.0f}".format(wip_backlog + wip_in_shop) }}</p>
+    <div class="mt-2 flex justify-between text-xs text-gray-400">
+      <span>All active orders</span>
+      <span>Materials: ${{ "{:,.0f}".format(wip_backlog_mat + wip_in_shop_mat) }} · Labor: ${{ "{:,.0f}".format((wip_backlog - wip_backlog_mat) + (wip_in_shop - wip_in_shop_mat)) }}</span>
+    </div>
+  </a>
+</div>
+{% endif %}
+
+<!-- Pipeline breakdown -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Shop Floor Pipeline</p>
+<div class="bg-white rounded-xl shadow p-5 mb-8">
+  <div class="flex items-center justify-between gap-2">
+
+    <a href="/orders?status=confirmed" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="bg-gray-100 rounded-lg px-4 py-4 hover:bg-gray-200 transition">
+        <p class="text-3xl font-bold text-gray-700">{{ pipeline.confirmed }}</p>
+        <p class="text-xs text-gray-500 mt-1 font-medium uppercase tracking-wide">Confirmed</p>
+      </div>
+    </a>
+
+    <div class="text-gray-300 text-2xl font-light flex-shrink-0">›</div>
+
+    <a href="/orders?status=in_production" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="bg-blue-50 rounded-lg px-4 py-4 hover:bg-blue-100 transition">
+        <p class="text-3xl font-bold text-blue-700">{{ pipeline.in_production }}</p>
+        <p class="text-xs text-blue-500 mt-1 font-medium uppercase tracking-wide">In Production</p>
+      </div>
+    </a>
+
+    <div class="text-gray-300 text-2xl font-light flex-shrink-0">›</div>
+
+    <a href="/orders?status=qa_review" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="bg-purple-50 rounded-lg px-4 py-4 hover:bg-purple-100 transition">
+        <p class="text-3xl font-bold text-purple-700">{{ pipeline.qa_review }}</p>
+        <p class="text-xs text-purple-500 mt-1 font-medium uppercase tracking-wide">QA / Inspection</p>
+      </div>
+    </a>
+
+    <div class="text-gray-300 text-2xl font-light flex-shrink-0">›</div>
+
+    <a href="/orders?status=ready" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="bg-green-50 rounded-lg px-4 py-4 hover:bg-green-100 transition">
+        <p class="text-3xl font-bold text-green-700">{{ pipeline.ready }}</p>
+        <p class="text-xs text-green-500 mt-1 font-medium uppercase tracking-wide">Ready to Deliver</p>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<!-- Period stat cards -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">{{ period_label }}</p>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  {% if can_see_financials %}
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-500">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Revenue Collected</p>
+    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.0f}".format(revenue_collected) }}</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-teal-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Revenue Invoiced</p>
+    <p class="text-3xl font-bold text-teal-700 mt-1">${{ "{:,.0f}".format(revenue_invoiced) }}</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-orange-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Outstanding Balance</p>
+    <p class="text-3xl font-bold text-orange-700 mt-1">${{ "{:,.0f}".format(outstanding) }}</p>
+  </div>
+  {% endif %}
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Orders Created</p>
+    <p class="text-3xl font-bold text-steel-dark mt-1">{{ orders_created }}</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-green-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Jobs Completed</p>
+    <p class="text-3xl font-bold text-green-700 mt-1">{{ jobs_completed }}</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-purple-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Quote Conversion</p>
+    {% if quotes_sent > 0 %}
+    <p class="text-3xl font-bold text-purple-700 mt-1">{{ "%.0f"|format(quotes_converted / quotes_sent * 100) }}%</p>
+    <p class="text-xs text-gray-400 mt-1">{{ quotes_converted }} of {{ quotes_sent }} sent</p>
+    {% else %}
+    <p class="text-3xl font-bold text-purple-700 mt-1">—</p>
+    <p class="text-xs text-gray-400 mt-1">No quotes sent</p>
+    {% endif %}
+  </div>
+</div>
+
+
 {% endblock %}
