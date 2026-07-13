@@ -8,6 +8,7 @@ class JobType(str, enum.Enum):
     walk_in     = "walk_in"
     fabrication = "fabrication"
     structural  = "structural"
+    beam        = "beam"        # residential beam jobs — labor rolled into $/lb price
 
 class OrderStatus(str, enum.Enum):
     draft         = "draft"
@@ -76,10 +77,6 @@ class OrderLineItem(Base):
     paint_override        = Column(String, nullable=True)
     unit_price            = Column(Float, nullable=True)
     notes                 = Column(Text, nullable=True)
+    internal_notes        = Column(Text, nullable=True)    # shop/production notes — never shown to customer
     inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
-    estimated_labor_hours = Column(Float, nullable=True)
-    estimated_labor_dept  = Column(String, nullable=True)
-    is_delivery_surcharge = Column(Boolean, default=False)
-
-    order                 = relationship("Order", back_populates="line_items")
-    inventory_item        = relationship("InventoryItem")
+    estimated_labor_hours = Column(Float, nullable=Tr

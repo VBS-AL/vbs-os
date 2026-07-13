@@ -6,11 +6,29 @@ from app.database import Base
 
 
 class InventoryCategory(str, enum.Enum):
-    plate      = "plate"       # flat plate steel — Plate area
-    structural = "structural"  # angle iron, tube, channel — Structural Steel area
-    beam       = "beam"        # I-beam, H-beam, wide flange — Beam area
-    consumables = "consumables" # welding wire, gas, paint, grinding discs
-    hardware   = "hardware"    # bolts, nuts, anchors, fasteners
+    # ── Carbon Steel ─────────────────────────────────────────────────────────
+    steel_pipe           = "steel_pipe"           # Schedule 40 Pipe, DOM
+    steel_rect_tube      = "steel_rect_tube"      # Rectangular Tubing
+    steel_sq_tube        = "steel_sq_tube"        # Square Tubing
+    steel_channel        = "steel_channel"        # Channel - Steel
+    steel_bar            = "steel_bar"            # HR/CR Bar (Flat/Sq/Rd), HR Dry Strip, Angle Iron
+    steel_ibeam          = "steel_ibeam"          # I-Beam - Steel
+    wide_flange          = "wide_flange"          # Wide Flange Beams
+    columns              = "columns"              # Columns (N/S)
+    steel_plate          = "steel_plate"          # Plate — AR / Floor / Hot Rolled
+    steel_sheet          = "steel_sheet"          # Steel Sheet (CR/HR), Galvanized Sheet
+    # ── Aluminum ─────────────────────────────────────────────────────────────
+    aluminum_structural  = "aluminum_structural"  # Al Angle / Tubing / Channel / Round / Square / Flat
+    aluminum_sheet       = "aluminum_sheet"       # Aluminum Sheet (Standard, Tread Brite)
+    # ── Stainless ─────────────────────────────────────────────────────────────
+    stainless_structural = "stainless_structural" # SS Round / Square bar
+    stainless_sheet      = "stainless_sheet"      # SS Sheet — #4 / 2B / STD
+    # ── Other ────────────────────────────────────────────────────────────────
+    misc                 = "misc"                 # Decking, Exp. Metal, Grip Struts, Bar Grating, Rebar, Wire
+    bumper_posts         = "bumper_posts"         # Bumper Posts (L-D, H-D)
+    consumables          = "consumables"          # Welding wire, gas, grinding discs, paint drums, bandsaw blades
+    hardware             = "hardware"             # Bolts, nuts, anchors, fasteners
+    retail               = "retail"               # Walk-in retail items (3× cost markup)
 
 
 class AdjustmentReason(str, enum.Enum):
@@ -77,49 +95,4 @@ class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
 
     id            = Column(Integer, primary_key=True, index=True)
-    po_number     = Column(String, unique=True, index=True)   # VBS-P-YY-#####
-    vendor        = Column(String, nullable=False)
-    status        = Column(SAEnum(POStatus), default=POStatus.ordered)
-    order_date    = Column(Date, nullable=False)
-    expected_date = Column(Date, nullable=True)
-    received_date = Column(Date, nullable=True)
-    notes         = Column(Text, nullable=True)
-    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at    = Column(DateTime(timezone=True), server_default=func.now())
-
-    line_items      = relationship("POLineItem", back_populates="po", cascade="all, delete-orphan")
-    outside_service = relationship("OutsideService", back_populates="po", uselist=False)
-
-
-class POLineItem(Base):
-    __tablename__ = "po_line_items"
-
-    id           = Column(Integer, primary_key=True, index=True)
-    po_id        = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False)
-    item_id      = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
-    description  = Column(String, nullable=False)
-    qty_ordered  = Column(Float, nullable=False)
-    qty_received = Column(Float, default=0)
-    unit_cost    = Column(Float, nullable=True)
-    received_date = Column(Date, nullable=True)
-
-    po   = relationship("PurchaseOrder", back_populates="line_items")
-    item = relationship("InventoryItem", back_populates="po_line_items")
-
-
-class OutsideService(Base):
-    __tablename__ = "outside_services"
-
-    id              = Column(Integer, primary_key=True, index=True)
-    po_id           = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False)
-    order_id        = Column(Integer, ForeignKey("orders.id"), nullable=True)
-    vendor          = Column(String, nullable=False)
-    service_type    = Column(String, nullable=False)
-    quoted_cost     = Column(Float, nullable=True)
-    actual_cost     = Column(Float, nullable=True)
-    sent_date       = Column(Date, nullable=True)
-    expected_return = Column(Date, nullable=True)
-    returned_date   = Column(Date, nullable=True)
-    notes           = Column(Text, nullable=True)
-
-    po = relationship("PurchaseOrder", back_populates="outside_service")
+    po_number     = Column(String

@@ -31,7 +31,8 @@
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Job Type <span class="text-red-500">*</span></label>
-          <select name="job_type" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <select name="job_type" id="job-type-select" required onchange="onJobTypeChange(this.value)"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             {% for j in job_types %}
             <option value="{{ j.value }}">{{ j.value.replace('_',' ').title() }}</option>
             {% endfor %}
@@ -73,6 +74,11 @@
           <textarea name="notes" rows="2" placeholder="Notes for internal use only…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
         </div>
       </div>
+    </div>
+
+    <!-- Beam job notice -->
+    <div id="beam-notice" class="hidden bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 text-sm text-blue-800">
+      <span class="font-semibold">Beam Job:</span> Labor is rolled into the per-pound material price — labor hours are not required on line items.
     </div>
 
     <!-- Line Items -->
@@ -188,6 +194,12 @@ function addLine() {
         <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
           class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
       </div>
+    </div>
+    <!-- Internal notes row -->
+    <div class="mt-1">
+      <label class="block text-xs text-amber-700 font-medium mb-1">🔒 Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
+      <textarea name="li_internal_notes_${idx}" rows="1" placeholder="Shop directions, production notes…"
+        class="w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"></textarea>
     </div>`;
 
   document.getElementById('lines-container').appendChild(row);
@@ -278,25 +290,12 @@ document.getElementById('quote-form').addEventListener('submit', function(e) {
     alert('Add at least one line item before saving.');
     return;
   }
-  for (let i = 0; i < lines.length; i++) {
-    const hrsInput  = lines[i].querySelector('input[name^="li_labor_"]');
-    const deptSelect = lines[i].querySelector('select[name^="li_labor_dept_"]');
-    const hrs = parseFloat(hrsInput?.value);
-    if (!hrsInput || !(hrs > 0)) {
-      e.preventDefault();
-      hrsInput.classList.add('border-red-500');
-      hrsInput.focus();
-      alert(`Line item ${i + 1}: Labor hours are required.`);
-      return;
-    }
-    if (!deptSelect || !deptSelect.value) {
-      e.preventDefault();
-      deptSelect.classList.add('border-red-500');
-      deptSelect.focus();
-      alert(`Line item ${i + 1}: Labor department is required.`);
-      return;
-    }
-  }
-});
-</script>
-{% endblock %}
+  const isBeam = document.getElementById('job-type-select')?.value === 'beam';
+  if (!isBeam) {
+    for (let i = 0; i < lines.length; i++) {
+      const hrsInput  = lines[i].querySelector('input[name^="li_labor_"]');
+      const deptSelect = lines[i].querySelector('select[name^="li_labor_dept_"]');
+      const hrs = parseFloat(hrsInput?.value);
+      if (!hrsInput || !(hrs > 0)) {
+        e.preventDefault();
+        hrsInput.classLis

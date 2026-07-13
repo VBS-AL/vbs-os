@@ -592,39 +592,4 @@ async def employee_queue(
 
     completed_sessions = db.query(WorkSession).filter(
         WorkSession.employee_id == view_employee.id,
-        WorkSession.status == SessionStatus.completed,
-        WorkSession.ended_at >= str(period_start),
-    ).all()
-
-    stat_hours  = round(sum((s.duration_minutes or 0) for s in completed_sessions) / 60.0, 2)
-    stat_orders = len(set(s.order_id for s in completed_sessions))
-
-    # Default billing dept for clock-in
-    active_stage_for_default = my_stages[0] if my_stages else None
-    default_billing = None
-    if active_stage_for_default:
-        default_billing = _get_employee_billing_default(view_employee, active_stage_for_default)
-
-    return templates.TemplateResponse("production/queue.html", {
-        "request":               request,
-        "user":                  user,
-        "view_employee":         view_employee,
-        "my_session":            my_session,
-        "job_list":              job_list,
-        "billing_options":       billing_options,
-        "default_billing":       default_billing,
-        "can_manage":            can_manage,
-        "can_see_financials":    financials_visible(user),
-        "all_employees_summary": all_employees_summary,
-        "stage_labels":          STAGE_LABELS,
-        "pause_reasons":         PAUSE_REASON_LABELS,
-        "today":                 today_date,
-        "now_utc":               now_utc,
-        "SessionStatus":         SessionStatus,
-        "StageStatus":           StageStatus,
-        "BillingDept":           BillingDept,
-        "stat_period":           stat_period,
-        "stat_hours":            stat_hours,
-        "stat_orders":           stat_orders,
-        "emp_id":                emp_id,
-    })
+        WorkSession.status

@@ -167,6 +167,16 @@
               </td>
               {% endif %}
             </tr>
+            {% if li.internal_notes %}
+            <tr>
+              <td colspan="7" class="pb-2 pt-0">
+                <div class="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-800">
+                  <span class="mt-0.5">🔒</span>
+                  <span>{{ li.internal_notes }}</span>
+                </div>
+              </td>
+            </tr>
+            {% endif %}
             {% endif %}
             {% endfor %}
           </tbody>
@@ -750,16 +760,4 @@ function handleQAResultChange(val) {
   const fr = document.getElementById('failure-reason');
   const rn = document.getElementById('rework-notes');
   if (!fr || !rn) return;
-  if (val === 'fail') {
-    fr.required = true; rn.required = true;
-    fr.style.borderColor = '#ef4444'; rn.style.borderColor = '#ef4444';
-  } else if (val === 'conditional') {
-    fr.required = true; rn.required = false;
-    fr.style.borderColor = '#f59e0b'; rn.style.borderColor = '';
-  } else {
-    fr.required = false; rn.required = false;
-    fr.style.borderColor = ''; rn.style.borderColor = '';
-  }
-}
-</script>
-{% endblock %}
+  if (

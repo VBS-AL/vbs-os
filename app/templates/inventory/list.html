@@ -84,32 +84,4 @@
           </th>
         {% endmacro %}
         {{ sort_th('SKU', 'sku') }}
-        {{ sort_th('Name', 'name') }}
-        {{ sort_th('Category', 'category') }}
-        {{ sort_th('Location', 'location') }}
-        {{ sort_th('On Hand', 'on_hand', 'right') }}
-        {{ sort_th('Reorder At', 'reorder', 'right') }}
-        {% if can_see_financials %}{{ sort_th('Unit Cost', 'cost', 'right') }}{% endif %}
-        {% if can_see_financials %}<th class="px-4 py-3 text-right text-xs uppercase tracking-wide font-semibold">Stock Value</th>{% endif %}
-        <th class="px-4 py-3 text-left">Status</th>
-      </tr>
-    </thead>
-    <tbody id="inventory-table-body" class="divide-y divide-gray-100">
-      {% include "inventory/_rows.html" %}
-    </tbody>
-  </table>
-</div>
-
-<script>
-function invSort(key, dir) {
-  document.getElementById('inv-sort-by').value  = key;
-  document.getElementById('inv-sort-dir').value = dir;
-  // Fire an HTMX GET directly with all form values
-  const form = document.getElementById('inv-filter-form');
-  htmx.ajax('GET', '/inventory', {
-    target: '#inventory-table-body',
-    values: Object.fromEntries(new FormData(form))
-  });
-}
-</script>
-{% endblock %}
+        {{ sort

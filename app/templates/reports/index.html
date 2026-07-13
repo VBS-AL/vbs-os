@@ -169,46 +169,4 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       {% for row in top_customers %}
-      <tr class="hover:bg-steel-light cursor-pointer" onclick="window.location='/customers/{{ row.id }}'">
-        <td class="px-5 py-3 text-gray-400 font-medium">{{ loop.index }}</td>
-        <td class="px-5 py-3 font-medium text-steel-dark">{{ row.name }}</td>
-        <td class="px-5 py-3 text-right text-gray-600">{{ row.invoice_count }}</td>
-        <td class="px-5 py-3 text-right font-medium">${{ "{:,.0f}".format(row.total_invoiced or 0) }}</td>
-        <td class="px-5 py-3 text-right text-green-700">${{ "{:,.0f}".format(row.total_paid or 0) }}</td>
-        <td class="px-5 py-3 text-right {% if (row.total_invoiced or 0) - (row.total_paid or 0) > 0 %}text-orange-600{% else %}text-gray-400{% endif %}">
-          ${{ "{:,.0f}".format((row.total_invoiced or 0) - (row.total_paid or 0)) }}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="px-5 py-8 text-center text-gray-400">No invoices in this period.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<!-- Labor by department -->
-{% if labor_rows %}
-<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Labor by Department</p>
-<div class="bg-white rounded-xl shadow overflow-hidden">
-  <table class="w-full text-sm">
-    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
-      <tr>
-        <th class="px-5 py-3 text-left">Department</th>
-        <th class="px-5 py-3 text-right">Hours</th>
-        <th class="px-5 py-3 text-right">Billed Value</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-gray-100">
-      {% for row in labor_rows %}
-      <tr class="hover:bg-steel-light">
-        <td class="px-5 py-3 font-medium text-gray-700">{{ dept_labels.get(row.billing_dept.value, row.billing_dept.value.title()) }}</td>
-        <td class="px-5 py-3 text-right text-gray-600">{{ "%.1f"|format(row.total_hours) }} hrs</td>
-        <td class="px-5 py-3 text-right font-medium">${{ "{:,.0f}".format(row.total_value or 0) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
-{% endblock %}
+      <tr class="hove

@@ -78,6 +78,7 @@
             <option value="Structural Steel">Structural Steel</option>
             <option value="Plate">Plate</option>
             <option value="Beam">Beam</option>
+            <option value="Retail">Retail</option>
           </select>
           <select id="loc-rack" onchange="buildLocation()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
             <option value="">Rack</option>
@@ -97,56 +98,4 @@
         </div>
         <p id="location-preview" class="text-xs text-gray-400 mt-1"></p>
       </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Cost per Unit</label>
-        <div class="relative">
-          <span class="absolute left-3 top-2 text-gray-400 text-sm">$</span>
-          <input type="number" name="cost_per_unit" step="0.01" min="0" placeholder="0.00"
-                 class="w-full border border-gray-200 rounded-lg pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Supplier -->
-  <div class="bg-white rounded-xl shadow p-6">
-    <h2 class="font-semibold text-steel-dark mb-4">Supplier</h2>
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Supplier Name</label>
-        <input type="text" name="supplier_name" placeholder="Supplier / vendor name"
-               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Supplier Contact</label>
-        <input type="text" name="supplier_contact" placeholder="Phone or email"
-               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
-      </div>
-      <div class="col-span-2">
-        <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-        <textarea name="notes" rows="2"
-                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid"></textarea>
-      </div>
-    </div>
-  </div>
-
-  <div class="flex gap-3">
-    <button type="submit" class="bg-steel-dark text-white px-6 py-2 rounded-lg hover:bg-steel-mid transition text-sm font-medium">
-      Save Item
-    </button>
-    <a href="/inventory" class="px-6 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</a>
-  </div>
-</form>
-
-<script>
-function buildLocation() {
-  const area = document.getElementById('loc-area').value;
-  const rack = document.getElementById('loc-rack').value;
-  const row  = document.getElementById('loc-row').value;
-  const parts = [area, rack, row].filter(Boolean);
-  const val = parts.join(' / ');
-  document.getElementById('location-value').value = val;
-  document.getElementById('location-preview').textContent = val ? '📍 ' + val : '';
-}
-</script>
-{% endblock %}
+    

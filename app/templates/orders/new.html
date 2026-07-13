@@ -34,7 +34,8 @@
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Job Type <span class="text-red-500">*</span></label>
-          <select name="job_type" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <select name="job_type" id="job-type-select" required onchange="onJobTypeChange(this.value)"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             {% for j in job_types %}
             <option value="{{ j.value }}">{{ j.value.replace('_',' ').title() }}</option>
             {% endfor %}
@@ -100,6 +101,11 @@
       </div>
       <div id="lines-container" class="space-y-3"></div>
       <p id="no-lines" class="text-sm text-gray-400 text-center py-4">No line items yet. Click "Add Line".</p>
+    </div>
+
+    <!-- Beam job notice -->
+    <div id="beam-notice" class="hidden bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 text-sm text-blue-800">
+      <span class="font-semibold">Beam Job:</span> Labor is rolled into the per-pound material price — labor hours are not required on line items.
     </div>
 
     <!-- Delivery Surcharge -->
@@ -210,138 +216,13 @@ function addLine() {
         <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
           class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
       </div>
+    </div>
+    <!-- Internal notes row -->
+    <div class="mt-1">
+      <label class="block text-xs text-amber-700 font-medium mb-1">🔒 Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
+      <textarea name="li_internal_notes_${idx}" rows="1" placeholder="Shop directions, production notes…"
+        class="w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"></textarea>
     </div>`;
 
   document.getElementById('lines-container').appendChild(row);
-  updateNoLines();
-
-  // Register HTMX on the new row so the inventory search fires
-  htmx.process(row);
-
-  // Wire the search input to include its own value
-  const searchEl = document.getElementById(`inv-search-${idx}`);
-  searchEl.addEventListener('keyup', function() {
-    const resultsEl = document.getElementById(`inv-results-${idx}`);
-    resultsEl.classList.toggle('hidden', !this.value.trim());
-  });
-}
-
-function updateNoLines() {
-  const count = document.querySelectorAll('.line-item').length;
-  document.getElementById('no-lines').style.display = count ? 'none' : 'block';
-}
-
-const LABOR_RATES = { general_labor: 80, steel_fabrication: 100, aluminum_structural: 120 };
-
-function updateLaborCost(idx) {
-  const hrs  = parseFloat(document.getElementById(`li-labor-${idx}`)?.value || 0);
-  const dept = document.getElementById(`li-labor-dept-${idx}`)?.value;
-  const el   = document.getElementById(`labor-cost-${idx}`);
-  if (!el) return;
-  el.textContent = (hrs > 0 && dept && LABOR_RATES[dept])
-    ? `Est. labor: $${(hrs * LABOR_RATES[dept]).toFixed(0)}`
-    : '';
-}
-
-function clearInv(idx) {
-  document.getElementById(`li-inv-id-${idx}`).value = '';
-  document.getElementById(`inv-search-${idx}`).value = '';
-  document.getElementById(`inv-badge-${idx}`).classList.add('hidden');
-}
-
-// Global click handler for inventory results (works on dynamically added rows)
-document.addEventListener('click', function(e) {
-  const item = e.target.closest('[data-inv-id]');
-  if (item) {
-    // Find which row this belongs to
-    const resultsDiv = item.closest('[id^="inv-results-"]');
-    if (!resultsDiv) return;
-    const idx = resultsDiv.id.replace('inv-results-', '');
-
-    // Fill fields
-    document.getElementById(`li-inv-id-${idx}`).value  = item.dataset.invId;
-    document.getElementById(`li-desc-${idx}`).value    = item.dataset.invName;
-    if (item.dataset.invPrice) {
-      // data-inv-price is already sell price (cost × markup) from the server
-      document.getElementById(`li-price-${idx}`).value = parseFloat(item.dataset.invPrice).toFixed(2);
-    }
-
-    // Show badge
-    document.getElementById(`inv-badge-text-${idx}`).textContent =
-      (item.dataset.invSku ? item.dataset.invSku + ' · ' : '') + item.dataset.invName;
-    document.getElementById(`inv-badge-${idx}`).classList.remove('hidden');
-
-    // Clear search + hide results
-    document.getElementById(`inv-search-${idx}`).value = '';
-    resultsDiv.innerHTML = '';
-    resultsDiv.classList.add('hidden');
-    return;
-  }
-
-  // Close any open inventory dropdowns if clicking outside
-  document.querySelectorAll('[id^="inv-results-"]').forEach(el => {
-    if (!el.contains(e.target)) {
-      el.classList.add('hidden');
-    }
-  });
-});
-
-// HTMX: show results div after swap
-document.addEventListener('htmx:afterSwap', function(e) {
-  if (e.target.id === 'customer-results') {
-    e.target.classList.remove('hidden');
-  }
-  if (e.target.id && e.target.id.startsWith('inv-results-')) {
-    if (e.target.innerHTML.trim()) e.target.classList.remove('hidden');
-    else e.target.classList.add('hidden');
-  }
-});
-
-// Customer autocomplete
-document.getElementById('customer-results').addEventListener('click', function(e) {
-  const el = e.target.closest('[data-customer-id]');
-  if (!el) return;
-  document.getElementById('customer-id').value = el.dataset.customerId;
-  document.getElementById('customer-search').value = el.dataset.customerName;
-  const sel = document.getElementById('customer-selected');
-  sel.textContent = '✓ ' + el.dataset.customerName;
-  sel.classList.remove('hidden');
-  this.innerHTML = '';
-  this.classList.add('hidden');
-});
-
-document.getElementById('order-form').addEventListener('submit', function(e) {
-  if (!document.getElementById('customer-id').value) {
-    e.preventDefault();
-    alert('Please select a customer from the search results.');
-    document.getElementById('customer-search').focus();
-    return;
-  }
-  const lines = document.querySelectorAll('.line-item');
-  if (lines.length === 0) {
-    e.preventDefault();
-    alert('Add at least one line item before saving.');
-    return;
-  }
-  for (let i = 0; i < lines.length; i++) {
-    const hrsInput   = lines[i].querySelector('input[name^="li_labor_"]');
-    const deptSelect = lines[i].querySelector('select[name^="li_labor_dept_"]');
-    const hrs = parseFloat(hrsInput?.value);
-    if (!hrsInput || !(hrs > 0)) {
-      e.preventDefault();
-      hrsInput.classList.add('border-red-500');
-      hrsInput.focus();
-      alert(`Line item ${i + 1}: Labor hours are required.`);
-      return;
-    }
-    if (!deptSelect || !deptSelect.value) {
-      e.preventDefault();
-      deptSelect.classList.add('border-red-500');
-      deptSelect.focus();
-      alert(`Line item ${i + 1}: Labor department is required.`);
-      return;
-    }
-  }
-});
-</script>
-{% endblock %}
+  updateNoLines

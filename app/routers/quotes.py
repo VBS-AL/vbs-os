@@ -189,6 +189,7 @@ async def create_quote(
                 unit_price=price or None,
                 paint_override=None if paint_val in ("", "Same as Job") else paint_val,
                 notes=form.get(f"li_notes_{idx}", "").strip() or None,
+                internal_notes=form.get(f"li_internal_notes_{idx}", "").strip() or None,
                 inventory_item_id=inv_id,
                 estimated_labor_hours=labor_hrs or None,
                 estimated_labor_dept=labor_dept,
@@ -331,6 +332,8 @@ async def accept_quote(
             inventory_item_id=li.inventory_item_id,
             estimated_labor_hours=li.estimated_labor_hours,
             estimated_labor_dept=li.estimated_labor_dept,
+            internal_notes=li.internal_notes,
+            is_delivery_surcharge=li.is_delivery_surcharge,
         ))
 
     # Create production stages
@@ -445,72 +448,4 @@ async def edit_quote(
     while f"li_desc_{idx}" in form:
         desc = form.get(f"li_desc_{idx}", "").strip()
         if desc:
-            qty = float(form.get(f"li_qty_{idx}", 1) or 1)
-            price = float(form.get(f"li_price_{idx}") or 0)
-            paint_val = form.get(f"li_paint_{idx}", "").strip()
-            inv_id_raw = form.get(f"li_inv_id_{idx}", "").strip()
-            inv_id = int(inv_id_raw) if inv_id_raw else None
-            labor_hrs = float(form.get(f"li_labor_{idx}") or 0)
-            labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
-            db.add(QuoteLineItem(
-                quote_id=quote.id,
-                line_number=idx + 1,
-                description=desc,
-                quantity=qty,
-                unit=form.get(f"li_unit_{idx}", "").strip() or None,
-                material=form.get(f"li_material_{idx}", "").strip() or None,
-                unit_price=price or None,
-                paint_override=None if paint_val in ("", "Same as Job") else paint_val,
-                notes=form.get(f"li_notes_{idx}", "").strip() or None,
-                inventory_item_id=inv_id,
-                estimated_labor_hours=labor_hrs or None,
-                estimated_labor_dept=labor_dept,
-            ))
-            total += qty * price
-            if labor_hrs and labor_dept:
-                try:
-                    rate = BILLING_RATES.get(BillingDept(labor_dept), 0)
-                    total += labor_hrs * rate
-                except Exception:
-                    pass
-        idx += 1
-    # Delivery charge
-    surcharge_raw = form.get("delivery_surcharge", "").strip()
-    surcharge_amount = float(surcharge_raw) if surcharge_raw else None
-    if surcharge_amount and surcharge_amount > 0:
-        db.add(QuoteLineItem(
-            quote_id=quote.id,
-            line_number=idx + 1,
-            description="Delivery",
-            quantity=1,
-            unit_price=surcharge_amount,
-            is_delivery_surcharge=True,
-        ))
-        total += surcharge_amount
-
-    quote.total_estimated = round(total, 2) if total else None
-    db.commit()
-    return RedirectResponse(f"/quotes/{quote_id}", status_code=302)
-
-# ── Customer search (reuse orders endpoint) ───────────────────────────────
-@router.get("/search/customers", response_class=HTMLResponse)
-async def customer_search(
-    _customer_search: str = "",
-    user: User = Depends(require_user),
-    db: Session = Depends(get_db),
-):
-    q = _customer_search.strip()
-    if len(q) < 2:
-        return HTMLResponse("")
-    results = db.query(Customer).filter(
-        (Customer.name.ilike(f"%{q}%") | Customer.phone.ilike(f"%{q}%")),
-        Customer.is_active == True,
-    ).limit(8).all()
-    if not results:
-        return HTMLResponse('<div class="px-3 py-2 text-sm text-gray-400">No customers found</div>')
-    html = ""
-    for c in results:
-        company = f'  <span class="text-gray-400 text-xs">{c.company}</span>' if c.company else ""
-        phone = f'  <span class="text-gray-400 text-xs">{c.phone}</span>' if c.phone else ""
-        html += f'<div data-customer-id="{c.id}" data-customer-name="{c.name}" class="px-3 py-2 cursor-pointer hover:bg-steel-light text-sm">{c.name}{company}{phone}</div>'
-    return HTMLResponse(html)
+            qty 

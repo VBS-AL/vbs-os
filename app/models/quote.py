@@ -52,6 +52,7 @@ class QuoteLineItem(Base):
     unit_price      = Column(Float, nullable=True)
     paint_override        = Column(String, nullable=True)  # None = inherit job paint_spec
     notes                 = Column(Text, nullable=True)
+    internal_notes        = Column(Text, nullable=True)    # shop/production notes — never shown to customer
     inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
     estimated_labor_hours = Column(Float, nullable=True)
     estimated_labor_dept  = Column(String, nullable=True)  # BillingDept value
@@ -65,11 +66,4 @@ class QuoteRevision(Base):
 
     id              = Column(Integer, primary_key=True, index=True)
     quote_id        = Column(Integer, ForeignKey("quotes.id"), nullable=False)
-    revision_number = Column(Integer, nullable=False)          # 1, 2, 3…
-    snapshot        = Column(JSON, nullable=False)             # full quote+lines at save time
-    edited_by_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
-    change_note     = Column(String, nullable=True)
-    created_at      = Column(DateTime(timezone=True), server_default=func.now())
-
-    quote           = relationship("Quote", back_populates="revisions")
-    edited_by       = relationship("User", foreign_keys=[edited_by_id])
+    revision_number = Column(Integer, nullable=False)          

@@ -31,13 +31,4 @@ class User(Base):
     email           = Column(String, unique=True, nullable=True)
     hashed_password = Column(String, nullable=False)
     role            = Column(SAEnum(UserRole), nullable=False)
-    is_active            = Column(Boolean, default=True)
-    mobile_access        = Column(Boolean, default=False)
-    default_billing_dept = Column(SAEnum(BillingDept), nullable=True)  # employee's home dept
-    hourly_cost_rate     = Column(Float, nullable=True)                 # internal $/hr cost (owner-only)
-    created_at           = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at           = Column(DateTime(timezone=True), onupdate=func.now())
-
-    labor_entries    = relationship("LaborEntry", back_populates="employee")
-    assigned_stages  = relationship("ProductionStage", foreign_keys="ProductionStage.assigned_to_id", back_populates="assigned_to")
-    work_sessions    = relationship("WorkSession", back_populates="employee")
+    is_active            = Column(Boolean, default

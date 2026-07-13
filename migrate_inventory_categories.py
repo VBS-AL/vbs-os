@@ -1,34 +1,31 @@
 """
-Migration: update inventory_items category values to new physical area names.
-Run from vbs-os directory (server must be stopped):
-    python migrate_inventory_categories.py
+Migration: remap old InventoryCategory values → new granular category codes.
 
-Old → New mapping:
-    raw_material → structural
-    consumable   → consumables
-    hardware     → hardware  (unchanged)
-    other        → consumables
+Old → New:
+  plate      → steel_plate
+  structural → steel_bar
+  beam       → steel_ibeam
+
+Also seeds any missing markup.* keys and removes stale old markup keys.
+
+Run once after pulling this update (server stopped):
+  py migrate_inventory_categories.py
 """
 import sqlite3, os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "vbs.db")
-conn = sqlite3.connect(DB_PATH)
-cur = conn.cursor()
 
-mappings = [
-    ("raw_material", "structural"),
-    ("consumable",   "consumables"),
-    ("other",        "consumables"),
-    # hardware stays as hardware
-]
+REMAP = {
+    "plate":      "steel_plate",
+    "structural": "steel_bar",
+    "beam":       "steel_ibeam",
+}
 
-for old, new in mappings:
-    cur.execute(
-        "UPDATE inventory_items SET category = ? WHERE category = ?",
-        (new, old)
-    )
-    print(f"  {old} → {new}: {cur.rowcount} rows updated")
-
-conn.commit()
-conn.close()
-print("Done.")
+# New markup keys to seed (INSERT OR IGNORE preserves any values already set)
+NEW_MARKUP_DEFAULTS = {
+    "markup.steel_pipe":           "0",
+    "markup.steel_rect_tube":      "0",
+    "markup.steel_sq_tube":        "0",
+    "markup.steel_channel":        "0",
+    "markup.steel_bar":            "0",
+    "markup.steel_ibeam":          

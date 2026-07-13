@@ -74,7 +74,4 @@ class DrawingRecord(Base):
     status         = Column(SAEnum(DrawingStatus), default=DrawingStatus.pending)
     reviewed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewed_at    = Column(DateTime(timezone=True), nullable=True)
-    notes          = Column(Text, nullable=True)
-    created_at     = Column(DateTime(timezone=True), server_default=func.now())
-
-    order          = relationship("Order", back_populates="drawing_records")
+    notes          = Column
