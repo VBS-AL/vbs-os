@@ -11,7 +11,7 @@
   <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{{ error }}</div>
   {% endif %}
 
-  <form method="POST" action="/quotes/new" id="quote-form">
+  <form method="POST" action="/quotes/new" id="quote-form" enctype="multipart/form-data">
     <div class="bg-white rounded-xl shadow p-6 mb-4">
       <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide mb-4">Customer & Job Info</h2>
       <div class="grid grid-cols-2 gap-4">
@@ -58,11 +58,24 @@
           </select>
         </div>
 
-        <div class="flex items-center gap-6 pt-5">
-          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" name="drawings_required" value="1" class="rounded border-gray-300"/>
-            Drawings Required
-          </label>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">PO # (customer's)</label>
+          <input type="text" name="customer_po" placeholder="Optional" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+        </div>
+
+        <div class="col-span-2">
+          <div class="flex items-center gap-4 flex-wrap">
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" name="drawings_required" value="1" id="drawings-cb"
+                     class="rounded border-gray-300" onchange="toggleDrawingUpload(this.checked)"/>
+              Drawings Required
+            </label>
+            <div id="drawing-upload-wrap" class="hidden flex items-center gap-2">
+              <span class="text-xs text-gray-400">📎 Attach drawing:</span>
+              <input type="file" name="drawing_file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf"
+                class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border file:border-gray-300 file:text-xs file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer"/>
+            </div>
+          </div>
         </div>
 
         <div class="col-span-2">
@@ -124,6 +137,10 @@ function toggleSurcharge(cb) {
     if (!inp.value) inp.value = '75.00';
     inp.focus();
   }
+}
+
+function toggleDrawingUpload(checked) {
+  document.getElementById('drawing-upload-wrap').classList.toggle('hidden', !checked);
 }
 
 let lineCount = 0;
@@ -271,31 +288,4 @@ document.getElementById('customer-results').addEventListener('click', function(e
   document.getElementById('customer-id').value = el.dataset.customerId;
   document.getElementById('customer-search').value = el.dataset.customerName;
   const sel = document.getElementById('customer-selected');
-  sel.textContent = '✓ ' + el.dataset.customerName;
-  sel.classList.remove('hidden');
-  this.innerHTML = '';
-  this.classList.add('hidden');
-});
-
-document.getElementById('quote-form').addEventListener('submit', function(e) {
-  if (!document.getElementById('customer-id').value) {
-    e.preventDefault();
-    alert('Please select a customer from the search dropdown.');
-    document.getElementById('customer-search').focus();
-    return;
-  }
-  const lines = document.querySelectorAll('.line-item');
-  if (lines.length === 0) {
-    e.preventDefault();
-    alert('Add at least one line item before saving.');
-    return;
-  }
-  const isBeam = document.getElementById('job-type-select')?.value === 'beam';
-  if (!isBeam) {
-    for (let i = 0; i < lines.length; i++) {
-      const hrsInput  = lines[i].querySelector('input[name^="li_labor_"]');
-      const deptSelect = lines[i].querySelector('select[name^="li_labor_dept_"]');
-      const hrs = parseFloat(hrsInput?.value);
-      if (!hrsInput || !(hrs > 0)) {
-        e.preventDefault();
-        hrsInput.classLis
+  sel

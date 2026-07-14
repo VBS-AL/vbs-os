@@ -53,6 +53,12 @@
             <span class="text-gray-500">Invoice #</span>
             <span class="font-mono">{{ order.invoice.invoice_number if order.invoice else '—' }}</span>
           </div>
+          {% if order.customer_po %}
+          <div class="flex justify-between">
+            <span class="text-gray-500">Customer PO</span>
+            <span class="font-mono">{{ order.customer_po }}</span>
+          </div>
+          {% endif %}
           <div class="flex justify-between">
             <span class="text-gray-500">Description</span>
             <span class="text-right max-w-xs truncate">{{ order.description or '—' }}</span>
@@ -88,7 +94,13 @@
           </div>
           <div class="flex justify-between">
             <span class="text-gray-500">Drawings</span>
-            <span>{{ 'Yes' if order.drawings_required else 'No' }}</span>
+            <span class="flex items-center gap-2">
+              {{ 'Yes' if order.drawings_required else 'No' }}
+              {% if order.drawing_file %}
+              <a href="/static/drawings/{{ order.drawing_file }}" target="_blank"
+                 class="text-xs text-blue-600 hover:underline font-medium">📄 Open</a>
+              {% endif %}
+            </span>
           </div>
           <div class="flex justify-between">
             <span class="text-gray-500">Paint Spec</span>
@@ -465,7 +477,7 @@
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Update Status</h2>
         {% set status_labels = {
           'confirmed': 'Resume — Back to Confirmed' if order.status.value == 'on_hold' else 'Confirm Order',
-          'in_production': 'Resume Production' if order.status.value == 'on_hold' else 'Start Production',
+          'in_production': 'Resume Production' if order.status.value == 'on_hold' else ('← Back to Production' if order.status.value == 'qa_review' else 'Start Production'),
           'qa_review': 'Send to QA / Inspection',
           'ready': 'Mark as Ready',
           'delivered': 'Mark as Delivered',
@@ -679,6 +691,18 @@
       </div>
       {% endif %}
 
+      <!-- Packing List (ready or beyond) -->
+      {% if order.status.value in ['ready', 'delivered', 'invoiced', 'paid'] %}
+      <div class="bg-white rounded-xl shadow p-4">
+        <a href="/orders/{{ order.id }}/packing-list"
+          class="flex items-center justify-between text-sm font-medium
+            {% if order.packing_list %}text-steel-mid hover:text-steel-dark{% else %}text-yellow-600 hover:text-yellow-800{% endif %}">
+          <span>🚚 Packing List{% if not order.packing_list %} <span class="text-xs font-normal text-yellow-500">(not yet generated)</span>{% endif %}</span>
+          <span>View / Print ↗</span>
+        </a>
+      </div>
+      {% endif %}
+
       <!-- View Invoice (invoiced or paid) -->
       {% if order.invoice and order.status.value in ['invoiced', 'paid'] and can_see_financials %}
       <div class="bg-white rounded-xl shadow p-4">
@@ -724,40 +748,4 @@
           </div>
           {% if total_labor %}
           <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-bold text-steel-dark">
-            <span>Actual Total</span>
-            <span>${{ '%.2f'|format(mat_sum.v + (total_labor or 0)) }}</span>
-          </div>
-          {% set overall_variance = (mat_sum.v + (total_labor or 0)) - (mat_sum.v + est_labor_sum.v) %}
-          <div class="flex justify-between text-xs font-semibold {% if overall_variance > 0 %}text-red-600{% elif overall_variance < 0 %}text-green-600{% else %}text-gray-400{% endif %}">
-            <span>vs. Estimate</span>
-            <span>{% if overall_variance > 0 %}+{% endif %}${{ '%.2f'|format(overall_variance) }}</span>
-          </div>
-          {% endif %}
-        </div>
-      </div>
-      {% endif %}
-
-    </div><!-- /right column -->
-  </div><!-- /grid -->
-</div>
-
-<script>
-function toggleLaborForm() {
-  const f = document.getElementById('labor-form');
-  if (!f) return;
-  f.classList.toggle('hidden');
-  if (!f.classList.contains('hidden')) {
-    const dp = document.getElementById('labor-date-picker');
-    if (dp && !dp.value) dp.value = '{{ today }}';
-  }
-}
-function toggleQAForm() {
-  const f = document.getElementById('qa-form');
-  if (!f) return;
-  f.classList.toggle('hidden');
-}
-function handleQAResultChange(val) {
-  const fr = document.getElementById('failure-reason');
-  const rn = document.getElementById('rework-notes');
-  if (!fr || !rn) return;
-  if (
+            <span>Actua

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Packing List — {{ order.order_number }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      color: #111;
+      background: #f5f5f5;
+    }
+
+    /* Screen: show controls */
+    .screen-controls {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #1a3a5c;
+      color: white;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      print-color-adjust: exact;
+    }
+    .screen-controls h1 { font-size: 14px; font-weight: 600; }
+    .btn {
+      padding: 7px 18px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .btn-print { background: #28a745; color: white; }
+    .btn-back  { background: rgba(255,255,255,0.15); color: white; }
+    .btn-back:hover { background: rgba(255,255,255,0.25); }
+    .btn-print:hover { background: #218838; }
+
+    .page-wrapper {
+      padding: 60px 20px 20px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    /* One packing list copy */
+    .pl-copy {
+      background: white;
+      border: 1px solid #ccc;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+    }
+
+    /* Company header */
+    .pl-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #1a3a5c;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    .company-name {
+      font-size: 18px;
+      font-weight: 800;
+      color: #1a3a5c;
+      letter-spacing: 0.5px;
+    }
+    .company-sub { font-size: 10px; color: #555; margin-top: 2px; }
+    .pl-title-block { text-align: right; }
+    .pl-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1a3a5c;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .pl-order-num { font-size: 12px; font-weight: 600; margin-top: 3px; }
+    .copy-label {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-top: 3px;
+    }
+    .copy-customer { background: #e8f4e8; color: #1a6b1a; border: 1px solid #aaddaa; }
+    .copy-shop     { background: #e8eef4; color: #1a3a5c; border: 1px solid #aabbcc; }
+
+    /* Info grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .info-box {
+      border: 1px solid #ddd;
+      padding: 7px 9px;
+    }
+    .info-label {
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #777;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .info-value {
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre-line;
+    }
+
+    .info-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    /* Line items table */
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+    }
+    .items-table th {
+      background: #1a3a5c;
+      color: white;
+      text-align: left;
+      padding: 5px 7px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .items-table th.right { text-align: right; }
+    .items-table td {
+      padding: 5px 7px;
+      border-bottom: 1px solid #eee;
+      font-size: 11px;
+      vertical-align: top;
+    }
+    .items-table td.right { text-align: right; font-weight: 600; }
+    .items-table tr:nth-child(even) td { background: #fafafa; }
+    .items-table tr:last-child td { border-bottom: 2px solid #ccc; }
+
+    /* Footer boxes */
+    .footer-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 0;
+      border: 1px solid #ccc;
+      margin-bottom: 10px;
+    }
+    .footer-box {
+      border-right: 1px solid #ccc;
+      padding: 6px 7px;
+      min-height: 40px;
+    }
+    .footer-box:last-child { border-right: none; }
+    .footer-label {
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #777;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+    }
+    .footer-value { font-size: 11px; font-weight: 600; }
+    .check-val { font-size: 14px; }
+
+    .pl-notice {
+      border: 1px solid #c00;
+      background: #fff8f8;
+      text-align: center;
+      padding: 5px;
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      color: #c00;
+      text-transform: uppercase;
+    }
+
+    /* Cut line between copies */
+    .cut-line {
+      text-align: center;
+      color: #aaa;
+      font-size: 10px;
+      margin: 4px 0 16px;
+      letter-spacing: 2px;
+    }
+
+    /* ── PRINT ── */
+    @media print {
+      body { background: white; font-size: 10px; }
+      .screen-controls { display: none !important; }
+      .page-wrapper { padding: 0; max-width: 100%; }
+      .pl-copy {
+        border: 1px solid #999;
+        padding: 12px 14px;
+        margin-bottom: 0;
+        page-break-inside: avoid;
+      }
+      .cut-line { page-break-after: avoid; }
+      /* Force both copies onto one page */
+      .copy-wrap { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Screen controls (hidden on print) -->
+<div class="screen-controls">
+  <div>
+    <h1>Packing List — {{ order.order_number }}</h1>
+    <div style="font-size:11px; opacity:0.8; margin-top:2px;">
+      {{ order.customer.name if order.customer else '—' }}
+      {% if pl and pl.date_shipped %} · Shipped {{ pl.date_shipped.strftime('%b %d, %Y') }}{% endif %}
+    </div>
+  </div>
+  <div style="display:flex; gap:10px; align-items:center;">
+    {% if not pl %}
+    <span style="font-size:11px; background:rgba(255,200,0,0.2); border:1px solid rgba(255,200,0,0.5); padding:4px 10px; border-radius:4px;">
+      ⚠ Packing list not yet generated
+    </span>
+    {% endif %}
+    <a href="/orders/{{ order.id }}" class="btn btn-back">← Back to Order</a>
+    <button onclick="window.print()" class="btn btn-print">🖨 Print (2 copies)</button>
+  </div>
+</div>
+
+<div class="page-wrapper">
+
+  {% set copies = [('Customer Copy', 'copy-customer'), ('Shop Copy', 'copy-shop')] %}
+  {% for copy_label, copy_class in copies %}
+  <div class="copy-wrap">
+  <div class="pl-copy">
+
+    <!-- Header -->
+    <div class="pl-header">
+      <div>
+        <div class="company-name">VAN BUREN STEEL</div>
+        <div class="company-sub">Steel Fabrication &amp; Manufacturing</div>
+      </div>
+      <div class="pl-title-block">
+        <div class="pl-title">Packing List</div>
+        <div class="pl-order-num">{{ order.order_number }}</div>
+        <div><span class="copy-label {{ copy_class }}">{{ copy_label }}</span></div>
+      </div>
+    </div>
+
+    <!-- Top info row -->
+    <div class="info-row">
+      <div class="info-box">
+        <div class="info-label">Date Shipped</div>
+        <div class="info-value">{{ pl.date_shipped.strftime('%m/%d/%Y') if pl and pl.date_shipped else '________________' }}</div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">Shipped Via</div>
+        <div class="info-value">
+          {% if pl and pl.shipped_via %}
+            {% if pl.shipped_via.value == 'other' and pl.shipped_via_other %}
+              {{ pl.shipped_via_other }}
+            {% else %}
+              {{ shipped_via_labels.get(pl.shipped_via, pl.shipped_via.value) }}
+            {% endif %}
+          {% else %}________________{% endif %}
+        </div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">Customer Contact</div>
+        <div class="info-value">{{ pl.contact_name if pl and pl.contact_name else (order.customer.name if order.customer else '—') }}</div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">Contact Phone</div>
+        <div class="info-value">{{ pl.contact_phone if pl and pl.contact_phone else (order.customer.phone if order.customer else '—') }}</div>
+      </div>
+    </div>
+
+    <!-- Address grid -->
+    <div class="info-grid">
+      <div class="info-box">
+        <div class="info-label">Sold To</div>
+        <div class="info-value">{% if pl and pl.sold_to %}{{ pl.sold_to }}{% elif order.customer %}{{ order.customer.name }}{% if order.customer.company %} / {{ order.customer.company }}{% endif %}{% if order.customer.phone %}
+{{ order.customer.phone }}{% endif %}{% if order.customer.email %}
+{{ order.customer.email }}{% endif %}{% else %}—{% endif %}</div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">Ship To</div>
+        <div class="info-value">{% if pl and pl.ship_to %}{{ pl.ship_to }}{% elif order.customer and order.customer.address_line1 %}{{ order.customer.address_line1 }}{% if order.customer.city %}, {{ order.customer.city }}{% endif %}{% if order.customer.state %}, {{ order.customer.state }}{% endif %}{% if order.customer.zip_code %} {{ order.customer.zip_code }}{% endif %}{% else %}________________
+________________{% endif %}</div>
+      </div>
+    </div>
+
+    <!-- Line items -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th class="right" style="width:60px;">Qty</th>
+          <th>Description</th>
+          <th style="width:80px;">Unit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(has_items=false) %}
+        {% for li in order.line_items | sort(attribute='line_number') %}
+        {% if not li.is_delivery_surcharge %}
+        {% set ns.has_items = true %}
+        <tr>
+          <td class="right">{{ li.quantity | int if li.quantity == (li.quantity | int) else li.quantity }}</td>
+          <td>{{ li.description }}</td>
+          <td>{{ li.unit or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        {% if not ns.has_items %}
+        <tr><td colspan="3" style="text-align:center; color:#aaa; padding:12px;">No line items</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    <!-- Footer boxes -->
+    <div class="footer-grid">
+      <div class="footer-box">
+        <div class="footer-label">Cartons</div>
+        <div class="footer-value">{{ pl.cartons if pl and pl.cartons is not none else '____' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Total Weight</div>
+        <div class="footer-value">{{ (pl.total_weight | round(1) | string + ' lbs') if pl and pl.total_weight else '____' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Order Complete</div>
+        <div class="footer-value check-val">{{ '☑' if pl and pl.order_complete else '☐' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Balance to Follow</div>
+        <div class="footer-value check-val">{{ '☑' if pl and pl.balance_to_follow else '☐' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Packed By</div>
+        <div class="footer-value">{{ pl.packed_by if pl and pl.packed_by else '____' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Checked By</div>
+        <div class="footer-value">{{ pl.checked_by if pl and pl.checked_by else '____' }}</div>
+      </div>
+    </div>
+
+    <!-- Notice -->
+    <div class="pl-notice">PLEASE NOTIFY US IMMEDIATELY IF ERROR IS FOUND IN SHIPMENT</div>
+
+  </div><!-- end pl-copy -->
+  </div><!-- end copy-wrap -->
+  {% if not loop.last %}
+  <div class="cut-line">- - - - - - - - - - - - - - - - - CUT HERE - - - - - - - - - - - - - - - - -</div>
+  {% endif %}
+  {% endfor %}
+
+</div><!-- end page-wrapper -->
+</body>
+</html>

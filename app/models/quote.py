@@ -23,6 +23,8 @@ class Quote(Base):
     priority        = Column(String, default="standard")
     paint_spec      = Column(String, nullable=True)
     drawings_required = Column(Boolean, default=False)
+    drawing_file    = Column(String, nullable=True)   # stored filename under app/static/drawings/
+    customer_po     = Column(String, nullable=True)   # customer's PO number
     description     = Column(Text, nullable=True)
     notes           = Column(Text, nullable=True)
     valid_until     = Column(Date, nullable=True)       # set when sent (sent_at + 14 days)
@@ -64,6 +66,4 @@ class QuoteLineItem(Base):
 class QuoteRevision(Base):
     __tablename__ = "quote_revisions"
 
-    id              = Column(Integer, primary_key=True, index=True)
-    quote_id        = Column(Integer, ForeignKey("quotes.id"), nullable=False)
-    revision_number = Column(Integer, nullable=False)          
+    id              = Column(Integ

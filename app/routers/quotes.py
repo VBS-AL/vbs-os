@@ -1,11 +1,31 @@
 import json
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+import uuid
+from fastapi import APIRouter, Depends, Request, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import Optional
 from datetime import date, timedelta, datetime, timezone
+
+DRAWINGS_DIR = "app/static/drawings"
+
+
+async def save_drawing(form_data, field_name: str = "drawing_file") -> Optional[str]:
+    """Extract uploaded file from form data, save it, return the stored filename or None.
+    Uses hasattr rather than isinstance — request.form() returns starlette's UploadFile
+    which doesn't satisfy isinstance checks against fastapi's UploadFile subclass."""
+    field = form_data.get(field_name)
+    if hasattr(field, "filename") and field.filename:
+        ext = os.path.splitext(field.filename)[1].lower()
+        fname = f"{uuid.uuid4().hex}{ext}"
+        os.makedirs(DRAWINGS_DIR, exist_ok=True)
+        content = await field.read()
+        with open(os.path.join(DRAWINGS_DIR, fname), "wb") as fh:
+            fh.write(content)
+        return fname
+    return None
 
 from app.database import get_db
 from app.auth import require_user, require_management, financials_visible
@@ -127,10 +147,12 @@ async def create_quote(
     description: str = Form(""),
     notes: str = Form(""),
     delivery_surcharge: str = Form(""),
+    customer_po: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     form = await request.form()
+    drawing_filename = await save_drawing(form)
     customers = db.query(Customer).filter(Customer.is_active == True).order_by(Customer.name).all()
 
     errors = []
@@ -158,6 +180,8 @@ async def create_quote(
         priority=priority,
         paint_spec=paint_spec or None,
         drawings_required=drawings_required,
+        drawing_file=drawing_filename,
+        customer_po=customer_po.strip() or None,
         description=description.strip() or None,
         notes=notes.strip() or None,
         status=QuoteStatus.draft,
@@ -312,6 +336,8 @@ async def accept_quote(
         status=OrderStatus.confirmed,
         paint_spec=quote.paint_spec,
         drawings_required=quote.drawings_required,
+        drawing_file=quote.drawing_file,
+        customer_po=quote.customer_po,
         description=quote.description,
         notes=f"[Converted from {quote.quote_number}]\n{quote.notes or ''}".strip(),
         promised_date=date.fromisoformat(promised_date) if promised_date else None,
@@ -336,10 +362,11 @@ async def accept_quote(
             is_delivery_surcharge=li.is_delivery_surcharge,
         ))
 
-    # Create production stages
-    stages = [StageType.material_receiving, StageType.fabrication, StageType.qa_qc, StageType.delivery]
+    # Create production stages — Drawings first (review before pulling material)
     if quote.drawings_required:
-        stages.insert(1, StageType.drawings)
+        stages = [StageType.drawings, StageType.material_receiving, StageType.fabrication, StageType.qa_qc, StageType.delivery]
+    else:
+        stages = [StageType.material_receiving, StageType.fabrication, StageType.qa_qc, StageType.delivery]
     for s in stages:
         db.add(ProductionStage(order_id=order.id, stage_type=s))
 
@@ -397,6 +424,7 @@ async def edit_quote(
     drawings_required: bool = Form(False),
     description: str = Form(""),
     notes: str = Form(""),
+    customer_po: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -406,46 +434,9 @@ async def edit_quote(
     if quote.status not in [QuoteStatus.draft, QuoteStatus.sent]:
         raise HTTPException(400, "Cannot edit this quote")
     form = await request.form()
+    new_drawing = await save_drawing(form)  # None if no new file uploaded
     # Snapshot current state before overwriting
     snapshot = {
         "revision": quote.revision,
         "customer_id": quote.customer_id,
-        "job_type": quote.job_type,
-        "priority": quote.priority,
-        "paint_spec": quote.paint_spec,
-        "drawings_required": quote.drawings_required,
-        "description": quote.description,
-        "notes": quote.notes,
-        "total_estimated": quote.total_estimated,
-        "line_items": [
-            {"line_number": li.line_number, "description": li.description,
-             "quantity": li.quantity, "unit_price": li.unit_price, "paint_override": li.paint_override, "notes": li.notes}
-            for li in sorted(quote.line_items, key=lambda x: x.line_number)
-        ],
-    }
-    db.add(QuoteRevision(
-        quote_id=quote.id,
-        revision_number=quote.revision,
-        snapshot=snapshot,
-        edited_by_id=user.id,
-        change_note=None,
-    ))
-    quote.revision = (quote.revision or 1) + 1
-    # Apply edits
-    quote.customer_id = customer_id
-    quote.job_type = job_type
-    quote.priority = priority
-    quote.paint_spec = paint_spec or None
-    quote.drawings_required = drawings_required
-    quote.description = description.strip() or None
-    quote.notes = notes.strip() or None
-    # Replace line items
-    for li in quote.line_items:
-        db.delete(li)
-    db.flush()
-    idx = 0
-    total = 0.0
-    while f"li_desc_{idx}" in form:
-        desc = form.get(f"li_desc_{idx}", "").strip()
-        if desc:
-            qty 
+        "job_type": quote.job_

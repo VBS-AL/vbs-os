@@ -1,10 +1,30 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+import os
+import uuid
+from fastapi import APIRouter, Depends, Request, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import Optional
 from datetime import date, datetime, timezone
+
+DRAWINGS_DIR = "app/static/drawings"
+
+
+async def save_drawing(form_data, field_name: str = "drawing_file") -> Optional[str]:
+    """Extract uploaded file from form data, save it, return the stored filename or None.
+    Uses hasattr rather than isinstance — request.form() returns starlette's UploadFile
+    which doesn't satisfy isinstance checks against fastapi's UploadFile subclass."""
+    field = form_data.get(field_name)
+    if hasattr(field, "filename") and field.filename:
+        ext = os.path.splitext(field.filename)[1].lower()
+        fname = f"{uuid.uuid4().hex}{ext}"
+        os.makedirs(DRAWINGS_DIR, exist_ok=True)
+        content = await field.read()
+        with open(os.path.join(DRAWINGS_DIR, fname), "wb") as fh:
+            fh.write(content)
+        return fname
+    return None
 
 from app.database import get_db
 from app.auth import require_user, require_foreman_up, require_management, financials_visible
@@ -111,9 +131,11 @@ async def create_order(
     description: str = Form(""), drawings_required: bool = Form(False), paint_spec: str = Form(""),
     promised_date: str = Form(""), notes: str = Form(""),
     delivery_surcharge: str = Form(""),
+    customer_po: str = Form(""),
     user: User = Depends(require_user), db: Session = Depends(get_db),
 ):
     form = await request.form()
+    drawing_filename = await save_drawing(form)
 
     if not promised_date:
         customers = db.query(Customer).filter(Customer.is_active == True).order_by(Customer.name).all()
@@ -130,6 +152,8 @@ async def create_order(
     order = Order(
         order_number=order_num, customer_id=customer_id, job_type=job_type, priority=priority,
         status=OrderStatus.confirmed, description=description or None, drawings_required=drawings_required,
+        drawing_file=drawing_filename,
+        customer_po=customer_po.strip() or None,
         paint_spec=paint_spec or None,
         promised_date=date.fromisoformat(promised_date) if promised_date else None,
         notes=notes or None, created_by_id=user.id,
@@ -168,9 +192,13 @@ async def create_order(
             is_delivery_surcharge=True,
         ))
 
-    for s in [StageType.material_receiving, StageType.drawings if drawings_required else None, StageType.fabrication, StageType.qa_qc, StageType.delivery]:
-        if s:
-            db.add(ProductionStage(order_id=order.id, stage_type=s))
+    # Drawings first (review before pulling material), then standard flow
+    if drawings_required:
+        stage_list = [StageType.drawings, StageType.material_receiving, StageType.fabrication, StageType.qa_qc, StageType.delivery]
+    else:
+        stage_list = [StageType.material_receiving, StageType.fabrication, StageType.qa_qc, StageType.delivery]
+    for s in stage_list:
+        db.add(ProductionStage(order_id=order.id, stage_type=s))
     db.commit()
     return RedirectResponse(f"/orders/{order.id}", status_code=302)
 
@@ -290,17 +318,22 @@ async def update_status(
             if stage.stage_type == StageType.qa_qc and stage.status == StageStatus.blocked:
                 stage.status = StageStatus.pending
                 stage.started_at = None
-            # Mark material_receiving complete, start fabrication on first entry to production
+            # Auto-advance stages on first entry to production
             if order.status == OrderStatus.confirmed:
-                if stage.stage_type == StageType.material_receiving and stage.status == StageStatus.pending:
-                    stage.status = StageStatus.complete
-                    stage.completed_at = now
-                if stage.stage_type == StageType.drawings and stage.status == StageStatus.pending:
-                    stage.status = StageStatus.in_progress
-                    stage.started_at = now
-                if stage.stage_type == StageType.fabrication and stage.status == StageStatus.pending:
-                    stage.status = StageStatus.in_progress
-                    stage.started_at = now
+                has_drawings = any(
+                    s.stage_type == StageType.drawings
+                    for s in order.production_stages
+                )
+                if has_drawings:
+                    # Drawings-first: kick off drawings stage, everything else waits
+                    if stage.stage_type == StageType.drawings and stage.status == StageStatus.pending:
+                        stage.status = StageStatus.in_progress
+                        stage.started_at = now
+                else:
+                    # No drawings: kick off material receiving, fabrication waits
+                    if stage.stage_type == StageType.material_receiving and stage.status == StageStatus.pending:
+                        stage.status = StageStatus.in_progress
+                        stage.started_at = now
     elif target == OrderStatus.qa_review:
         for stage in order.production_stages:
             if stage.stage_type == StageType.fabrication and stage.status == StageStatus.in_progress:
@@ -319,28 +352,4 @@ async def update_status(
             if stage.stage_type == StageType.delivery:
                 stage.status = StageStatus.complete
                 stage.completed_at = now
-    # ── Inventory availability check ──────────────────────────────────────
-    from app.models.inventory import InventoryItem as InvItem, InventoryAdjustment, AdjustmentReason
-    if target == OrderStatus.in_production and order.status == OrderStatus.confirmed:
-        shortages = []
-        for li in order.line_items:
-            if li.inventory_item_id:
-                inv = db.query(InvItem).filter(InvItem.id == li.inventory_item_id).first()
-                if inv and (inv.quantity_on_hand or 0) < (li.quantity or 0):
-                    shortages.append(inv.sku or inv.name)
-        if shortages:
-            return RedirectResponse(
-                f"/orders/{order_id}?inv_block=1",
-                status_code=302,
-            )
-
-    # ── Inventory auto-deduct / auto-reverse ──────────────────────────────
-    if target == OrderStatus.in_production and order.status == OrderStatus.confirmed:
-        # Deduct stock for all inventory-linked line items
-        for li in order.line_items:
-            if li.inventory_item_id:
-                inv = db.query(InvItem).filter(InvItem.id == li.inventory_item_id).first()
-                if inv:
-                    inv.quantity_on_hand = (inv.quantity_on_hand or 0) - li.quantity
-                    db.add(InventoryAdjustment(
-                        item
+    # ── Inventory availability check ──────────�

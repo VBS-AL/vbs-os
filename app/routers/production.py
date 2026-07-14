@@ -11,7 +11,8 @@ from app.database import get_db
 from app.auth import require_user, financials_visible
 from app.models.user import User, UserRole
 from app.models.order import Order, OrderStatus, Priority
-from app.models.production import ProductionStage, StageStatus, StageType
+from app.models.production import ProductionStage, StageStatus, StageType, QARecord, QAResult
+from app.models.packing_list import PackingList, ShippedVia
 from app.models.work_session import WorkSession, SessionStatus, PauseReason, PAUSE_REASON_LABELS
 from app.models.labor import LaborEntry, BillingDept, BILLING_RATES
 
@@ -169,10 +170,11 @@ async def production_board(
     auto_close_stale_sessions(db)
     today_date = _date.today()
 
-    # Load all active orders with stages, assignments, customers
+    # Load all active orders with stages, assignments, customers, and work sessions
     active_orders = db.query(Order).options(
         joinedload(Order.customer),
         joinedload(Order.production_stages).joinedload(ProductionStage.assigned_to),
+        joinedload(Order.production_stages).joinedload(ProductionStage.work_sessions),
     ).filter(
         Order.status.notin_([OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled])
     ).all()
@@ -287,15 +289,21 @@ async def update_stage_status(
     stage_id: int,
     status: str = Form(...),
     notes: Optional[str] = Form(None),
+    redirect_to: str = Form("/production"),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    if user.role not in MANAGEMENT_ROLES:
-        raise HTTPException(403, "Not authorized to update stage status")
-
     stage = db.query(ProductionStage).filter(ProductionStage.id == stage_id).first()
     if not stage:
         raise HTTPException(404, "Stage not found")
+
+    # Management can do anything; workers can only complete/block their own assigned stage
+    is_management = user.role in MANAGEMENT_ROLES
+    if not is_management:
+        if stage.assigned_to_id != user.id:
+            raise HTTPException(403, "Not authorized to update this stage")
+        if StageStatus(status) not in (StageStatus.complete, StageStatus.blocked, StageStatus.in_progress):
+            raise HTTPException(403, "Not authorized to update stage status")
 
     now = datetime.utcnow()
     new_status = StageStatus(status)
@@ -314,8 +322,22 @@ async def update_stage_status(
     if notes is not None:
         stage.notes = notes.strip() or None
 
+    # Auto-advance: when a stage completes, kick the next pending stage to in_progress
+    if new_status == StageStatus.complete:
+        order_stages = db.query(ProductionStage).filter(
+            ProductionStage.order_id == stage.order_id
+        ).order_by(ProductionStage.id).all()
+        found = False
+        for s in order_stages:
+            if found and s.status == StageStatus.pending:
+                s.status = StageStatus.in_progress
+                s.started_at = now
+                break
+            if s.id == stage.id:
+                found = True
+
     db.commit()
-    return RedirectResponse("/production", status_code=302)
+    return RedirectResponse(redirect_to, status_code=302)
 
 
 # ── Clock In ─────────────────────────────────────────────────────────────
@@ -352,7 +374,8 @@ async def clock_in(
 
     now = datetime.utcnow()
     dept = BillingDept(billing_dept)
-    rate = BILLING_RATES[dept]
+    # Delivery time is tracked for internal purposes only — no billable charge
+    rate = 0.0 if stage.stage_type == StageType.delivery else BILLING_RATES[dept]
 
     session = WorkSession(
         order_id     = stage.order_id,
@@ -490,106 +513,222 @@ async def stop_session(
     return RedirectResponse("/production/queue", status_code=302)
 
 
-# ── Employee Queue ───────────────────────────────────────────────────────
-@router.get("/queue", response_class=HTMLResponse)
-async def employee_queue(
-    request: Request,
-    emp_id: Optional[int] = None,   # management can view any employee's queue
-    stat_period: str = "day",        # day | week | month
+# ── QA Complete (stop session + record result + complete stage) ───────────
+@router.post("/stages/{stage_id}/qa-complete")
+async def qa_complete(
+    stage_id: int,
+    result: str = Form(...),
+    failure_reason: Optional[str] = Form(None),
+    rework_notes: Optional[str] = Form(None),
+    certified_weld: bool = Form(False),
+    cert_reference: Optional[str] = Form(None),
+    session_notes: Optional[str] = Form(None),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    auto_close_stale_sessions(db)
-    can_manage = user.role in MANAGEMENT_ROLES
-    today_date = _date.today()
+    stage = db.query(ProductionStage).filter(ProductionStage.id == stage_id).first()
+    if not stage:
+        raise HTTPException(404, "Stage not found")
+    if stage.stage_type != StageType.qa_qc:
+        raise HTTPException(400, "Stage is not a QA stage")
+    if stage.assigned_to_id != user.id and user.role not in MANAGEMENT_ROLES:
+        raise HTTPException(403, "Not authorized")
 
-    # Determine whose queue to show
-    if can_manage and emp_id:
-        view_employee = db.query(User).filter(User.id == emp_id).first()
-        if not view_employee:
-            raise HTTPException(404, "Employee not found")
-    else:
-        view_employee = user
+    now = datetime.utcnow()
 
-    # Active session for this employee
-    my_session = db.query(WorkSession).filter(
-        WorkSession.employee_id == view_employee.id,
+    # Stop the active work session for this stage
+    active_session = db.query(WorkSession).filter(
+        WorkSession.stage_id == stage_id,
+        WorkSession.employee_id == user.id,
         WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
-    ).options(
-        joinedload(WorkSession.stage),
-        joinedload(WorkSession.order).joinedload(Order.customer),
     ).first()
 
-    # All active orders assigned to this employee at any stage
-    from app.models.order import OrderLineItem
-    my_stages = db.query(ProductionStage).options(
-        joinedload(ProductionStage.order).joinedload(Order.customer),
-        joinedload(ProductionStage.order).joinedload(Order.line_items),
-    ).filter(
-        ProductionStage.assigned_to_id == view_employee.id,
-        ProductionStage.status.notin_([StageStatus.complete]),
-    ).all()
+    if active_session:
+        if active_session.status == SessionStatus.paused and active_session.paused_at:
+            paused_minutes = (now - active_session.paused_at).total_seconds() / 60.0
+            active_session.total_paused_minutes = (active_session.total_paused_minutes or 0.0) + paused_minutes
 
-    # Build job cards, sorted by priority
-    jobs_by_order = {}
-    for stage in my_stages:
-        o = stage.order
-        if o.status in [OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled]:
-            continue
-        if o.id not in jobs_by_order:
-            jobs_by_order[o.id] = {"order": o, "stages": []}
-        jobs_by_order[o.id]["stages"].append(stage)
+        duration = _net_minutes(active_session, now)
+        active_session.ended_at         = now
+        active_session.duration_minutes = duration
+        active_session.status           = SessionStatus.completed
+        if session_notes:
+            active_session.notes = session_notes.strip() or None
 
-    job_list = list(jobs_by_order.values())
+        if duration > 0:
+            hours     = duration / 60.0
+            work_date = now.replace(tzinfo=timezone.utc).astimezone(EASTERN).date()
+            dept      = BillingDept(active_session.billing_dept)
+            entry = LaborEntry(
+                order_id     = active_session.order_id,
+                stage_id     = active_session.stage_id,
+                employee_id  = active_session.employee_id,
+                billing_dept = dept,
+                hours        = round(hours, 4),
+                billing_rate = active_session.billing_rate,
+                billed_value = round(hours * active_session.billing_rate, 2),
+                work_date    = work_date,
+                notes        = active_session.notes,
+                is_rework    = 0,
+            )
+            db.add(entry)
+            db.flush()
+            active_session.labor_entry_id = entry.id
 
-    def _sort_key(job):
-        o = job["order"]
-        is_overdue = o.promised_date and o.promised_date < today_date
-        days_overdue = (today_date - o.promised_date).days if is_overdue else 0
-        priority_rank = _PRIORITY_RANK.get(o.priority, 2)
-        due = o.promised_date or _date(9999, 12, 31)
-        return (0 if is_overdue else 1, -days_overdue, priority_rank, due)
+    # Create QA record
+    qa = QARecord(
+        order_id       = stage.order_id,
+        inspector_id   = user.id,
+        result         = QAResult(result),
+        failure_reason = failure_reason.strip() if failure_reason else None,
+        rework_notes   = rework_notes.strip() if rework_notes else None,
+        certified_weld = certified_weld,
+        cert_reference = cert_reference.strip() if cert_reference else None,
+    )
+    db.add(qa)
 
-    job_list.sort(key=_sort_key)
+    # Mark stage complete
+    stage.status       = StageStatus.complete
+    stage.completed_at = now
+    if not stage.started_at:
+        stage.started_at = now
 
-    # Build billing options for clock-in form
-    billing_options = [
-        (BillingDept.general_labor,       "General Labor ($80/hr)"),
-        (BillingDept.steel_fabrication,   "Steel Fabrication ($100/hr)"),
-        (BillingDept.aluminum_structural, "Aluminum Structural ($120/hr)"),
-    ]
+    # Auto-advance next pending stage
+    order_stages = db.query(ProductionStage).filter(
+        ProductionStage.order_id == stage.order_id
+    ).order_by(ProductionStage.id).all()
+    found = False
+    for s in order_stages:
+        if found and s.status == StageStatus.pending:
+            s.status     = StageStatus.in_progress
+            s.started_at = now
+            break
+        if s.id == stage.id:
+            found = True
 
-    # Management: also load all employee queues summary
-    all_employees_summary = []
-    if can_manage:
-        active_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
-        for emp in active_employees:
-            emp_session = db.query(WorkSession).filter(
-                WorkSession.employee_id == emp.id,
-                WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
-            ).first()
-            emp_stage_count = db.query(ProductionStage).filter(
-                ProductionStage.assigned_to_id == emp.id,
-                ProductionStage.status.notin_([StageStatus.complete]),
-            ).count()
-            all_employees_summary.append({
-                "employee":    emp,
-                "session":     emp_session,
-                "stage_count": emp_stage_count,
-            })
+    # Advance order status based on QA result
+    order = db.query(Order).filter(Order.id == stage.order_id).first()
+    if order:
+        qa_result = QAResult(result)
+        if qa_result == QAResult.pass_result:
+            # Pass → ready for delivery
+            order.status = OrderStatus.ready
+        else:
+            # Fail / Rework / Conditional → send to QA review for foreman decision
+            order.status = OrderStatus.qa_review
 
-    now_utc = datetime.utcnow()
+    db.commit()
+    return RedirectResponse("/production/queue", status_code=302)
 
-    # ── My Stats ─────────────────────────────────────────────────────────
-    stat_period = stat_period if stat_period in ("day", "week", "month") else "day"
-    today = today_date
-    if stat_period == "day":
-        period_start = today
-    elif stat_period == "week":
-        period_start = today - timedelta(days=today.weekday())  # Monday
-    else:  # month
-        period_start = today.replace(day=1)
 
-    completed_sessions = db.query(WorkSession).filter(
-        WorkSession.employee_id == view_employee.id,
-        WorkSession.status
+# ── Delivery Complete (stop session + save packing list + complete stage) ─
+@router.post("/stages/{stage_id}/delivery-complete")
+async def delivery_complete(
+    stage_id: int,
+    shipped_via: str = Form(...),
+    shipped_via_other: Optional[str] = Form(None),
+    date_shipped: Optional[str] = Form(None),
+    ship_to: Optional[str] = Form(None),
+    sold_to: Optional[str] = Form(None),
+    contact_name: Optional[str] = Form(None),
+    contact_phone: Optional[str] = Form(None),
+    cartons: Optional[int] = Form(None),
+    total_weight: Optional[float] = Form(None),
+    order_complete: bool = Form(False),
+    balance_to_follow: bool = Form(False),
+    packed_by: Optional[str] = Form(None),
+    checked_by: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    session_notes: Optional[str] = Form(None),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    from datetime import date as _date_type
+    stage = db.query(ProductionStage).options(
+        joinedload(ProductionStage.order).joinedload(Order.line_items)
+    ).filter(ProductionStage.id == stage_id).first()
+    if not stage:
+        raise HTTPException(404, "Stage not found")
+    if stage.stage_type != StageType.delivery:
+        raise HTTPException(400, "Stage is not a delivery stage")
+    if stage.assigned_to_id != user.id and user.role not in MANAGEMENT_ROLES:
+        raise HTTPException(403, "Not authorized")
+
+    now = datetime.utcnow()
+
+    # Stop active session
+    active_session = db.query(WorkSession).filter(
+        WorkSession.stage_id == stage_id,
+        WorkSession.employee_id == user.id,
+        WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+    ).first()
+
+    if active_session:
+        if active_session.status == SessionStatus.paused and active_session.paused_at:
+            paused_minutes = (now - active_session.paused_at).total_seconds() / 60.0
+            active_session.total_paused_minutes = (active_session.total_paused_minutes or 0.0) + paused_minutes
+        duration = _net_minutes(active_session, now)
+        active_session.ended_at         = now
+        active_session.duration_minutes = duration
+        active_session.status           = SessionStatus.completed
+        if session_notes:
+            active_session.notes = session_notes.strip() or None
+        if duration > 0:
+            hours     = duration / 60.0
+            work_date = now.replace(tzinfo=timezone.utc).astimezone(EASTERN).date()
+            dept      = BillingDept(active_session.billing_dept)
+            entry = LaborEntry(
+                order_id     = active_session.order_id,
+                stage_id     = active_session.stage_id,
+                employee_id  = active_session.employee_id,
+                billing_dept = dept,
+                hours        = round(hours, 4),
+                billing_rate = active_session.billing_rate,
+                billed_value = round(hours * active_session.billing_rate, 2),
+                work_date    = work_date,
+                notes        = active_session.notes,
+                is_rework    = 0,
+            )
+            db.add(entry)
+            db.flush()
+            active_session.labor_entry_id = entry.id
+
+    # Auto-calculate weight from inventory line items if not provided
+    order = db.query(Order).options(joinedload(Order.line_items)).filter(Order.id == stage.order_id).first()
+    if total_weight is None and order:
+        calc_weight = 0.0
+        for li in order.line_items:
+            if li.inventory_item and li.inventory_item.weight_per_unit:
+                calc_weight += li.quantity * li.inventory_item.weight_per_unit
+        total_weight = round(calc_weight, 2) if calc_weight > 0 else None
+
+    # Parse date
+    shipped_date = None
+    if date_shipped:
+        try:
+            shipped_date = _date_type.fromisoformat(date_shipped)
+        except ValueError:
+            shipped_date = None
+    if not shipped_date:
+        shipped_date = now.replace(tzinfo=timezone.utc).astimezone(EASTERN).date()
+
+    # Create or update packing list
+    pl = db.query(PackingList).filter(PackingList.order_id == stage.order_id).first()
+    if not pl:
+        pl = PackingList(order_id=stage.order_id, created_by_id=user.id)
+        db.add(pl)
+
+    pl.shipped_via       = ShippedVia(shipped_via)
+    pl.shipped_via_other = shipped_via_other.strip() if shipped_via_other else None
+    pl.date_shipped      = shipped_date
+    pl.ship_to           = ship_to.strip() if ship_to else None
+    pl.sold_to           = sold_to.strip() if sold_to else None
+    pl.contact_name      = contact_name.strip() if contact_name else None
+    pl.contact_phone     = contact_phone.strip() if contact_phone else None
+    pl.cartons           = cartons
+    pl.total_weight      = total_weight
+    pl.order_complete    = order_complete
+    pl.balance_to_follow = balance_to_follow
+    pl.packed_by         = packed_by.strip() if packed_by else None
+    pl.checked_by        = checked_by.strip() if checked_by else None
+    pl.notes             = notes.st

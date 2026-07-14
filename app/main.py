@@ -17,6 +17,7 @@ from app.routers import quotes as quotes_router
 from app.routers import inventory as inventory_router
 from app.routers import reports as reports_router
 from app.routers import production as production_router
+from app.routers import packing as packing_router
 
 # ── Number sequencing helpers ─────────────────────────────────────────────
 import re
@@ -72,6 +73,7 @@ app.include_router(quotes_router.router)
 app.include_router(inventory_router.router)
 app.include_router(reports_router.router)
 app.include_router(production_router.router)
+app.include_router(packing_router.router)
 
 # ── Root redirect ─────────────────────────────────────────────────────────
 @app.get("/")
@@ -221,5 +223,4 @@ async def dashboard(
 
     # ── Pipeline breakdown (from active_orders, no extra query) ──────────────
     pipeline = {
-        "confirmed":     sum(1 for o in active_orders if o.status.value == "confirmed"),
-        "in_production": sum(1 for o in active_orders if
+        "confirmed":     sum(1 for o in active_orders

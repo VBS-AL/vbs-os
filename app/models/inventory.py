@@ -52,6 +52,7 @@ class InventoryItem(Base):
     quantity_on_hand  = Column(Float, default=0)
     reorder_threshold = Column(Float, nullable=True)             # alert below this
     cost_per_unit     = Column(Float, nullable=True)
+    weight_per_unit   = Column(Float, nullable=True)             # lbs per unit (for packing list auto-weight)
     location          = Column(String, nullable=True)            # shelf / bin in shop
     supplier_name     = Column(String, nullable=True)
     supplier_contact  = Column(String, nullable=True)
@@ -92,7 +93,4 @@ class POStatus(str, enum.Enum):
 
 
 class PurchaseOrder(Base):
-    __tablename__ = "purchase_orders"
-
-    id            = Column(Integer, primary_key=True, index=True)
-    po_number     = Column(String
+    __tablename__ = "purcha

@@ -12,7 +12,7 @@
   <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{{ error }}</div>
   {% endif %}
 
-  <form method="POST" action="/orders/new" id="order-form">
+  <form method="POST" action="/orders/new" id="order-form" enctype="multipart/form-data">
 
     <!-- Customer & Type -->
     <div class="bg-white rounded-xl shadow p-6 mb-4">
@@ -66,15 +66,23 @@
           <textarea name="notes" rows="2" placeholder="Brief description of scope…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
         </div>
 
-        <div class="flex items-center gap-6">
-          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" name="drawings_required" value="1" class="rounded border-gray-300 text-steel-mid"/>
-            Drawings Required
-          </label>
-          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" name="material_supplied_by_customer" value="1" class="rounded border-gray-300 text-steel-mid"/>
-            Customer Supplies Material
-          </label>
+        <div class="col-span-2">
+          <div class="flex items-center gap-6 flex-wrap">
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" name="drawings_required" value="1" id="drawings-cb"
+                     class="rounded border-gray-300 text-steel-mid" onchange="toggleDrawingUpload(this.checked)"/>
+              Drawings Required
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" name="material_supplied_by_customer" value="1" class="rounded border-gray-300 text-steel-mid"/>
+              Customer Supplies Material
+            </label>
+            <div id="drawing-upload-wrap" class="hidden flex items-center gap-2">
+              <span class="text-xs text-gray-400">📎 Attach drawing:</span>
+              <input type="file" name="drawing_file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf"
+                class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border file:border-gray-300 file:text-xs file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer"/>
+            </div>
+          </div>
         </div>
 
         <div>
@@ -142,6 +150,10 @@ function toggleSurcharge(cb) {
     if (!inp.value) inp.value = '75.00';
     inp.focus();
   }
+}
+
+function toggleDrawingUpload(checked) {
+  document.getElementById('drawing-upload-wrap').classList.toggle('hidden', !checked);
 }
 
 let lineCount = 0;
@@ -213,16 +225,4 @@ function addLine() {
         <p id="labor-cost-${idx}" class="text-xs font-semibold text-indigo-600 mt-1 h-4"></p>
       </div>
       <div class="col-span-1 flex justify-end pt-5">
-        <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
-          class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
-      </div>
-    </div>
-    <!-- Internal notes row -->
-    <div class="mt-1">
-      <label class="block text-xs text-amber-700 font-medium mb-1">🔒 Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
-      <textarea name="li_internal_notes_${idx}" rows="1" placeholder="Shop directions, production notes…"
-        class="w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"></textarea>
-    </div>`;
-
-  document.getElementById('lines-container').appendChild(row);
-  updateNoLines
+        <button type="

@@ -39,6 +39,8 @@ class Order(Base):
     priority            = Column(SAEnum(Priority), default=Priority.standard)
     description         = Column(Text, nullable=True)
     drawings_required   = Column(Boolean, default=False)
+    drawing_file        = Column(String, nullable=True)   # stored filename under app/static/drawings/
+    customer_po         = Column(String, nullable=True)   # customer's PO number
     paint_spec          = Column(String, nullable=True)
     promised_date       = Column(Date, nullable=True)
     ship_date           = Column(Date, nullable=True)
@@ -61,6 +63,7 @@ class Order(Base):
     qa_records          = relationship("QARecord", back_populates="order")
     drawing_records     = relationship("DrawingRecord", back_populates="order")
     invoice             = relationship("Invoice", back_populates="order", uselist=False)
+    packing_list        = relationship("PackingList", back_populates="order", uselist=False)
     scrap_records       = relationship("ScrapRecord", back_populates="order")
     work_sessions       = relationship("WorkSession", back_populates="order")
 
@@ -76,7 +79,4 @@ class OrderLineItem(Base):
     material              = Column(String, nullable=True)
     paint_override        = Column(String, nullable=True)
     unit_price            = Column(Float, nullable=True)
-    notes                 = Column(Text, nullable=True)
-    internal_notes        = Column(Text, nullable=True)    # shop/production notes — never shown to customer
-    inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
-    estimated_labor_hours = Column(Float, nullable=Tr
+    notes                 = Column(T
