@@ -172,4 +172,10 @@
   {% endif %}
 
   <!-- Footer -->
-  <div class="border-t border-gray-200 pt-4 text-xs text-gray-400 text-cente
+  <div class="border-t border-gray-200 pt-4 text-xs text-gray-400 text-center">
+    Thank you for your business. Please remit payment by {{ inv.due_date.strftime('%B %d, %Y') if inv.due_date else 'the due date' }}.
+  </div>
+
+{% endif %}
+</body>
+</html>

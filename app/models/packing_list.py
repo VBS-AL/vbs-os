@@ -25,6 +25,7 @@ class PackingList(Base):
     __tablename__ = "packing_lists"
 
     id                = Column(Integer, primary_key=True, index=True)
+    pl_number         = Column(String, unique=True, nullable=True, index=True)  # e.g. VBS-PL-26-00001
     order_id          = Column(Integer, ForeignKey("orders.id"), nullable=False, unique=True)
 
     # Shipping method
@@ -46,7 +47,10 @@ class PackingList(Base):
     order_complete    = Column(Boolean, default=False)
     balance_to_follow = Column(Boolean, default=False)
     packed_by         = Column(String, nullable=True)
-    checked_by        = Column(String, nullable=True)
+    checked_by        = Column(String, nullable=True)   # display name (denormalised)
+    checker_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    check_confirmed   = Column(Boolean, default=False)
+    check_confirmed_at = Column(DateTime(timezone=True), nullable=True)
     notes             = Column(Text, nullable=True)
 
     # Meta
@@ -56,3 +60,4 @@ class PackingList(Base):
     # Relationships
     order             = relationship("Order", back_populates="packing_list")
     created_by        = relationship("User", foreign_keys=[created_by_id])
+    checker           = relationship("User", foreign_keys=[checker_id])

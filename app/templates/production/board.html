@@ -1,11 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Production Board — Van Buren Steel{% endblock %}
+{% block title %}Production Board &mdash; Van Buren Steel{% endblock %}
 {% block content %}
 
 <div class="flex items-center justify-between mb-6">
   <div>
     <h1 class="text-2xl font-bold text-steel-dark">Production Board</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Shop floor — live job status &amp; assignments</p>
+    <p class="text-sm text-gray-500 mt-0.5">Shop floor &mdash; live job status &amp; assignments</p>
+  </div>
+  <div class="flex items-center gap-3">
+    <a href="/production/queue" class="text-sm text-steel-mid hover:underline">My Queue</a>
+    {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
+    <a href="/fulfillment" class="text-sm text-gray-400 hover:text-steel-mid">Fulfillment</a>
+    {% endif %}
   </div>
 </div>
 
@@ -57,12 +63,12 @@
         <td class="pl-4 py-3">
           <button onclick="toggleExpand({{ o.id }})"
             class="text-gray-400 hover:text-steel-mid transition text-xs font-bold leading-none focus:outline-none"
-            id="toggle-{{ o.id }}" title="Show all stages">▶</button>
+            id="toggle-{{ o.id }}" title="Show all stages">&#x25B6;</button>
         </td>
 
         <!-- Order # -->
         <td class="px-4 py-3">
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 flex-wrap">
             {% if job.has_active_timer %}
             <span class="relative flex h-2 w-2 flex-shrink-0" title="Timer active">
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -70,22 +76,57 @@
             </span>
             {% endif %}
             <a href="/orders/{{ o.id }}" class="font-mono font-semibold text-steel-mid hover:underline">{{ o.order_number }}</a>
+            {% if o.drawing_records %}
+            <div class="relative inline-block">
+              <button onclick="toggleBoardDrawings('bd-{{ o.id }}')"
+                class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition">
+                &#x1F4C4; {{ o.drawing_records | length }}
+              </button>
+              <div id="bd-{{ o.id }}" class="hidden absolute left-0 top-6 z-30 bg-white border border-gray-200 rounded-xl shadow-lg w-64 p-2 space-y-1">
+                {% for dr in o.drawing_records | sort(attribute='created_at', reverse=True) %}
+                <a href="/static/drawings/{{ o.order_number }}/{{ dr.file_reference }}" target="_blank"
+                   class="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-gray-50 text-xs text-gray-700 truncate">
+                  {% set dext = dr.file_reference.rsplit('.', 1)[-1].lower() if dr.file_reference and '.' in dr.file_reference else '' %}
+                  {% if dr.drawing_type in ['qa_photo', 'delivery_photo'] or dext in ['jpg', 'jpeg', 'png', 'tiff'] %}&#x1F4F7;
+                  {% elif dr.drawing_type in ['document'] or dext in ['xlsx', 'docx'] %}&#x1F4CB;
+                  {% else %}&#x1F4C4;{% endif %}
+                  <span class="truncate">{{ dr.display_name or dr.file_reference }}</span>
+                  {% if dr.revision %}<span class="text-gray-400 font-mono flex-shrink-0">{{ dr.revision }}</span>{% endif %}
+                </a>
+                {% endfor %}
+                <div class="border-t border-gray-100 pt-1">
+                  <form method="POST" action="/orders/{{ o.id }}/drawings" enctype="multipart/form-data" class="flex items-center gap-1 px-1">
+                    <input type="hidden" name="stage_context" value="board"/>
+                    <input type="file" name="files" multiple required accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.tiff,.xlsx,.docx"
+                      class="text-xs flex-1 min-w-0"/>
+                    <button type="submit" class="text-xs bg-steel-dark text-white px-2 py-1 rounded hover:bg-steel-mid flex-shrink-0">+</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            {% elif o.drawing_file %}
+            <a href="/static/drawings/{{ o.drawing_file }}" target="_blank"
+               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+               title="Legacy drawing">
+              &#x1F4C4;
+            </a>
+            {% endif %}
           </div>
         </td>
 
         <!-- Customer -->
-        <td class="px-4 py-3 font-medium text-gray-800">{{ o.customer.name if o.customer else '—' }}</td>
+        <td class="px-4 py-3 font-medium text-gray-800">{{ o.customer.name if o.customer else '&#x2014;' }}</td>
 
         <!-- Priority -->
         <td class="px-4 py-3">
-          {% if o.priority.value == 'urgent' %}<span class="font-bold text-red-600">⚡ Urgent</span>
-          {% elif o.priority.value == 'priority' %}<span class="font-medium text-yellow-600">↑ Priority</span>
+          {% if o.priority.value == 'urgent' %}<span class="font-bold text-red-600">&#x26A1; Urgent</span>
+          {% elif o.priority.value == 'priority' %}<span class="font-medium text-yellow-600">&#x2191; Priority</span>
           {% else %}<span class="text-gray-400 text-xs">Standard</span>{% endif %}
         </td>
 
         <!-- Due Date -->
         <td class="px-4 py-3 {% if o.promised_date and o.promised_date < today %}text-red-500 font-medium{% else %}text-gray-500{% endif %}">
-          {{ o.promised_date or '—' }}
+          {{ o.promised_date or '&#x2014;' }}
           {% if o.promised_date and o.promised_date < today %}
           <span class="text-xs block text-red-400">{{ (today - o.promised_date).days }}d overdue</span>
           {% endif %}
@@ -110,7 +151,7 @@
         <td class="px-4 py-3">
           {% if cs %}
             {% if cs.status.value == 'complete' %}
-              <span class="text-green-600 font-medium text-xs">✓ All Complete</span>
+              <span class="text-green-600 font-medium text-xs">&#x2713; All Complete</span>
             {% else %}
               <span class="inline-flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full flex-shrink-0
@@ -139,17 +180,36 @@
                 {{ cs.assigned_to.first_name }} {{ cs.assigned_to.last_name or '' }}
               </span>
             {% else %}
-              <span class="text-xs text-yellow-600 font-medium">⚠ Unassigned</span>
+              <span class="text-xs text-yellow-600 font-medium">&#x26A0; Unassigned</span>
             {% endif %}
           {% else %}
-            <span class="text-gray-300 text-xs">—</span>
+            <span class="text-gray-300 text-xs">&#x2014;</span>
           {% endif %}
         </td>
 
         <!-- Actions (current stage, management only) -->
         {% if can_manage %}
         <td class="px-4 py-3">
-          {% if cs and cs.status.value != 'complete' %}
+          {% if o.status.value == 'confirmed' and o.job_type.value != 'retail' %}
+            {% set unassigned_stages = job.stages | rejectattr('assigned_to_id') | list %}
+            {% if unassigned_stages %}
+            <span id="stage-badge-{{ o.id }}" class="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              &#x26A0; {{ unassigned_stages | length }} stage{{ 's' if unassigned_stages | length > 1 else '' }} unassigned
+            </span>
+            {% else %}
+            <div class="flex items-center gap-2">
+              <span id="stage-badge-{{ o.id }}" class="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                &#x2713; Ready to start
+              </span>
+              <form method="POST" action="/orders/{{ o.id }}/status">
+                <input type="hidden" name="new_status" value="in_production"/>
+                <button type="submit" class="text-xs bg-steel-dark text-white px-3 py-1 rounded hover:bg-steel-mid transition font-medium">
+                  &#x25B6; Start Production
+                </button>
+              </form>
+            </div>
+            {% endif %}
+          {% elif cs and cs.status.value != 'complete' %}
           <div class="flex flex-col gap-1.5">
             <form class="assign-form flex gap-1 items-center"
                   action="/production/stages/{{ cs.id }}/assign"
@@ -157,7 +217,7 @@
                   data-order-id="{{ o.id }}"
                   data-is-current="true">
               <select name="assigned_to_id" class="border border-gray-200 rounded px-2 py-1 text-xs text-gray-700 max-w-[130px]">
-                <option value="">— Unassign —</option>
+                <option value="">&#x2014; Unassign &#x2014;</option>
                 {% for emp in employees %}
                 <option value="{{ emp.id }}" {% if cs.assigned_to_id == emp.id %}selected{% endif %}>
                   {{ emp.first_name }} {{ emp.last_name or '' }}
@@ -168,7 +228,7 @@
             </form>
           </div>
           {% else %}
-          <span class="text-xs text-green-600 font-medium">✓ Done</span>
+          <span class="text-xs text-green-600 font-medium">&#x2713; Done</span>
           {% endif %}
         </td>
         {% endif %}
@@ -177,7 +237,7 @@
       <!-- Expanded stage detail row -->
       <tr id="expand-{{ o.id }}" class="hidden bg-slate-50 border-t border-gray-100">
         <td colspan="{% if can_manage %}9{% else %}8{% endif %}" class="px-6 py-3">
-          <p class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-2">All Stages — {{ o.order_number }}</p>
+          <p class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-2">All Stages &mdash; {{ o.order_number }}</p>
           <table class="w-full text-xs">
             <thead>
               <tr class="text-gray-400 uppercase tracking-wide">
@@ -227,7 +287,7 @@
                       {{ stage.assigned_to.first_name }} {{ stage.assigned_to.last_name or '' }}
                     </span>
                   {% else %}
-                    <span class="text-yellow-600">⚠ Unassigned</span>
+                    <span class="text-yellow-600">&#x26A0; Unassigned</span>
                   {% endif %}
                 </td>
 
@@ -241,7 +301,7 @@
                           data-order-id="{{ o.id }}"
                           data-is-current="{{ 'true' if cs and stage.id == cs.id else 'false' }}">
                       <select name="assigned_to_id" class="border border-gray-200 rounded px-2 py-0.5 text-xs text-gray-700">
-                        <option value="">— Unassign —</option>
+                        <option value="">&#x2014; Unassign &#x2014;</option>
                         {% for emp in employees %}
                         <option value="{{ emp.id }}" {% if stage.assigned_to_id == emp.id %}selected{% endif %}>
                           {{ emp.first_name }} {{ emp.last_name or '' }}
@@ -253,28 +313,29 @@
                     {% if this_can_start %}
                     <form method="POST" action="/production/stages/{{ stage.id }}/status">
                       <input type="hidden" name="status" value="in_progress">
-                      <button class="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-0.5 rounded transition">▶ Start</button>
+                      <button class="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-0.5 rounded transition">&#x25B6; Start</button>
                     </form>
                     {% elif stage.status.value == 'in_progress' %}
                     {% if stage.work_sessions | length == 0 %}
-                    <span class="text-xs text-amber-600 font-medium" title="No time has been logged for this stage">⚠ No time logged</span>
+                    <span class="text-xs text-amber-600 font-medium" title="Log time before marking complete">&#x26A0; No time logged</span>
                     {% endif %}
-                    <form method="POST" action="/production/stages/{{ stage.id }}/status">
+                    <form class="stage-complete-form" method="POST" action="/production/stages/{{ stage.id }}/status">
                       <input type="hidden" name="status" value="complete">
-                      <button class="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-2 py-0.5 rounded transition">✓ Complete</button>
+                      <button class="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-2 py-0.5 rounded transition">&#x2713; Complete</button>
                     </form>
+                    <span class="stage-done-error hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1"></span>
                     <form method="POST" action="/production/stages/{{ stage.id }}/status">
                       <input type="hidden" name="status" value="blocked">
-                      <button class="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-2 py-0.5 rounded transition">✕ Block</button>
+                      <button class="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-2 py-0.5 rounded transition">&#x2715; Block</button>
                     </form>
                     {% elif stage.status.value == 'blocked' %}
                     <form method="POST" action="/production/stages/{{ stage.id }}/status">
                       <input type="hidden" name="status" value="in_progress">
-                      <button class="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-0.5 rounded transition">▶ Resume</button>
+                      <button class="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-0.5 rounded transition">&#x25B6; Resume</button>
                     </form>
                     {% endif %}
                     {% else %}
-                    <span class="text-green-600 font-medium">✓ Complete</span>
+                    <span class="text-green-600 font-medium">&#x2713; Complete</span>
                     {% endif %}
                   </div>
                 </td>
@@ -300,59 +361,176 @@
 
 <!-- Stage legend -->
 <div class="mt-4 flex gap-4 text-xs text-gray-400">
-  <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block"></span> Pending</span>
   <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block"></span> In Progress</span>
   <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-green-400 inline-block"></span> Complete</span>
   <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-400 inline-block"></span> Blocked</span>
-  <span class="text-gray-300 ml-2">· Click ▶ on any row to expand all stages</span>
 </div>
 
 <script>
-// ── Expand / collapse ────────────────────────────────────────────────────
+function toggleBoardDrawings(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isHidden = el.classList.contains('hidden');
+  // close all open board dropdowns
+  document.querySelectorAll('[id^="bd-"]').forEach(d => d.classList.add('hidden'));
+  if (isHidden) el.classList.remove('hidden');
+}
+
+// Outside-click dismissal
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('[id^="bd-"]') && !e.target.closest('button[onclick^="toggleBoardDrawings"]')) {
+    document.querySelectorAll('[id^="bd-"]').forEach(d => d.classList.add('hidden'));
+  }
+});
+
 function toggleExpand(orderId) {
-  const expandRow = document.getElementById('expand-' + orderId);
-  const toggle    = document.getElementById('toggle-' + orderId);
-  const isOpen    = !expandRow.classList.contains('hidden');
-  expandRow.classList.toggle('hidden', isOpen);
-  toggle.textContent = isOpen ? '▶' : '▼';
-  toggle.classList.toggle('text-steel-mid', !isOpen);
+  const row = document.getElementById('expand-' + orderId);
+  const btn = document.getElementById('toggle-' + orderId);
+  if (!row) return;
+  const isHidden = row.classList.contains('hidden');
+  row.classList.toggle('hidden');
+  if (btn) btn.innerHTML = isHidden ? '&#x25BC;' : '&#x25B6;';
 }
 
-// ── Assignee display helpers ─────────────────────────────────────────────
-function avatarHtml(empName, size) {
-  const initials = empName.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const dim = size === 'sm' ? 'w-5 h-5' : 'w-6 h-6';
-  return `<span class="inline-flex items-center gap-1 font-medium text-gray-700">
-    <span class="${dim} rounded-full bg-steel-mid text-white text-xs flex items-center justify-center font-bold flex-shrink-0">${initials}</span>
-    ${empName}
-  </span>`;
+function avatarHtml(firstName, lastName, size) {
+  size = size || 6;
+  const initials = (firstName ? firstName[0] : '') + (lastName ? lastName[0] : '');
+  return '<span class="w-' + size + ' h-' + size + ' rounded-full bg-steel-mid text-white text-xs flex items-center justify-center font-bold flex-shrink-0">' + initials + '</span>';
 }
 
-function setAssigneeCell(cellId, empId, empName, size) {
+function setAssigneeCell(cellId, firstName, lastName) {
   const cell = document.getElementById(cellId);
   if (!cell) return;
-  cell.innerHTML = (empId && empName)
-    ? avatarHtml(empName, size)
-    : '<span class="text-xs text-yellow-600 font-medium">⚠ Unassigned</span>';
+  if (firstName) {
+    const fullName = firstName + (lastName ? ' ' + lastName : '');
+    cell.innerHTML = '<span class="inline-flex items-center gap-1 text-sm font-medium text-gray-700">' +
+      avatarHtml(firstName, lastName, 6) + fullName + '</span>';
+  } else {
+    cell.innerHTML = '<span class="text-xs text-yellow-600 font-medium">&#x26A0; Unassigned</span>';
+  }
 }
 
-// ── Intercept all assign forms — no page reload ──────────────────────────
+// Per-stage assignment state (for live badge updates)
+const stageAssigned = {
+  {% for job in jobs %}{% for stage in job.stages %}
+  "{{ stage.id }}": {{ 'true' if stage.assigned_to_id else 'false' }},
+  {% endfor %}{% endfor %}
+};
+const stageToOrder = {
+  {% for job in jobs %}{% for stage in job.stages %}
+  "{{ stage.id }}": "{{ job.order.id }}",
+  {% endfor %}{% endfor %}
+};
+const orderStageIds = {
+  {% for job in jobs %}
+  "{{ job.order.id }}": [{% for stage in job.stages %}"{{ stage.id }}"{% if not loop.last %},{% endif %}{% endfor %}],
+  {% endfor %}
+};
+
+function updateStageBadge(orderId) {
+  const badge = document.getElementById('stage-badge-' + orderId);
+  if (!badge) return;
+  const stages = orderStageIds[orderId] || [];
+  const unassigned = stages.filter(sid => !stageAssigned[sid]).length;
+  if (unassigned > 0) {
+    badge.className = 'inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1';
+    badge.innerHTML = '&#x26A0; ' + unassigned + ' stage' + (unassigned > 1 ? 's' : '') + ' unassigned';
+    // Remove start button if it appeared
+    const btn = badge.parentElement.querySelector('.start-prod-btn');
+    if (btn) btn.remove();
+  } else {
+    badge.className = 'inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1';
+    badge.innerHTML = '&#x2713; Ready to start';
+    // Inject Start Production button if not already there
+    if (!badge.parentElement.querySelector('.start-prod-btn')) {
+      const f = document.createElement('form');
+      f.method = 'POST';
+      f.action = '/orders/' + orderId + '/status';
+      f.className = 'start-prod-btn';
+      f.innerHTML = '<input type="hidden" name="new_status" value="in_production"/>' +
+        '<button type="submit" class="text-xs bg-steel-dark text-white px-3 py-1 rounded hover:bg-steel-mid transition font-medium">&#x25B6; Start Production</button>';
+      badge.parentElement.appendChild(f);
+    }
+  }
+}
+
+// Intercept assign-form submits for AJAX update
 document.addEventListener('submit', function(e) {
-  const form = e.target;
-  if (!form.classList.contains('assign-form')) return;
+  const form = e.target.closest('.assign-form');
+  if (!form) return;
   e.preventDefault();
-
-  const stageId   = form.dataset.stageId;
-  const orderId   = form.dataset.orderId;
+  const action = form.getAttribute('action');
+  const stageId = form.dataset.stageId;
+  const orderId = form.dataset.orderId;
   const isCurrent = form.dataset.isCurrent === 'true';
-  const select    = form.querySelector('select[name="assigned_to_id"]');
-  const empId     = select.value;
-  const empName   = empId ? select.options[select.selectedIndex].text.trim() : null;
+  const select = form.querySelector('select[name="assigned_to_id"]');
+  const selectedOption = select ? select.options[select.selectedIndex] : null;
 
-  // Show a subtle "saving…" state on the button
-  const btn = form.querySelector('button[type="submit"]');
-  const origText = btn.textContent;
-  btn.textContent = '…';
-  btn.disabled = true;
+  fetch(action, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams(new FormData(form))
+  }).then(function(resp) {
+    if (!resp.ok) return;
+    let firstName = '', lastName = '';
+    if (selectedOption && selectedOption.value) {
+      const parts = selectedOption.text.trim().split(' ');
+      firstName = parts[0] || '';
+      lastName = parts.slice(1).join(' ') || '';
+    }
+    // Update assignment tracking state
+    stageAssigned[stageId] = !!selectedOption?.value;
+    // Update per-stage cell
+    setAssigneeCell('assignee-stage-' + stageId, firstName, lastName);
+    // If this is the current stage, also update the main row cell
+    if (isCurrent) {
+      const mainCell = document.getElementById('assignee-main-' + orderId);
+      if (mainCell) {
+        if (firstName) {
+          const fullName = firstName + (lastName ? ' ' + lastName : '');
+          mainCell.innerHTML = '<span class="inline-flex items-center gap-1 text-sm font-medium text-gray-700">' +
+            avatarHtml(firstName, lastName, 6) + fullName + '</span>';
+        } else {
+          mainCell.innerHTML = '<span class="text-xs text-yellow-600 font-medium">&#x26A0; Unassigned</span>';
+        }
+      }
+    }
+    // Sync all other assign-forms for this stage to reflect new selection
+    document.querySelectorAll('.assign-form[data-stage-id="' + stageId + '"] select').forEach(function(sel) {
+      sel.value = selectedOption ? selectedOption.value : '';
+    });
+    // Update the confirmed-order stage badge
+    updateStageBadge(orderId);
+  });
+});
 
-  fetch(form.act
+// Intercept ✓ Complete form — show inline error if time hasn't been logged
+document.addEventListener('submit', function(e) {
+  const form = e.target.closest('.stage-complete-form');
+  if (!form) return;
+  e.preventDefault();
+  const errEl = form.nextElementSibling;
+  fetch(form.action, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams(new FormData(form))
+  }).then(function(resp) {
+    if (resp.ok) {
+      window.location.reload();
+    } else {
+      return resp.json().then(function(data) {
+        if (errEl) {
+          errEl.textContent = data.detail || 'Cannot complete stage';
+          errEl.classList.remove('hidden');
+        }
+      });
+    }
+  }).catch(function() {
+    if (errEl) {
+      errEl.textContent = 'Something went wrong';
+      errEl.classList.remove('hidden');
+    }
+  });
+});
+</script>
+{% endblock %}

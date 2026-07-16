@@ -21,8 +21,9 @@ class Quote(Base):
     job_type        = Column(String, nullable=False)
     status          = Column(SAEnum(QuoteStatus), default=QuoteStatus.draft)
     priority        = Column(String, default="standard")
-    paint_spec      = Column(String, nullable=True)
-    drawings_required = Column(Boolean, default=False)
+    paint_spec                  = Column(String, nullable=True)
+    preferred_delivery_method   = Column(String, nullable=True)  # customer_pickup | delivery | None
+    drawings_required           = Column(Boolean, default=False)
     drawing_file    = Column(String, nullable=True)   # stored filename under app/static/drawings/
     customer_po     = Column(String, nullable=True)   # customer's PO number
     description     = Column(Text, nullable=True)
@@ -66,4 +67,12 @@ class QuoteLineItem(Base):
 class QuoteRevision(Base):
     __tablename__ = "quote_revisions"
 
-    id              = Column(Integ
+    id              = Column(Integer, primary_key=True, index=True)
+    quote_id        = Column(Integer, ForeignKey("quotes.id"), nullable=False)
+    revision_number = Column(Integer, nullable=False)          # 1, 2, 3…
+    snapshot        = Column(JSON, nullable=False)             # full quote+lines at save time
+    edited_by_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    change_note     = Column(String, nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    quote           =

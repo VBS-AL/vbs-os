@@ -221,7 +221,7 @@
     <h1>Packing List — {{ order.order_number }}</h1>
     <div style="font-size:11px; opacity:0.8; margin-top:2px;">
       {{ order.customer.name if order.customer else '—' }}
-      {% if pl and pl.date_shipped %} · Shipped {{ pl.date_shipped.strftime('%b %d, %Y') }}{% endif %}
+      {% if pl and pl.date_shipped %} · {% if order and order.preferred_delivery_method == 'customer_pickup' %}Picked Up{% else %}Shipped{% endif %} {{ pl.date_shipped.strftime('%b %d, %Y') }}{% endif %}
     </div>
   </div>
   <div style="display:flex; gap:10px; align-items:center;">
@@ -230,7 +230,32 @@
       ⚠ Packing list not yet generated
     </span>
     {% endif %}
+    {% if error %}
+    <span style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600;">
+      ⚠ {{ error }}
+    </span>
+    {% endif %}
+    <a href="/fulfillment" class="btn btn-back" style="opacity:0.7;">Fulfillment</a>
     <a href="/orders/{{ order.id }}" class="btn btn-back">← Back to Order</a>
+    {% if pl and order.status.value == 'ready' %}
+      {% set is_pickup = order.preferred_delivery_method == 'customer_pickup' %}
+      {% set checker_pending = pl.checker_id and not pl.check_confirmed %}
+      <form method="POST" action="/orders/{{ order.id }}/confirm-delivery" style="display:inline;">
+        <button type="submit" class="btn" style="background:#28a745; color:white;"
+          onclick="return confirm('{% if is_pickup %}Mark this order as picked up?{% else %}Mark this order as delivered?{% endif %}')">
+          {% if is_pickup %}✓ Mark as Picked Up{% else %}✓ Mark as Delivered{% endif %}
+        </button>
+      </form>
+      {% if checker_pending and user.role.value in ['owner', 'ops_manager'] %}
+      <form method="POST" action="/orders/{{ order.id }}/confirm-delivery" style="display:inline;">
+        <input type="hidden" name="override" value="true"/>
+        <button type="submit" class="btn" style="background:#6b7280; color:white;"
+          onclick="return confirm('Override checker confirmation and mark as {% if is_pickup %}picked up{% else %}delivered{% endif %}? This will bypass the packing list check.')">
+          ⚠ Override & {% if is_pickup %}Mark as Picked Up{% else %}Mark as Delivered{% endif %}
+        </button>
+      </form>
+      {% endif %}
+    {% endif %}
     <button onclick="window.print()" class="btn btn-print">🖨 Print (2 copies)</button>
   </div>
 </div>
@@ -247,10 +272,15 @@
       <div>
         <div class="company-name">VAN BUREN STEEL</div>
         <div class="company-sub">Steel Fabrication &amp; Manufacturing</div>
+        <div class="company-sub" style="margin-top:4px;">327 Davis St., Belleville, MI 48111</div>
+        <div class="company-sub">877-STEEL-65 &nbsp;·&nbsp; www.vanburensteel.com</div>
       </div>
       <div class="pl-title-block">
         <div class="pl-title">Packing List</div>
-        <div class="pl-order-num">{{ order.order_number }}</div>
+        {% if pl and pl.pl_number %}
+        <div class="pl-order-num" style="font-size:13px; color:#1a3a5c;">{{ pl.pl_number }}</div>
+        {% endif %}
+        <div class="pl-order-num" style="font-size:10px; color:#888;">Order: {{ order.order_number }}</div>
         <div><span class="copy-label {{ copy_class }}">{{ copy_label }}</span></div>
       </div>
     </div>
@@ -258,7 +288,7 @@
     <!-- Top info row -->
     <div class="info-row">
       <div class="info-box">
-        <div class="info-label">Date Shipped</div>
+        <div class="info-label">{% if order and order.preferred_delivery_method == 'customer_pickup' %}Pickup Date{% else %}Date Shipped{% endif %}</div>
         <div class="info-value">{{ pl.date_shipped.strftime('%m/%d/%Y') if pl and pl.date_shipped else '________________' }}</div>
       </div>
       <div class="info-box">
@@ -332,37 +362,4 @@ ________________{% endif %}</div>
         <div class="footer-value">{{ pl.cartons if pl and pl.cartons is not none else '____' }}</div>
       </div>
       <div class="footer-box">
-        <div class="footer-label">Total Weight</div>
-        <div class="footer-value">{{ (pl.total_weight | round(1) | string + ' lbs') if pl and pl.total_weight else '____' }}</div>
-      </div>
-      <div class="footer-box">
-        <div class="footer-label">Order Complete</div>
-        <div class="footer-value check-val">{{ '☑' if pl and pl.order_complete else '☐' }}</div>
-      </div>
-      <div class="footer-box">
-        <div class="footer-label">Balance to Follow</div>
-        <div class="footer-value check-val">{{ '☑' if pl and pl.balance_to_follow else '☐' }}</div>
-      </div>
-      <div class="footer-box">
-        <div class="footer-label">Packed By</div>
-        <div class="footer-value">{{ pl.packed_by if pl and pl.packed_by else '____' }}</div>
-      </div>
-      <div class="footer-box">
-        <div class="footer-label">Checked By</div>
-        <div class="footer-value">{{ pl.checked_by if pl and pl.checked_by else '____' }}</div>
-      </div>
-    </div>
-
-    <!-- Notice -->
-    <div class="pl-notice">PLEASE NOTIFY US IMMEDIATELY IF ERROR IS FOUND IN SHIPMENT</div>
-
-  </div><!-- end pl-copy -->
-  </div><!-- end copy-wrap -->
-  {% if not loop.last %}
-  <div class="cut-line">- - - - - - - - - - - - - - - - - CUT HERE - - - - - - - - - - - - - - - - -</div>
-  {% endif %}
-  {% endfor %}
-
-</div><!-- end page-wrapper -->
-</body>
-</html>
+      

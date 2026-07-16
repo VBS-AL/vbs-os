@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Fulfillment — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-steel-dark">Fulfillment</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Outbound orders — deliveries &amp; customer pickups</p>
+  </div>
+</div>
+
+<!-- Filters -->
+<form method="GET" class="bg-white rounded-xl shadow p-4 mb-6 flex flex-wrap gap-3 items-end">
+  <div class="flex-1 min-w-[180px]">
+    <label class="block text-xs text-gray-500 mb-1">Search</label>
+    <input name="q" value="{{ filters.q or '' }}" placeholder="PL #, order #, or customer…"
+      autocomplete="off"
+      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Status</label>
+    <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <option value="">All</option>
+      <option value="awaiting_check" {% if filters.status == 'awaiting_check' %}selected{% endif %}>⏳ Awaiting Check</option>
+      <option value="ready"          {% if filters.status == 'ready'          %}selected{% endif %}>📋 Ready to Fulfill</option>
+      <option value="fulfilled"      {% if filters.status == 'fulfilled'      %}selected{% endif %}>✅ Fulfilled</option>
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Ship Date From</label>
+    <input type="date" name="date_from" value="{{ filters.date_from or '' }}"
+      class="border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Ship Date To</label>
+    <input type="date" name="date_to" value="{{ filters.date_to or '' }}"
+      class="border border-gray-300 rounded-lg px-3 py-2 text-sm"/>
+  </div>
+  <button type="submit" class="bg-steel-mid text-white px-4 py-2 rounded-lg text-sm hover:bg-steel-dark transition">Filter</button>
+  <a href="/fulfillment" class="text-sm text-gray-400 hover:text-gray-600 py-2">Clear</a>
+</form>
+
+
+<!-- ── Section 1: In-progress packing lists ─────────────────────────────── -->
+<div class="flex items-center justify-between mb-2">
+  <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Packing Lists</h2>
+  <span class="text-xs text-gray-400">{{ packing_lists|length }} record{{ 's' if packing_lists|length != 1 }}</span>
+</div>
+
+<div class="bg-white rounded-xl shadow overflow-hidden mb-8">
+  <table class="w-full text-sm">
+    <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-4 py-3 text-left">PL #</th>
+        <th class="px-4 py-3 text-left">Order #</th>
+        <th class="px-4 py-3 text-left">Customer</th>
+        <th class="px-4 py-3 text-left">Method</th>
+        <th class="px-4 py-3 text-left">Ship Date</th>
+        <th class="px-4 py-3 text-left">Packed By</th>
+        <th class="px-4 py-3 text-left">Check</th>
+        <th class="px-4 py-3 text-left">Status</th>
+        <th class="px-4 py-3 text-left">POD</th>
+        <th class="px-4 py-3 text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for pl in packing_lists %}
+      {% set o = pl.order %}
+      <tr class="hover:bg-steel-light transition">
+
+        <td class="px-4 py-3 font-mono font-semibold text-steel-mid whitespace-nowrap">
+          {{ pl.pl_number or '—' }}
+        </td>
+
+        <td class="px-4 py-3 whitespace-nowrap">
+          <a href="/orders/{{ o.id }}" class="font-mono text-steel-mid hover:underline">{{ o.order_number }}</a>
+        </td>
+
+        <td class="px-4 py-3 font-medium">
+          {{ o.customer.name if o.customer else '—' }}
+        </td>
+
+        <!-- Method: pickup vs delivery -->
+        <td class="px-4 py-3 whitespace-nowrap">
+          {% if pl.shipped_via %}
+            {% set via = pl.shipped_via.value %}
+            {% if via == 'customer_pickup' %}
+            <span class="inline-flex items-center gap-1 text-xs text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">🏭 Pickup</span>
+            {% elif via == 'vbs_delivery' %}
+            <span class="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">🚚 Delivery</span>
+            {% elif via == 'third_party_freight' %}
+            <span class="inline-flex items-center gap-1 text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">📦 Freight</span>
+            {% elif via == 'courier' %}
+            <span class="inline-flex items-center gap-1 text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">📬 Courier</span>
+            {% else %}
+            <span class="text-xs text-gray-500">{{ shipped_via_labels.get(pl.shipped_via, via) }}</span>
+            {% endif %}
+            {% if pl.shipped_via_other %}
+            <span class="text-gray-400 text-xs ml-1">({{ pl.shipped_via_other }})</span>
+            {% endif %}
+          {% else %}
+          <span class="text-xs text-gray-400">—</span>
+          {% endif %}
+        </td>
+
+        <td class="px-4 py-3 text-gray-600 whitespace-nowrap">
+          {{ pl.date_shipped.strftime('%b %d, %Y') if pl.date_shipped else '—' }}
+        </td>
+
+        <td class="px-4 py-3 text-gray-600">
+          {{ pl.packed_by or '—' }}
+        </td>
+
+        <td class="px-4 py-3 whitespace-nowrap">
+          {% if pl.checker_id %}
+            {% if pl.check_confirmed %}
+            <span class="text-xs text-green-700">✅ {{ pl.checked_by or (pl.checker.first_name ~ ' ' ~ (pl.checker.last_name or '') if pl.checker else '—') }}</span>
+            {% else %}
+            <span class="text-xs text-amber-700">⏳ {{ pl.checked_by or (pl.checker.first_name ~ ' ' ~ (pl.checker.last_name or '') if pl.checker else '—') }}</span>
+            {% endif %}
+          {% else %}
+          <span class="text-xs text-gray-400">—</span>
+          {% endif %}
+        </td>
+
+        <td class="px-4 py-3 whitespace-nowrap">
+          {% if o.status.value in ['delivered', 'paid'] %}
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">✅ Fulfilled</span>
+          {% elif pl.checker_id and not pl.check_confirmed %}
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">⏳ Awaiting Check</span>
+          {% else %}
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">📋 Ready to Fulfill</span>
+          {% endif %}
+        </td>
+
+        <!-- POD placeholder -->
+        <td class="px-4 py-3">
+          <span class="text-xs text-gray-300 italic">—</span>
+        </td>
+
+        <td class="px-4 py-3 text-right whitespace-nowrap">
+          <a href="/orders/{{ o.id }}/packing-list"
+            class="text-xs px-3 py-1.5 rounded-md bg-steel-light text-steel-dark hover:bg-steel-mid hover:text-white transition font-medium">
+            View / Print ↗
+          </a>
+        </td>
+
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="10" class="px-4 py-10 text-center text-gray-400">
+          No packing lists found.
+          {% if filters.q or filters.status or filters.date_from or filters.date_to %}
+          <a href="/fulfillment" class="text-steel-mid hover:underline ml-1">Clear filters.</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if packing_lists %}
+<div class="mb-8 -mt-6 text-xs text-gray-400 text-right">
+  {% set fulfilled_count = packing_lists | selectattr('order.status.value', 'in', ['delivered','paid']) | list | length %}
+  {% set awaiting_count  = packing_lists | selectattr('checker_id') | rejectattr('check_confirmed') | list | length %}
+  {% set ready_count     = packing_lists | length - fulfilled_count - awaiting_count %}
+  {{ fulfilled_count }} fulfilled &nbsp;·&nbsp; {{ awaiting_count }} awaiting check &nbsp;·&nbsp; {{ ready_count }} ready to fulfill
+</div>
+{% endif %}
+
+
+<!-- ── Section 2: Ready orders with no packing list ──────────────────────── -->
+{% if awaiting_pl %}
+<div class="flex items-center justify-between mb-2">
+  <h2 class="text-sm font-semibold text-orange-700 uppercase tracking-wide">⚠ Awaiting Packing List</h2>
+  <span class="text-xs text-gray-400">{{ awaiting_pl|length }} order{{ 's' if awaiting_pl|length != 1 }} ready with no PL started</span>
+</div>
+
+<div class="bg-white rounded-xl shadow overflow-hidden border border-orange-200">
+  <table class="w-full text-sm">
+    <thead class="bg-orange-50 text-orange-800 text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-4 py-3 text-left">Order #</th>
+        <th class="px-4 py-3 text-left">Customer</th>
+        <th class="px-4 py-3 text-left">Due Date</th>
+        <th class="px-4 py-3 text-left">Job Type</th>
+        <th class="px-4 py-3 text-right">Action</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-orange-100">
+      {% for o in awaiting_pl %}
+      {% set overdue = o.promised_date and o.promised_date < today %}
+      <tr class="hover:bg-orange-50 transition">
+
+        <td class="px-4 py-3 font-mono font-semibold text-steel-mid">
+          <a href="/orders/{{ o.id }}" class="hover:underline">{{ o.order_number }}</a>
+        </td>
+
+        <td class="px-4 py-3 font-medium">
+          {{ o.customer.name if o.customer else '—' }}
+        </td>
+
+        <td class="px-4 py-3 whitespace-nowrap">
+          {% if o.promised_date %}
+          <span class="{% if overdue %}text-red-600 font-semibold{% else %}text-gray-600{% endif %}">
+            {{ o.promised_date.strftime('%b %d, %Y') }}{% if overdue %} ⚡{% endif %}
+          </span>
+          {% else %}
+          <span class="text-gray-400">—</span>
+          {% endif %}
+        </td>
+
+        <td class="px-4 py-3 text-gray-500 capitalize">
+          {{ o.job_type.value.replace('_', ' ') if o.job_type else '—' }}
+        </td>
+
+        <td class="px-4 py-3 text-right">
+          <a href="/orders/{{ o.id }}/packing-list"
+            class="text-xs px-3 py-1.5 rounded-md bg-orange-100 text-orange-800 hover:bg-orange-200 transition font-medium">
+            Start Packing List →
+          </a>
+        </td>
+
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

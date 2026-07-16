@@ -11,7 +11,7 @@ from app.database import get_db
 from app.auth import require_user, financials_visible
 from app.models.user import User, UserRole
 from app.models.order import Order, OrderStatus, Priority
-from app.models.production import ProductionStage, StageStatus, StageType, QARecord, QAResult
+from app.models.production import ProductionStage, StageStatus, StageType, QARecord, QAResult, DrawingRecord
 from app.models.packing_list import PackingList, ShippedVia
 from app.models.work_session import WorkSession, SessionStatus, PauseReason, PAUSE_REASON_LABELS
 from app.models.labor import LaborEntry, BillingDept, BILLING_RATES
@@ -175,6 +175,7 @@ async def production_board(
         joinedload(Order.customer),
         joinedload(Order.production_stages).joinedload(ProductionStage.assigned_to),
         joinedload(Order.production_stages).joinedload(ProductionStage.work_sessions),
+        joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
     ).filter(
         Order.status.notin_([OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled])
     ).all()
@@ -308,6 +309,15 @@ async def update_stage_status(
     now = datetime.utcnow()
     new_status = StageStatus(status)
 
+    # Gate: require at least one completed work session before marking any stage done
+    if new_status == StageStatus.complete:
+        has_time = db.query(WorkSession).filter(
+            WorkSession.stage_id == stage_id,
+            WorkSession.status == SessionStatus.completed,
+        ).first()
+        if not has_time:
+            raise HTTPException(400, "Log time on this stage before marking it complete")
+
     if new_status == StageStatus.in_progress and not stage.started_at:
         stage.started_at = now
     elif new_status == StageStatus.complete:
@@ -335,6 +345,43 @@ async def update_stage_status(
                 break
             if s.id == stage.id:
                 found = True
+
+        # Completing a delivery stage: stop the running timer + mark order delivered
+        if stage.stage_type == StageType.delivery:
+            order = db.query(Order).filter(Order.id == stage.order_id).first()
+            if order and order.status == OrderStatus.ready:
+                order.status = OrderStatus.delivered
+            # Stop any still-running session for this stage
+            open_session = db.query(WorkSession).filter(
+                WorkSession.stage_id == stage_id,
+                WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+            ).first()
+            if open_session:
+                if open_session.status == SessionStatus.paused and open_session.paused_at:
+                    open_session.total_paused_minutes = (open_session.total_paused_minutes or 0.0) + \
+                        (now - open_session.paused_at).total_seconds() / 60.0
+                duration = _net_minutes(open_session, now)
+                open_session.ended_at         = now
+                open_session.duration_minutes = duration
+                open_session.status           = SessionStatus.completed
+                if duration > 0:
+                    work_date = now.replace(tzinfo=timezone.utc).astimezone(EASTERN).date()
+                    dept      = BillingDept(open_session.billing_dept)
+                    entry = LaborEntry(
+                        order_id     = open_session.order_id,
+                        stage_id     = open_session.stage_id,
+                        employee_id  = open_session.employee_id,
+                        billing_dept = dept,
+                        hours        = round(duration / 60.0, 4),
+                        billing_rate = open_session.billing_rate,
+                        billed_value = 0.0,  # delivery is non-billable
+                        work_date    = work_date,
+                        notes        = open_session.notes,
+                        is_rework    = 0,
+                    )
+                    db.add(entry)
+                    db.flush()
+                    open_session.labor_entry_id = entry.id
 
     db.commit()
     return RedirectResponse(redirect_to, status_code=302)
@@ -637,7 +684,7 @@ async def delivery_complete(
     order_complete: bool = Form(False),
     balance_to_follow: bool = Form(False),
     packed_by: Optional[str] = Form(None),
-    checked_by: Optional[str] = Form(None),
+    checker_id: Optional[int] = Form(None),
     notes: Optional[str] = Form(None),
     session_notes: Optional[str] = Form(None),
     user: User = Depends(require_user),
@@ -656,42 +703,16 @@ async def delivery_complete(
 
     now = datetime.utcnow()
 
-    # Stop active session
+    # Do NOT stop the session here — the timer keeps running until delivery is confirmed.
+    # That way we track total time from packing start to confirmed delivery.
+    # Store notes on the session for now if provided.
     active_session = db.query(WorkSession).filter(
         WorkSession.stage_id == stage_id,
         WorkSession.employee_id == user.id,
         WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
     ).first()
-
-    if active_session:
-        if active_session.status == SessionStatus.paused and active_session.paused_at:
-            paused_minutes = (now - active_session.paused_at).total_seconds() / 60.0
-            active_session.total_paused_minutes = (active_session.total_paused_minutes or 0.0) + paused_minutes
-        duration = _net_minutes(active_session, now)
-        active_session.ended_at         = now
-        active_session.duration_minutes = duration
-        active_session.status           = SessionStatus.completed
-        if session_notes:
-            active_session.notes = session_notes.strip() or None
-        if duration > 0:
-            hours     = duration / 60.0
-            work_date = now.replace(tzinfo=timezone.utc).astimezone(EASTERN).date()
-            dept      = BillingDept(active_session.billing_dept)
-            entry = LaborEntry(
-                order_id     = active_session.order_id,
-                stage_id     = active_session.stage_id,
-                employee_id  = active_session.employee_id,
-                billing_dept = dept,
-                hours        = round(hours, 4),
-                billing_rate = active_session.billing_rate,
-                billed_value = round(hours * active_session.billing_rate, 2),
-                work_date    = work_date,
-                notes        = active_session.notes,
-                is_rework    = 0,
-            )
-            db.add(entry)
-            db.flush()
-            active_session.labor_entry_id = entry.id
+    if active_session and session_notes:
+        active_session.notes = session_notes.strip() or None
 
     # Auto-calculate weight from inventory line items if not provided
     order = db.query(Order).options(joinedload(Order.line_items)).filter(Order.id == stage.order_id).first()
@@ -713,9 +734,29 @@ async def delivery_complete(
         shipped_date = now.replace(tzinfo=timezone.utc).astimezone(EASTERN).date()
 
     # Create or update packing list
+    from datetime import date as _d
     pl = db.query(PackingList).filter(PackingList.order_id == stage.order_id).first()
     if not pl:
-        pl = PackingList(order_id=stage.order_id, created_by_id=user.id)
+        # Generate sequential PL number: VBS-PL-YY-XXXXX
+        yy      = str(_d.today().year)[2:]
+        pattern = f"VBS-PL-{yy}-"
+        last    = db.query(PackingList.pl_number).filter(
+            PackingList.pl_number.like(f"{pattern}%")
+        ).order_by(PackingList.pl_number.desc()).first()
+        next_n  = (int(last[0].split("-")[-1]) + 1) if (last and last[0]) else 1
+        # Pre-populate shipped_via from order's preferred delivery method
+        _order = db.query(Order).filter(Order.id == stage.order_id).first()
+        _pre_shipped_via = None
+        if _order and _order.preferred_delivery_method == "customer_pickup":
+            _pre_shipped_via = ShippedVia.customer_pickup
+        elif _order and _order.preferred_delivery_method == "delivery":
+            _pre_shipped_via = ShippedVia.vbs_delivery
+        pl = PackingList(
+            order_id      = stage.order_id,
+            created_by_id = user.id,
+            pl_number     = f"{pattern}{next_n:05d}",
+            shipped_via   = _pre_shipped_via,
+        )
         db.add(pl)
 
     pl.shipped_via       = ShippedVia(shipped_via)
@@ -730,5 +771,149 @@ async def delivery_complete(
     pl.order_complete    = order_complete
     pl.balance_to_follow = balance_to_follow
     pl.packed_by         = packed_by.strip() if packed_by else None
-    pl.checked_by        = checked_by.strip() if checked_by else None
-    pl.notes             = notes.st
+    # Resolve checker by ID so the name is authoritative and we can enforce confirmation
+    checker_user = db.query(User).filter(User.id == checker_id).first() if checker_id else None
+    pl.checker_id        = checker_id if checker_user else None
+    pl.checked_by        = f"{checker_user.first_name} {checker_user.last_name or ''}".strip() if checker_user else None
+    pl.check_confirmed   = False   # checker must confirm in their own queue
+    pl.notes             = notes.strip() if notes else None
+
+    # Leave delivery stage in_progress — it completes only when delivery is confirmed.
+    # "Mark as Delivered" on the packing list view (or "✓ Done" in the queue) finalises it.
+
+    db.commit()
+    return RedirectResponse(f"/orders/{stage.order_id}/packing-list", status_code=302)
+
+
+# ── Employee Queue ───────────────────────────────────────────────────────
+@router.get("/queue", response_class=HTMLResponse)
+async def employee_queue(
+    request: Request,
+    emp_id: Optional[int] = None,   # management can view any employee's queue
+    stat_period: str = "day",        # day | week | month
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    auto_close_stale_sessions(db)
+    can_manage = user.role in MANAGEMENT_ROLES
+    today_date = _date.today()
+
+    # Determine whose queue to show
+    if can_manage and emp_id:
+        view_employee = db.query(User).filter(User.id == emp_id).first()
+        if not view_employee:
+            raise HTTPException(404, "Employee not found")
+    else:
+        view_employee = user
+
+    # Active session for this employee
+    from app.models.order import OrderLineItem
+    from app.models.inventory import InventoryItem
+    my_session = db.query(WorkSession).filter(
+        WorkSession.employee_id == view_employee.id,
+        WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+    ).options(
+        joinedload(WorkSession.stage),
+        joinedload(WorkSession.order).joinedload(Order.customer),
+        joinedload(WorkSession.order).joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
+        joinedload(WorkSession.order).joinedload(Order.packing_list),
+        joinedload(WorkSession.order).joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
+    ).first()
+
+    # All active orders assigned to this employee at any stage
+    from app.models.order import OrderLineItem
+    my_stages = db.query(ProductionStage).options(
+        joinedload(ProductionStage.order).joinedload(Order.customer),
+        joinedload(ProductionStage.order).joinedload(Order.line_items),
+        joinedload(ProductionStage.order).joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
+    ).filter(
+        ProductionStage.assigned_to_id == view_employee.id,
+        ProductionStage.status.notin_([StageStatus.complete]),
+    ).all()
+
+    # Build job cards, sorted by priority
+    jobs_by_order = {}
+    for stage in my_stages:
+        o = stage.order
+        if o.status in [OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled]:
+            continue
+        if o.id not in jobs_by_order:
+            jobs_by_order[o.id] = {"order": o, "stages": []}
+        jobs_by_order[o.id]["stages"].append(stage)
+
+    job_list = list(jobs_by_order.values())
+
+    def _sort_key(job):
+        o = job["order"]
+        is_overdue = o.promised_date and o.promised_date < today_date
+        days_overdue = (today_date - o.promised_date).days if is_overdue else 0
+        priority_rank = _PRIORITY_RANK.get(o.priority, 2)
+        due = o.promised_date or _date(9999, 12, 31)
+        return (0 if is_overdue else 1, -days_overdue, priority_rank, due)
+
+    job_list.sort(key=_sort_key)
+
+    # Build billing options for clock-in form
+    billing_options = [
+        (BillingDept.general_labor,       "General Labor ($80/hr)"),
+        (BillingDept.steel_fabrication,   "Steel Fabrication ($100/hr)"),
+        (BillingDept.aluminum_structural, "Aluminum Structural ($120/hr)"),
+    ]
+
+    # Management: also load all employee queues summary
+    all_employees_summary = []
+    if can_manage:
+        active_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
+        for emp in active_employees:
+            emp_session = db.query(WorkSession).filter(
+                WorkSession.employee_id == emp.id,
+                WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+            ).first()
+            emp_stage_count = db.query(ProductionStage).filter(
+                ProductionStage.assigned_to_id == emp.id,
+                ProductionStage.status.notin_([StageStatus.complete]),
+            ).count()
+            all_employees_summary.append({
+                "employee":    emp,
+                "session":     emp_session,
+                "stage_count": emp_stage_count,
+            })
+
+    now_utc = datetime.utcnow()
+
+    # ── My Stats ─────────────────────────────────────────────────────────
+    stat_period = stat_period if stat_period in ("day", "week", "month") else "day"
+    today = today_date
+    if stat_period == "day":
+        period_start = today
+    elif stat_period == "week":
+        period_start = today - timedelta(days=today.weekday())  # Monday
+    else:  # month
+        period_start = today.replace(day=1)
+
+    completed_sessions = db.query(WorkSession).filter(
+        WorkSession.employee_id == view_employee.id,
+        WorkSession.status == SessionStatus.completed,
+    ).join(WorkSession.labor_entry).filter(
+        LaborEntry.work_date >= period_start,
+    ).options(joinedload(WorkSession.labor_entry)).all()
+
+    stat_hours  = round(sum((s.labor_entry.hours or 0) for s in completed_sessions if s.labor_entry), 1)
+    stat_orders = len(set(s.order_id for s in completed_sessions))
+
+    default_billing = _get_employee_billing_default(view_employee, my_stages[0]) if my_stages else None
+
+    # All active employees — for Checked By dropdown on delivery form
+    all_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
+
+    # Packing lists awaiting confirmation by this employee (checker role)
+    from app.models.packing_list import PackingList
+    pending_checks = db.query(PackingList).options(
+        joinedload(PackingList.order).joinedload(Order.customer),
+        joinedload(PackingList.created_by),
+    ).filter(
+        PackingList.checker_id == view_employee.id,
+        PackingList.check_confirmed == False,
+    ).all()
+
+    return templates.TemplateResponse("product

@@ -85,4 +85,52 @@
             {% for n in range(1, 21) %}
             <option value="Row {{ n }}" {% if loc_parts|length > 2 and loc_parts[2] == 'Row ' ~ n %}selected{% endif %}>Row {{ n }}</option>
             {% endfor %}
-            <option value="Row TBD" {% if loc_parts|length > 2 an
+            <option value="Row TBD" {% if loc_parts|length > 2 and loc_parts[2] == 'Row TBD' %}selected{% endif %}>Row TBD</option>
+          </select>
+        </div>
+        <p id="location-preview" class="text-xs text-gray-400 mt-1">{% if item.location %}📍 {{ item.location }}{% endif %}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl shadow p-6">
+    <h2 class="font-semibold text-steel-dark mb-4">Supplier</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Supplier Name</label>
+        <input type="text" name="supplier_name" value="{{ item.supplier_name or '' }}"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Supplier Contact</label>
+        <input type="text" name="supplier_contact" value="{{ item.supplier_contact or '' }}"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+        <textarea name="notes" rows="2"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">{{ item.notes or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-3">
+    <button type="submit" class="bg-steel-dark text-white px-6 py-2 rounded-lg hover:bg-steel-mid transition text-sm font-medium">
+      Save Changes
+    </button>
+    <a href="/inventory/{{ item.id }}" class="px-6 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</a>
+  </div>
+</form>
+
+<script>
+function buildLocation() {
+  const area = document.getElementById('loc-area').value;
+  const rack = document.getElementById('loc-rack').value;
+  const row  = document.getElementById('loc-row').value;
+  const parts = [area, rack, row].filter(Boolean);
+  const val = parts.join(' / ');
+  document.getElementById('location-value').value = val;
+  document.getElementById('location-preview').textContent = val ? '📍 ' + val : '';
+}
+</script>
+{% endblock %}

@@ -9,6 +9,7 @@ class JobType(str, enum.Enum):
     fabrication = "fabrication"
     structural  = "structural"
     beam        = "beam"        # residential beam jobs — labor rolled into $/lb price
+    retail      = "retail"      # counter/material sale — line items auto-priced at cost × retail_markup
 
 class OrderStatus(str, enum.Enum):
     draft         = "draft"
@@ -41,8 +42,9 @@ class Order(Base):
     drawings_required   = Column(Boolean, default=False)
     drawing_file        = Column(String, nullable=True)   # stored filename under app/static/drawings/
     customer_po         = Column(String, nullable=True)   # customer's PO number
-    paint_spec          = Column(String, nullable=True)
-    promised_date       = Column(Date, nullable=True)
+    paint_spec                  = Column(String, nullable=True)
+    preferred_delivery_method   = Column(String, nullable=True)  # customer_pickup | delivery | None
+    promised_date               = Column(Date, nullable=True)
     ship_date           = Column(Date, nullable=True)
     hold_reason         = Column(Text, nullable=True)
     hold_owner          = Column(String, nullable=True)
@@ -79,4 +81,11 @@ class OrderLineItem(Base):
     material              = Column(String, nullable=True)
     paint_override        = Column(String, nullable=True)
     unit_price            = Column(Float, nullable=True)
-    notes                 = Column(T
+    notes                 = Column(Text, nullable=True)
+    internal_notes        = Column(Text, nullable=True)    # shop/production notes — never shown to customer
+    inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
+    estimated_labor_hours = Column(Float, nullable=True)
+    estimated_labor_dept  = Column(String, nullable=True)
+    is_delivery_surcharge = Column(Boolean, default=False)
+
+    order           

@@ -64,16 +64,28 @@
                      {% if quote.drawings_required %}checked{% endif %}/>
               Drawings Required
             </label>
-            <div id="drawing-upload-wrap" class="{% if not quote.drawings_required %}hidden {% endif %}flex items-center gap-2 flex-wrap">
-              {% if quote.drawing_file %}
+            <div id="drawing-upload-wrap" class="{% if not quote.drawings_required %}hidden {% endif %}flex flex-col gap-2 flex-wrap">
+              {% if quote_files %}
+              <div class="flex flex-wrap gap-2">
+                {% for f in quote_files %}
+                <a href="/static/drawings/{{ f.rel_path }}" target="_blank"
+                   class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline max-w-[160px]">
+                  {% if f.ext in ['jpg','jpeg','png','tiff'] %}🖼
+                  {% elif f.ext in ['xlsx','docx'] %}📋
+                  {% else %}📄{% endif %}
+                  <span class="truncate">{{ f.display_name }}</span>
+                </a>
+                {% endfor %}
+              </div>
+              <span class="text-xs text-gray-400">Add more files:</span>
+              {% elif quote.drawing_file %}
               <a href="/static/drawings/{{ quote.drawing_file }}" target="_blank"
                  class="text-xs text-blue-600 hover:underline flex items-center gap-1">📄 Current drawing</a>
-              <span class="text-gray-300 text-xs">·</span>
-              <span class="text-xs text-gray-400">Replace:</span>
+              <span class="text-xs text-gray-400">Add / replace:</span>
               {% else %}
-              <span class="text-xs text-gray-400">📎 Attach drawing:</span>
+              <span class="text-xs text-gray-400">📎 Attach files:</span>
               {% endif %}
-              <input type="file" name="drawing_file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf"
+              <input type="file" name="files" multiple accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.tiff,.xlsx,.docx"
                 class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border file:border-gray-300 file:text-xs file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer"/>
             </div>
           </div>
@@ -109,23 +121,245 @@
     {% set delivery_line = namespace(amount=0) %}
     {% for li in quote.line_items %}{% if li.is_delivery_surcharge %}{% set delivery_line.amount = li.unit_price or 0 %}{% endif %}{% endfor %}
     <div class="bg-white rounded-xl shadow p-5 mb-4">
-      <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Delivery</h2>
-      <div class="flex items-center gap-4">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" id="surcharge-toggle" onchange="toggleSurcharge(this)"
-            class="rounded border-gray-300 text-steel-mid w-4 h-4"
-            {% if delivery_line.amount > 0 %}checked{% endif %}/>
-          <span class="text-sm text-gray-700">Add delivery charge</span>
+      <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Delivery Method</h2>
+      <div class="flex flex-wrap gap-3">
+        <label class="delivery-opt flex items-center gap-2 cursor-pointer border border-gray-200 rounded-lg px-4 py-2.5 text-sm hover:bg-gray-50">
+          <input type="radio" name="preferred_delivery_method" value=""
+            {% if not quote.preferred_delivery_method %}checked{% endif %}
+            onchange="onDeliveryChange(this.value)" class="text-steel-mid"/>
+          <span>TBD</span>
         </label>
-        <div id="surcharge-amount-wrap" class="{% if delivery_line.amount == 0 %}hidden {% endif %}flex items-center gap-2">
-          <span class="text-sm text-gray-500">$</span>
-          <input type="number" name="delivery_surcharge" id="surcharge-amount"
-            min="0" step="0.01" placeholder="75.00"
-            value="{{ '%.2f'|format(delivery_line.amount) if delivery_line.amount > 0 else '' }}"
-            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-steel-mid"/>
-        </div>
+        <label class="delivery-opt flex items-center gap-2 cursor-pointer border border-gray-200 rounded-lg px-4 py-2.5 text-sm hover:bg-gray-50">
+          <input type="radio" name="preferred_delivery_method" value="customer_pickup"
+            {% if quote.preferred_delivery_method == 'customer_pickup' %}checked{% endif %}
+            onchange="onDeliveryChange(this.value)" class="text-steel-mid"/>
+          <span>🏭 Customer Pickup</span>
+        </label>
+        <label class="delivery-opt flex items-center gap-2 cursor-pointer border border-gray-200 rounded-lg px-4 py-2.5 text-sm hover:bg-gray-50">
+          <input type="radio" name="preferred_delivery_method" value="delivery"
+            {% if quote.preferred_delivery_method == 'delivery' %}checked{% endif %}
+            onchange="onDeliveryChange(this.value)" class="text-steel-mid"/>
+          <span>🚚 Delivery</span>
+        </label>
+      </div>
+      <div id="surcharge-amount-wrap" class="{% if delivery_line.amount == 0 and quote.preferred_delivery_method != 'delivery' %}hidden {% endif %}mt-3 flex items-center gap-2">
+        <span class="text-sm text-gray-500">Delivery charge: $</span>
+        <input type="number" name="delivery_surcharge" id="surcharge-amount"
+          min="0" step="0.01" placeholder="75.00"
+          value="{{ '%.2f'|format(delivery_line.amount) if delivery_line.amount > 0 else '' }}"
+          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-steel-mid"/>
       </div>
     </div>
 
     <div class="flex justify-end gap-3">
-  
+      <a href="/quotes/{{ quote.id }}" class="px-5 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Cancel</a>
+      <button type="submit" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-6 py-2 rounded-lg transition">Save Changes</button>
+    </div>
+  </form>
+</div>
+
+<script>
+function onDeliveryChange(val) {
+  const wrap = document.getElementById('surcharge-amount-wrap');
+  wrap.classList.toggle('hidden', val !== 'delivery');
+  if (val !== 'delivery') document.getElementById('surcharge-amount').value = '';
+  if (val === 'delivery') {
+    const inp = document.getElementById('surcharge-amount');
+    if (!inp.value) inp.value = '75.00';
+    inp.focus();
+  }
+}
+
+function toggleDrawingUpload(checked) {
+  document.getElementById('drawing-upload-wrap').classList.toggle('hidden', !checked);
+}
+
+let lineCount = 0;
+const paintOptions = {{ paint_options | tojson }};
+const existingLines = [
+  {% for li in quote.line_items | sort(attribute='line_number') %}
+  {% if not li.is_delivery_surcharge %}
+  { description: {{ li.description | tojson }}, quantity: {{ li.quantity }}, unit_price: {{ li.unit_price or 0 }}, paint: {{ (li.paint_override or 'Same as Job') | tojson }}, notes: {{ (li.notes or '') | tojson }}, internal_notes: {{ (li.internal_notes or '') | tojson }}, labor_hours: {{ li.estimated_labor_hours or 0 }}, labor_dept: {{ (li.estimated_labor_dept or '') | tojson }}, inv_id: {{ li.inventory_item_id or 'null' }}, inv_sku: {{ (li.inventory_item.sku if li.inventory_item else '') | tojson }}, inv_name: {{ (li.inventory_item.name if li.inventory_item else '') | tojson }} },
+  {% endif %}
+  {% endfor %}
+];
+
+const LABOR_RATES = { general_labor: 80, steel_fabrication: 100, aluminum_structural: 120 };
+
+function updateLaborCost(idx) {
+  const hrs  = parseFloat(document.getElementById(`li-labor-${idx}`)?.value || 0);
+  const dept = document.getElementById(`li-labor-dept-${idx}`)?.value;
+  const el   = document.getElementById(`labor-cost-${idx}`);
+  if (!el) return;
+  el.textContent = (hrs > 0 && dept && LABOR_RATES[dept])
+    ? `Est. labor: $${(hrs * LABOR_RATES[dept]).toFixed(0)}`
+    : '';
+}
+
+function clearInv(idx) {
+  document.getElementById(`li-inv-id-${idx}`).value = '';
+  document.getElementById(`inv-search-${idx}`).value = '';
+  document.getElementById(`inv-badge-${idx}`).classList.add('hidden');
+}
+
+function addLine(desc='', qty=1, price='', paint='Same as Job', notes='', internalNotes='', laborHrs=0, laborDept='', invId='', invSku='', invName='') {
+  const idx = lineCount++;
+  const paintOpts = ['Same as Job', ...paintOptions].map(p =>
+    `<option value="${p}" ${p === paint ? 'selected' : ''}>${p}</option>`
+  ).join('');
+  const deptOpts = [
+    ['', '— Dept —'],
+    ['general_labor', 'General Labor ($80/hr)'],
+    ['steel_fabrication', 'Steel Fab ($100/hr)'],
+    ['aluminum_structural', 'Aluminum ($120/hr)'],
+  ].map(([v, l]) => `<option value="${v}" ${v === laborDept ? 'selected' : ''}>${l}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'line-item bg-gray-50 rounded-lg p-3 space-y-2';
+  row.innerHTML = `
+    <!-- Inventory search -->
+    <div class="relative">
+      <label class="block text-xs text-gray-500 mb-1">Search Inventory <span class="text-gray-400">(optional)</span></label>
+      <input type="text" id="inv-search-${idx}" name="q" placeholder="Type to search inventory…" autocomplete="off"
+        hx-get="/inventory/search" hx-trigger="keyup changed delay:250ms" hx-target="#inv-results-${idx}"
+        hx-include="this"
+        class="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
+      <input type="hidden" name="li_inv_id_${idx}" id="li-inv-id-${idx}" value="${invId}"/>
+      <div id="inv-results-${idx}" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 divide-y divide-gray-100 hidden max-h-48 overflow-y-auto"></div>
+      <span id="inv-badge-${idx}" class="${invId ? '' : 'hidden'} mt-1 inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5">
+        <span id="inv-badge-text-${idx}">${invSku ? invSku + ' · ' : ''}${invName}</span>
+        <button type="button" onclick="clearInv(${idx})" class="text-blue-400 hover:text-blue-600 ml-1">×</button>
+      </span>
+    </div>
+    <!-- Line fields -->
+    <div class="grid grid-cols-12 gap-2 items-start">
+      <div class="col-span-3">
+        <label class="block text-xs text-gray-500 mb-1">Description *</label>
+        <input type="text" name="li_desc_${idx}" id="li-desc-${idx}" value="${desc}" required placeholder="Item description…"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+      </div>
+      <div class="col-span-1">
+        <label class="block text-xs text-gray-500 mb-1">Qty</label>
+        <input type="number" name="li_qty_${idx}" min="1" value="${qty}" required
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+      </div>
+      <div class="col-span-1">
+        <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
+        <input type="number" name="li_price_${idx}" id="li-price-${idx}" step="1" min="0" value="${price}" placeholder="0.00"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs text-gray-500 mb-1">Paint</label>
+        <select name="li_paint_${idx}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+          ${paintOpts}
+        </select>
+      </div>
+      <div class="col-span-1">
+        <label class="block text-xs text-gray-500 mb-1">Labor hrs <span class="text-red-400">*</span></label>
+        <input type="number" name="li_labor_${idx}" id="li-labor-${idx}" step="0.25" min="0.25" value="${laborHrs || ''}" placeholder="0"
+          oninput="updateLaborCost(${idx})"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+      </div>
+      <div class="col-span-3">
+        <label class="block text-xs text-gray-500 mb-1">Labor Dept <span class="text-red-400">*</span></label>
+        <select name="li_labor_dept_${idx}" id="li-labor-dept-${idx}" onchange="updateLaborCost(${idx})"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+          ${deptOpts}
+        </select>
+        <p id="labor-cost-${idx}" class="text-xs font-semibold text-indigo-600 mt-1 h-4">
+          ${(laborHrs && laborDept && LABOR_RATES[laborDept]) ? 'Est. labor: $' + (laborHrs * LABOR_RATES[laborDept]).toFixed(0) : ''}
+        </p>
+      </div>
+      <div class="col-span-1 flex justify-end pt-5">
+        <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
+          class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+      </div>
+    </div>
+    <!-- Internal notes row -->
+    <div class="mt-1">
+      <label class="block text-xs text-amber-700 font-medium mb-1">🔒 Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
+      <textarea name="li_internal_notes_${idx}" rows="1" placeholder="Shop directions, production notes…"
+        class="w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none">${internalNotes}</textarea>
+    </div>`;
+  document.getElementById('lines-container').appendChild(row);
+  updateNoLines();
+  htmx.process(row);
+}
+
+function updateNoLines() {
+  const el = document.getElementById('no-lines');
+  el.classList.toggle('hidden', !!document.querySelectorAll('.line-item').length);
+}
+
+// Global click handler for inventory results
+document.addEventListener('click', function(e) {
+  const item = e.target.closest('[data-inv-id]');
+  if (item) {
+    const resultsDiv = item.closest('[id^="inv-results-"]');
+    if (!resultsDiv) return;
+    const idx = resultsDiv.id.replace('inv-results-', '');
+    document.getElementById(`li-inv-id-${idx}`).value = item.dataset.invId;
+    document.getElementById(`li-desc-${idx}`).value   = item.dataset.invName;
+    if (item.dataset.invPrice) {
+      document.getElementById(`li-price-${idx}`).value = Math.round(parseFloat(item.dataset.invPrice));
+    }
+    document.getElementById(`inv-badge-text-${idx}`).textContent =
+      (item.dataset.invSku ? item.dataset.invSku + ' · ' : '') + item.dataset.invName;
+    document.getElementById(`inv-badge-${idx}`).classList.remove('hidden');
+    document.getElementById(`inv-search-${idx}`).value = '';
+    resultsDiv.innerHTML = '';
+    resultsDiv.classList.add('hidden');
+    return;
+  }
+  document.querySelectorAll('[id^="inv-results-"]').forEach(el => {
+    if (!el.contains(e.target)) el.classList.add('hidden');
+  });
+});
+
+document.addEventListener('htmx:afterSwap', function(e) {
+  if (e.target.id && e.target.id.startsWith('inv-results-')) {
+    if (e.target.innerHTML.trim()) e.target.classList.remove('hidden');
+    else e.target.classList.add('hidden');
+  }
+});
+
+// Pre-populate existing line items
+existingLines.forEach(li => {
+  addLine(li.description || '', li.quantity || 1, li.unit_price || '', li.paint || 'Same as Job', li.notes || '', li.internal_notes || '', li.labor_hours || 0, li.labor_dept || '', li.inv_id || '', li.inv_sku || '', li.inv_name || '');
+});
+
+document.getElementById('quote-form').addEventListener('submit', function(e) {
+  const lines = document.querySelectorAll('.line-item');
+  if (lines.length === 0) {
+    e.preventDefault();
+    alert('Add at least one line item before saving.');
+    return;
+  }
+  const isBeam = document.getElementById('job-type-select')?.value === 'beam';
+  if (!isBeam) {
+    for (let i = 0; i < lines.length; i++) {
+      const hrsInput   = lines[i].querySelector('input[name^="li_labor_"]');
+      const deptSelect = lines[i].querySelector('select[name^="li_labor_dept_"]');
+      const hrs = parseFloat(hrsInput?.value);
+      if (!hrsInput || !(hrs > 0)) {
+        e.preventDefault();
+        hrsInput.classList.add('border-red-500');
+        hrsInput.focus();
+        alert(`Line item ${i + 1}: Labor hours are required.`);
+        return;
+      }
+      if (!deptSelect || !deptSelect.value) {
+        e.preventDefault();
+        deptSelect.classList.add('border-red-500');
+        deptSelect.focus();
+        alert(`Line item ${i + 1}: Labor department is required.`);
+        return;
+      }
+    }
+  }
+});
+
+function onJobTypeChange(val) {
+  document.getElementById('beam-notice').classList.toggle('hidden', val !== 'beam');
+}
+</script>
+{% endblock %}

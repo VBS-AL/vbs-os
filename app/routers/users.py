@@ -175,4 +175,10 @@ async def update_user(
         if len(new_password) < 6:
             return templates.TemplateResponse("users/edit.html", {
                 "request": request, "user": user, "target": target, "roles": UserRole,
-                "error": 
+                "error": "New password must be at least 6 characters.",
+                "can_see_financials": financials_visible(user),
+            }, status_code=422)
+        target.hashed_password = hash_password(new_password)
+
+    db.commit()
+    return RedirectResponse("/users", status_code=302)

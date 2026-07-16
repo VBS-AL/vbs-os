@@ -10,22 +10,58 @@ from typing import Optional
 from datetime import date, timedelta, datetime, timezone
 
 DRAWINGS_DIR = "app/static/drawings"
+ALLOWED_DRAWING_EXT = {".pdf", ".dwg", ".dxf", ".png", ".jpg", ".jpeg", ".tiff", ".xlsx", ".docx"}
 
 
-async def save_drawing(form_data, field_name: str = "drawing_file") -> Optional[str]:
-    """Extract uploaded file from form data, save it, return the stored filename or None.
-    Uses hasattr rather than isinstance — request.form() returns starlette's UploadFile
-    which doesn't satisfy isinstance checks against fastapi's UploadFile subclass."""
-    field = form_data.get(field_name)
-    if hasattr(field, "filename") and field.filename:
-        ext = os.path.splitext(field.filename)[1].lower()
-        fname = f"{uuid.uuid4().hex}{ext}"
-        os.makedirs(DRAWINGS_DIR, exist_ok=True)
-        content = await field.read()
-        with open(os.path.join(DRAWINGS_DIR, fname), "wb") as fh:
+def _quote_dir(quote_number: str) -> str:
+    return os.path.join(DRAWINGS_DIR, quote_number)
+
+
+def list_quote_files(quote_number: str) -> list:
+    """Return list of dicts {filename, display_name, rel_path, ext} for files in the quote directory."""
+    d = _quote_dir(quote_number)
+    if not os.path.isdir(d):
+        return []
+    result = []
+    for fname in sorted(os.listdir(d)):
+        fpath = os.path.join(d, fname)
+        if not os.path.isfile(fpath):
+            continue
+        # Strip leading timestamp prefix: "{digits}_originalname.ext"
+        import re as _re
+        display = _re.sub(r'^\d+_', '', fname)
+        ext = os.path.splitext(fname)[1].lower().lstrip('.')
+        result.append({
+            "filename": fname,
+            "display_name": display,
+            "rel_path": f"{quote_number}/{fname}",
+            "ext": ext,
+        })
+    return result
+
+
+async def save_quote_drawings(form_data, quote_number: str) -> Optional[str]:
+    """Save all uploaded files to the quote's drawing directory.
+    Returns the rel_path of the first saved file (for drawing_file backward compat), or None."""
+    from datetime import datetime as _dt
+    uploads = form_data.getlist("files")
+    dest_dir = _quote_dir(quote_number)
+    os.makedirs(dest_dir, exist_ok=True)
+    first_path = None
+    for upload in uploads:
+        if not hasattr(upload, "filename") or not upload.filename:
+            continue
+        ext = os.path.splitext(upload.filename)[1].lower()
+        if ext not in ALLOWED_DRAWING_EXT:
+            continue
+        timestamp = int(_dt.utcnow().timestamp())
+        unique_filename = f"{timestamp}_{upload.filename}"
+        content = await upload.read()
+        with open(os.path.join(dest_dir, unique_filename), "wb") as fh:
             fh.write(content)
-        return fname
-    return None
+        if first_path is None:
+            first_path = f"{quote_number}/{unique_filename}"
+    return first_path
 
 from app.database import get_db
 from app.auth import require_user, require_management, financials_visible
@@ -148,11 +184,11 @@ async def create_quote(
     notes: str = Form(""),
     delivery_surcharge: str = Form(""),
     customer_po: str = Form(""),
+    preferred_delivery_method: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     form = await request.form()
-    drawing_filename = await save_drawing(form)
     customers = db.query(Customer).filter(Customer.is_active == True).order_by(Customer.name).all()
 
     errors = []
@@ -179,8 +215,9 @@ async def create_quote(
         job_type=job_type,
         priority=priority,
         paint_spec=paint_spec or None,
+        preferred_delivery_method=preferred_delivery_method or None,
         drawings_required=drawings_required,
-        drawing_file=drawing_filename,
+        drawing_file=None,  # set after files are saved below
         customer_po=customer_po.strip() or None,
         description=description.strip() or None,
         notes=notes.strip() or None,
@@ -189,6 +226,11 @@ async def create_quote(
     )
     db.add(quote)
     db.flush()
+
+    # Save uploaded drawing files
+    first_file = await save_quote_drawings(form, quote_num)
+    if first_file:
+        quote.drawing_file = first_file
 
     # Parse line items
     idx = 0
@@ -268,6 +310,7 @@ async def quote_detail(
         "today": date.today(),
         "can_see_financials": financials_visible(user),
         "billing_rates": billing_rates,
+        "quote_files": list_quote_files(quote.quote_number),
     })
 
 # ── Mark Sent ─────────────────────────────────────────────────────────────
@@ -335,8 +378,9 @@ async def accept_quote(
         priority=quote.priority or "standard",
         status=OrderStatus.confirmed,
         paint_spec=quote.paint_spec,
+        preferred_delivery_method=quote.preferred_delivery_method,
         drawings_required=quote.drawings_required,
-        drawing_file=quote.drawing_file,
+        drawing_file=None,  # files transferred as DrawingRecords below
         customer_po=quote.customer_po,
         description=quote.description,
         notes=f"[Converted from {quote.quote_number}]\n{quote.notes or ''}".strip(),
@@ -370,8 +414,71 @@ async def accept_quote(
     for s in stages:
         db.add(ProductionStage(order_id=order.id, stage_type=s))
 
+    # Transfer quote drawing files to the order as DrawingRecord entries
+    from app.models.production import DrawingRecord, DrawingStatus
+    import shutil
+    quote_files = list_quote_files(quote.quote_number)
+    if not quote_files and quote.drawing_file:
+        # Legacy single file — synthesize a file entry
+        quote_files = [{"filename": quote.drawing_file, "rel_path": quote.drawing_file}]
+    if quote_files:
+        order_dir = os.path.join(DRAWINGS_DIR, order_num)
+        os.makedirs(order_dir, exist_ok=True)
+        for f in quote_files:
+            src = os.path.join(DRAWINGS_DIR, f["rel_path"])
+            if not os.path.isfile(src):
+                continue
+            dest = os.path.join(order_dir, f["filename"])
+            shutil.copy2(src, dest)
+            db.add(DrawingRecord(
+                order_id=order.id,
+                drawing_type="drawing",
+                file_reference=f["filename"],
+                display_name=f.get("display_name", f["filename"]),
+                uploaded_by_id=user.id,
+                status=DrawingStatus.pending,
+            ))
+
     db.commit()
     return RedirectResponse(f"/orders/{order.id}", status_code=302)
+
+# ── Upload Files to Existing Quote ────────────────────────────────────────
+@router.post("/{quote_id}/files")
+async def upload_quote_files(
+    quote_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    quote = db.query(Quote).filter(Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(404)
+    if quote.status.value not in ["draft", "sent"]:
+        raise HTTPException(400, "Cannot add files to a finalized quote")
+    form = await request.form()
+    await save_quote_drawings(form, quote.quote_number)
+    return RedirectResponse(f"/quotes/{quote_id}#drawings", status_code=302)
+
+
+# ── Delete a Quote File ────────────────────────────────────────────────────
+@router.post("/{quote_id}/files/delete")
+async def delete_quote_file(
+    quote_id: int,
+    filename: str = Form(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    from app.models.user import UserRole
+    if user.role not in {UserRole.owner, UserRole.ops_manager, UserRole.shop_foreman}:
+        raise HTTPException(403)
+    quote = db.query(Quote).filter(Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(404)
+    file_path = os.path.join(_quote_dir(quote.quote_number), filename)
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+    return RedirectResponse(f"/quotes/{quote_id}#drawings", status_code=302)
+
 
 # ── Decline Quote ─────────────────────────────────────────────────────────
 @router.post("/{quote_id}/decline")
@@ -411,6 +518,7 @@ async def edit_quote_form(
         "customers": customers, "job_types": JobType, "priorities": Priority,
         "paint_options": PAINT_OPTIONS, "today": date.today().isoformat(),
         "can_see_financials": financials_visible(user),
+        "quote_files": list_quote_files(quote.quote_number),
     })
 
 @router.post("/{quote_id}/edit")
@@ -434,9 +542,118 @@ async def edit_quote(
     if quote.status not in [QuoteStatus.draft, QuoteStatus.sent]:
         raise HTTPException(400, "Cannot edit this quote")
     form = await request.form()
-    new_drawing = await save_drawing(form)  # None if no new file uploaded
+    new_drawing = await save_quote_drawings(form, quote.quote_number)  # None if no files uploaded
     # Snapshot current state before overwriting
     snapshot = {
         "revision": quote.revision,
         "customer_id": quote.customer_id,
-        "job_type": quote.job_
+        "job_type": quote.job_type,
+        "priority": quote.priority,
+        "paint_spec": quote.paint_spec,
+        "drawings_required": quote.drawings_required,
+        "description": quote.description,
+        "notes": quote.notes,
+        "total_estimated": quote.total_estimated,
+        "line_items": [
+            {"line_number": li.line_number, "description": li.description,
+             "quantity": li.quantity, "unit_price": li.unit_price, "paint_override": li.paint_override, "notes": li.notes}
+            for li in sorted(quote.line_items, key=lambda x: x.line_number)
+        ],
+    }
+    db.add(QuoteRevision(
+        quote_id=quote.id,
+        revision_number=quote.revision,
+        snapshot=snapshot,
+        edited_by_id=user.id,
+        change_note=None,
+    ))
+    quote.revision = (quote.revision or 1) + 1
+    # Apply edits
+    quote.customer_id = customer_id
+    quote.job_type = job_type
+    quote.priority = priority
+    quote.paint_spec = paint_spec or None
+    quote.drawings_required = drawings_required
+    if new_drawing:
+        quote.drawing_file = new_drawing   # only overwrite if a new file was uploaded
+    quote.customer_po = customer_po.strip() or None
+    quote.description = description.strip() or None
+    quote.notes = notes.strip() or None
+    # Replace line items
+    for li in quote.line_items:
+        db.delete(li)
+    db.flush()
+    idx = 0
+    total = 0.0
+    while f"li_desc_{idx}" in form:
+        desc = form.get(f"li_desc_{idx}", "").strip()
+        if desc:
+            qty = float(form.get(f"li_qty_{idx}", 1) or 1)
+            price = float(form.get(f"li_price_{idx}") or 0)
+            paint_val = form.get(f"li_paint_{idx}", "").strip()
+            inv_id_raw = form.get(f"li_inv_id_{idx}", "").strip()
+            inv_id = int(inv_id_raw) if inv_id_raw else None
+            labor_hrs = float(form.get(f"li_labor_{idx}") or 0)
+            labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
+            db.add(QuoteLineItem(
+                quote_id=quote.id,
+                line_number=idx + 1,
+                description=desc,
+                quantity=qty,
+                unit=form.get(f"li_unit_{idx}", "").strip() or None,
+                material=form.get(f"li_material_{idx}", "").strip() or None,
+                unit_price=price or None,
+                paint_override=None if paint_val in ("", "Same as Job") else paint_val,
+                notes=form.get(f"li_notes_{idx}", "").strip() or None,
+                internal_notes=form.get(f"li_internal_notes_{idx}", "").strip() or None,
+                inventory_item_id=inv_id,
+                estimated_labor_hours=labor_hrs or None,
+                estimated_labor_dept=labor_dept,
+            ))
+            total += qty * price
+            if labor_hrs and labor_dept:
+                try:
+                    rate = BILLING_RATES.get(BillingDept(labor_dept), 0)
+                    total += labor_hrs * rate
+                except Exception:
+                    pass
+        idx += 1
+    # Delivery charge
+    surcharge_raw = form.get("delivery_surcharge", "").strip()
+    surcharge_amount = float(surcharge_raw) if surcharge_raw else None
+    if surcharge_amount and surcharge_amount > 0:
+        db.add(QuoteLineItem(
+            quote_id=quote.id,
+            line_number=idx + 1,
+            description="Delivery",
+            quantity=1,
+            unit_price=surcharge_amount,
+            is_delivery_surcharge=True,
+        ))
+        total += surcharge_amount
+
+    quote.total_estimated = round(total, 2) if total else None
+    db.commit()
+    return RedirectResponse(f"/quotes/{quote_id}", status_code=302)
+
+# ── Customer search (reuse orders endpoint) ───────────────────────────────
+@router.get("/search/customers", response_class=HTMLResponse)
+async def customer_search(
+    _customer_search: str = "",
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    q = _customer_search.strip()
+    if len(q) < 2:
+        return HTMLResponse("")
+    results = db.query(Customer).filter(
+        (Customer.name.ilike(f"%{q}%") | Customer.phone.ilike(f"%{q}%")),
+        Customer.is_active == True,
+    ).limit(8).all()
+    if not results:
+        return HTMLResponse('<div class="px-3 py-2 text-sm text-gray-400">No customers found</div>')
+    html = ""
+    for c in results:
+        company = f'  <span class="text-gray-400 text-xs">{c.company}</span>' if c.company else ""
+        phone = f'  <span class="text-gray-400 text-xs">{c.phone}</span>' if c.phone else ""
+        html += f'<

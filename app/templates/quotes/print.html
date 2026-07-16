@@ -82,3 +82,28 @@
           <td class="text-right pr-4 py-2">${{ '%.2f'|format(unit_price) }}</td>
           <td class="text-right py-2">${{ '%.2f'|format(line_total) }}</td>
         </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="flex justify-end mb-8">
+    <div class="w-64 text-sm space-y-2">
+      {% if ns.delivery > 0 %}
+      <div class="flex justify-between text-gray-600 border-t border-gray-200 pt-2">
+        <span>🚚 Delivery</span><span>${{ '%.2f'|format(ns.delivery) }}</span>
+      </div>
+      {% endif %}
+      <div class="flex justify-between font-bold text-lg border-t-2 border-gray-800 pt-2">
+        <span>Estimated Total</span><span>${{ '%.2f'|format(ns.total) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="border-t border-gray-200 pt-4 text-xs text-gray-400">
+    This quote is valid for 14 days from the date sent. Prices are subject to change after expiry.
+    To accept this quote, please contact us at your earliest convenience.
+  </div>
+</body>
+</html>

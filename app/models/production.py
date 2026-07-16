@@ -74,4 +74,13 @@ class DrawingRecord(Base):
     status         = Column(SAEnum(DrawingStatus), default=DrawingStatus.pending)
     reviewed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewed_at    = Column(DateTime(timezone=True), nullable=True)
-    notes          = Column
+    notes          = Column(Text, nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+
+    display_name   = Column(String, nullable=True)
+    revision       = Column(String, nullable=True)
+    uploaded_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    stage_context  = Column(String, nullable=True)
+
+    order          = relationship("Order", back_populates="drawing_records")
+    uploaded_by    = relationship("User", foreign_keys=[uploaded_by_id])

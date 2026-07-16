@@ -12,6 +12,7 @@
   {% endif %}
 
   <form method="POST" action="/quotes/new" id="quote-form" enctype="multipart/form-data">
+    <!-- Customer & Job Info -->
     <div class="bg-white rounded-xl shadow p-6 mb-4">
       <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide mb-4">Customer & Job Info</h2>
       <div class="grid grid-cols-2 gap-4">
@@ -48,14 +49,28 @@
           </select>
         </div>
 
-        <div>
+        <!-- Paint spec: full dropdown for non-beam -->
+        <div id="paint-select-wrap">
           <label class="block text-sm font-medium text-gray-700 mb-1">Paint Spec (job-level)</label>
-          <select name="paint_spec" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <select name="paint_spec" id="paint-spec-select" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             <option value="" disabled selected>— Select —</option>
             {% for p in paint_options %}
             <option value="{{ p }}">{{ p }}</option>
             {% endfor %}
           </select>
+        </div>
+
+        <!-- Paint spec: beam radio buttons (hidden by default) -->
+        <div id="paint-beam-wrap" class="hidden">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Paint Spec</label>
+          <div class="flex flex-wrap gap-3">
+            {% for p in ['Galvanized', 'Black', 'Grey', 'No Paint'] %}
+            <label class="flex items-center gap-2 cursor-pointer border border-gray-200 rounded-lg px-3 py-2 text-sm hover:bg-gray-50 beam-paint-label">
+              <input type="radio" name="paint_spec" value="{{ p }}" class="text-steel-mid" onchange="highlightPaint()"/>
+              {{ p }}
+            </label>
+            {% endfor %}
+          </div>
         </div>
 
         <div>
@@ -71,8 +86,8 @@
               Drawings Required
             </label>
             <div id="drawing-upload-wrap" class="hidden flex items-center gap-2">
-              <span class="text-xs text-gray-400">📎 Attach drawing:</span>
-              <input type="file" name="drawing_file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf"
+              <span class="text-xs text-gray-400">📎 Attach files:</span>
+              <input type="file" name="files" multiple accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.tiff,.xlsx,.docx"
                 class="text-xs text-gray-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border file:border-gray-300 file:text-xs file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer"/>
             </div>
           </div>
@@ -89,13 +104,34 @@
       </div>
     </div>
 
-    <!-- Beam job notice -->
-    <div id="beam-notice" class="hidden bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 text-sm text-blue-800">
-      <span class="font-semibold">Beam Job:</span> Labor is rolled into the per-pound material price — labor hours are not required on line items.
-    </div>
+    <!-- ══ BEAM JOB: Beams + Columns sections ══════════════════════════════ -->
+    <div id="beam-items-section" class="hidden">
 
-    <!-- Line Items -->
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
+      <!-- BEAMS -->
+      <div class="bg-white rounded-xl shadow p-6 mb-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Beams</h2>
+          <button type="button" onclick="addBeamRow()" class="text-sm text-steel-mid hover:text-steel-dark font-medium">+ Add Beam</button>
+        </div>
+        <div id="beam-rows" class="space-y-3"></div>
+        <p id="no-beams" class="text-sm text-gray-400 text-center py-3">No beams added.</p>
+      </div>
+
+      <!-- COLUMNS -->
+      <div class="bg-white rounded-xl shadow p-6 mb-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Columns</h2>
+          <button type="button" onclick="addColumnRow()" class="text-sm text-steel-mid hover:text-steel-dark font-medium">+ Add Column</button>
+        </div>
+        <div id="column-rows" class="space-y-3"></div>
+        <p id="no-columns" class="text-sm text-gray-400 text-center py-3">No columns added.</p>
+      </div>
+
+    </div>
+    <!-- ══ END BEAM SECTIONS ════════════════════════════════════════════════ -->
+
+    <!-- Generic Line Items (hidden for beam jobs) -->
+    <div id="generic-line-items" class="bg-white rounded-xl shadow p-6 mb-4">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Line Items</h2>
         <button type="button" onclick="addLine()" class="text-sm text-steel-mid hover:text-steel-dark font-medium">+ Add Line</button>
@@ -104,21 +140,28 @@
       <p id="no-lines" class="text-sm text-gray-400 text-center py-4">No line items yet. Click "Add Line".</p>
     </div>
 
-    <!-- Delivery Surcharge -->
-    <div class="bg-white rounded-xl shadow p-5">
-      <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Delivery</h2>
-      <div class="flex items-center gap-4">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" id="surcharge-toggle" onchange="toggleSurcharge(this)"
-            class="rounded border-gray-300 text-steel-mid w-4 h-4"/>
-          <span class="text-sm text-gray-700">Add delivery charge</span>
+    <!-- Delivery -->
+    <div class="bg-white rounded-xl shadow p-5 mb-4">
+      <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Delivery Method</h2>
+      <div class="flex flex-wrap gap-3">
+        <label class="delivery-opt flex items-center gap-2 cursor-pointer border border-gray-200 rounded-lg px-4 py-2.5 text-sm hover:bg-gray-50">
+          <input type="radio" name="preferred_delivery_method" value="" checked onchange="onDeliveryChange(this.value)" class="text-steel-mid"/>
+          <span>TBD</span>
         </label>
-        <div id="surcharge-amount-wrap" class="hidden flex items-center gap-2">
-          <span class="text-sm text-gray-500">$</span>
-          <input type="number" name="delivery_surcharge" id="surcharge-amount"
-            min="0" step="0.01" placeholder="75.00"
-            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-steel-mid"/>
-        </div>
+        <label class="delivery-opt flex items-center gap-2 cursor-pointer border border-gray-200 rounded-lg px-4 py-2.5 text-sm hover:bg-gray-50">
+          <input type="radio" name="preferred_delivery_method" value="customer_pickup" onchange="onDeliveryChange(this.value)" class="text-steel-mid"/>
+          <span>🏭 Customer Pickup</span>
+        </label>
+        <label class="delivery-opt flex items-center gap-2 cursor-pointer border border-gray-200 rounded-lg px-4 py-2.5 text-sm hover:bg-gray-50">
+          <input type="radio" name="preferred_delivery_method" value="delivery" onchange="onDeliveryChange(this.value)" class="text-steel-mid"/>
+          <span>🚚 Delivery</span>
+        </label>
+      </div>
+      <div id="surcharge-amount-wrap" class="hidden mt-3 flex items-center gap-2">
+        <span class="text-sm text-gray-500">Delivery charge: $</span>
+        <input type="number" name="delivery_surcharge" id="surcharge-amount"
+          min="0" step="0.01" placeholder="75.00"
+          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-steel-mid"/>
       </div>
     </div>
 
@@ -130,9 +173,10 @@
 </div>
 
 <script>
-function toggleSurcharge(cb) {
-  document.getElementById('surcharge-amount-wrap').classList.toggle('hidden', !cb.checked);
-  if (cb.checked) {
+function onDeliveryChange(val) {
+  const wrap = document.getElementById('surcharge-amount-wrap');
+  wrap.classList.toggle('hidden', val !== 'delivery');
+  if (val === 'delivery') {
     const inp = document.getElementById('surcharge-amount');
     if (!inp.value) inp.value = '75.00';
     inp.focus();
@@ -143,149 +187,110 @@ function toggleDrawingUpload(checked) {
   document.getElementById('drawing-upload-wrap').classList.toggle('hidden', !checked);
 }
 
-let lineCount = 0;
-const paintOptions = {{ paint_options | tojson }};
+function highlightPaint() {
+  document.querySelectorAll('.beam-paint-label').forEach(l => {
+    l.classList.toggle('bg-steel-light', l.querySelector('input').checked);
+    l.classList.toggle('border-steel-mid', l.querySelector('input').checked);
+    l.classList.toggle('font-medium', l.querySelector('input').checked);
+  });
+}
 
-function addLine() {
-  const idx = lineCount++;
-  const opts = paintOptions.map(p => `<option value="${p}">${p}</option>`).join('');
+// ── Beam rows ────────────────────────────────────────────────────────────────
+let beamCount = 0;
+function addBeamRow() {
+  const bidx = 'b' + beamCount++;
   const row = document.createElement('div');
-  row.className = 'line-item bg-gray-50 rounded-lg p-3 space-y-2';
+  row.className = 'beam-row bg-gray-50 rounded-lg p-3 space-y-2';
   row.innerHTML = `
-    <!-- Inventory search -->
     <div class="relative">
-      <label class="block text-xs text-gray-500 mb-1">Search Inventory <span class="text-gray-400">(optional — type SKU or name)</span></label>
-      <input type="text" id="inv-search-${idx}" name="q" placeholder="Type to search inventory…" autocomplete="off"
-        hx-get="/inventory/search" hx-trigger="keyup changed delay:250ms" hx-target="#inv-results-${idx}"
+      <label class="block text-xs text-gray-500 mb-1">Search Inventory <span class="text-gray-400">(SKU or name)</span></label>
+      <input type="text" id="inv-search-${bidx}" name="q" placeholder="Type to search beams/wide flange…" autocomplete="off"
+        hx-get="/inventory/search" hx-trigger="keyup changed delay:250ms" hx-target="#inv-results-${bidx}"
         hx-include="this"
         class="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
-      <input type="hidden" name="li_inv_id_${idx}" id="li-inv-id-${idx}"/>
-      <div id="inv-results-${idx}" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 divide-y divide-gray-100 hidden max-h-48 overflow-y-auto"></div>
-      <span id="inv-badge-${idx}" class="hidden mt-1 inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5">
-        <span id="inv-badge-text-${idx}"></span>
-        <button type="button" onclick="clearInv(${idx})" class="text-blue-400 hover:text-blue-600 ml-1">×</button>
+      <input type="hidden" class="br-inv-id" id="li-inv-id-${bidx}"/>
+      <div id="inv-results-${bidx}" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 divide-y divide-gray-100 hidden max-h-48 overflow-y-auto"></div>
+      <span id="inv-badge-${bidx}" class="hidden mt-1 inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5">
+        <span id="inv-badge-text-${bidx}"></span>
+        <button type="button" onclick="clearBeamInv('${bidx}')" class="text-blue-400 hover:text-blue-600 ml-1">×</button>
       </span>
     </div>
-    <!-- Line fields -->
-    <div class="grid grid-cols-12 gap-2 items-start">
-      <div class="col-span-3">
-        <label class="block text-xs text-gray-500 mb-1">Description <span class="text-red-400">*</span></label>
-        <input type="text" name="li_desc_${idx}" id="li-desc-${idx}" required placeholder="Item description…"
-          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
-      </div>
-      <div class="col-span-1">
+    <div class="grid gap-2 items-center" style="grid-template-columns: 48px 1fr 70px 70px 100px 32px;">
+      <div>
         <label class="block text-xs text-gray-500 mb-1">Qty</label>
-        <input type="number" name="li_qty_${idx}" min="1" value="1" required
-          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+        <input type="number" class="br-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1"/>
       </div>
-      <div class="col-span-1">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Size (WF ___#)</label>
+        <input type="text" class="br-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="e.g. 8×31"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Ft</label>
+        <input type="number" class="br-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">In</label>
+        <input type="number" class="br-in w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" max="11" placeholder="0"/>
+      </div>
+      <div>
         <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
-        <input type="number" name="li_price_${idx}" id="li-price-${idx}" step="1" min="0" placeholder="0.00"
-          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+        <input type="number" class="br-price w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" min="0" step="0.01" placeholder="0.00"/>
       </div>
-      <div class="col-span-2">
-        <label class="block text-xs text-gray-500 mb-1">Paint Spec</label>
-        <select name="li_paint_${idx}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
-          <option value="Same as Job">Same as Job</option>
-          ${opts}
-        </select>
-      </div>
-      <div class="col-span-1">
-        <label class="block text-xs text-gray-500 mb-1">Labor hrs <span class="text-red-400">*</span></label>
-        <input type="number" name="li_labor_${idx}" id="li-labor-${idx}" step="0.25" min="0.25" placeholder="0"
-          oninput="updateLaborCost(${idx})"
-          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
-      </div>
-      <div class="col-span-3">
-        <label class="block text-xs text-gray-500 mb-1">Labor Dept <span class="text-red-400">*</span></label>
-        <select name="li_labor_dept_${idx}" id="li-labor-dept-${idx}" onchange="updateLaborCost(${idx})"
-          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
-          <option value="">— Select Dept —</option>
-          <option value="general_labor">General Labor ($80/hr)</option>
-          <option value="steel_fabrication">Steel Fab ($100/hr)</option>
-          <option value="aluminum_structural">Aluminum ($120/hr)</option>
-        </select>
-        <p id="labor-cost-${idx}" class="text-xs font-semibold text-indigo-600 mt-1 h-4"></p>
-      </div>
-      <div class="col-span-1 flex justify-end pt-5">
-        <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
+      <div class="flex justify-end pt-4">
+        <button type="button" onclick="this.closest('.beam-row').remove(); syncBeamNoMsg()"
           class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
       </div>
-    </div>
-    <!-- Internal notes row -->
-    <div class="mt-1">
-      <label class="block text-xs text-amber-700 font-medium mb-1">🔒 Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
-      <textarea name="li_internal_notes_${idx}" rows="1" placeholder="Shop directions, production notes…"
-        class="w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"></textarea>
     </div>`;
-
-  document.getElementById('lines-container').appendChild(row);
-  updateNoLines();
+  document.getElementById('beam-rows').appendChild(row);
+  syncBeamNoMsg();
   htmx.process(row);
+  row.querySelector('.br-size').focus();
 }
 
-function updateNoLines() {
-  document.getElementById('no-lines').style.display =
-    document.querySelectorAll('.line-item').length ? 'none' : 'block';
+function clearBeamInv(bidx) {
+  document.getElementById('li-inv-id-' + bidx).value = '';
+  document.getElementById('inv-search-' + bidx).value = '';
+  document.getElementById('inv-badge-' + bidx).classList.add('hidden');
 }
 
-const LABOR_RATES = { general_labor: 80, steel_fabrication: 100, aluminum_structural: 120 };
-
-function updateLaborCost(idx) {
-  const hrs  = parseFloat(document.getElementById(`li-labor-${idx}`)?.value || 0);
-  const dept = document.getElementById(`li-labor-dept-${idx}`)?.value;
-  const el   = document.getElementById(`labor-cost-${idx}`);
-  if (!el) return;
-  el.textContent = (hrs > 0 && dept && LABOR_RATES[dept])
-    ? `Est. labor: $${(hrs * LABOR_RATES[dept]).toFixed(0)}`
-    : '';
+function syncBeamNoMsg() {
+  document.getElementById('no-beams').style.display =
+    document.querySelectorAll('.beam-row').length ? 'none' : 'block';
 }
 
-function clearInv(idx) {
-  document.getElementById(`li-inv-id-${idx}`).value = '';
-  document.getElementById(`inv-search-${idx}`).value = '';
-  document.getElementById(`inv-badge-${idx}`).classList.add('hidden');
-}
-
-// Global click handler for inventory results
-document.addEventListener('click', function(e) {
-  const item = e.target.closest('[data-inv-id]');
-  if (item) {
-    const resultsDiv = item.closest('[id^="inv-results-"]');
-    if (!resultsDiv) return;
-    const idx = resultsDiv.id.replace('inv-results-', '');
-    document.getElementById(`li-inv-id-${idx}`).value = item.dataset.invId;
-    document.getElementById(`li-desc-${idx}`).value   = item.dataset.invName;
-    if (item.dataset.invPrice) {
-      // data-inv-price is already sell price (cost × markup) from the server
-      document.getElementById(`li-price-${idx}`).value = parseFloat(item.dataset.invPrice).toFixed(2);
-    }
-    document.getElementById(`inv-badge-text-${idx}`).textContent =
-      (item.dataset.invSku ? item.dataset.invSku + ' · ' : '') + item.dataset.invName;
-    document.getElementById(`inv-badge-${idx}`).classList.remove('hidden');
-    document.getElementById(`inv-search-${idx}`).value = '';
-    resultsDiv.innerHTML = '';
-    resultsDiv.classList.add('hidden');
-    return;
-  }
-  // Close open dropdowns on outside click
-  document.querySelectorAll('[id^="inv-results-"]').forEach(el => {
-    if (!el.contains(e.target)) el.classList.add('hidden');
-  });
-});
-
-document.addEventListener('htmx:afterSwap', function(e) {
-  if (e.target.id === 'customer-results') e.target.classList.remove('hidden');
-  if (e.target.id && e.target.id.startsWith('inv-results-')) {
-    if (e.target.innerHTML.trim()) e.target.classList.remove('hidden');
-    else e.target.classList.add('hidden');
-  }
-});
-
-document.getElementById('customer-results').addEventListener('click', function(e) {
-  const el = e.target.closest('[data-customer-id]');
-  if (!el) return;
-  document.getElementById('customer-id').value = el.dataset.customerId;
-  document.getElementById('customer-search').value = el.dataset.customerName;
-  const sel = document.getElementById('customer-selected');
-  sel
+// ── Column rows ───────────────────────────────────────────────────────────────
+let colCount = 0;
+function addColumnRow() {
+  const cidx = 'c' + colCount++;
+  const row = document.createElement('div');
+  row.className = 'col-row bg-gray-50 rounded-lg p-3 space-y-2';
+  row.innerHTML = `
+    <div class="relative">
+      <label class="block text-xs text-gray-500 mb-1">Search Inventory <span class="text-gray-400">(SKU or name)</span></label>
+      <input type="text" id="inv-search-${cidx}" name="q" placeholder="Type to search columns…" autocomplete="off"
+        hx-get="/inventory/search" hx-trigger="keyup changed delay:250ms" hx-target="#inv-results-${cidx}"
+        hx-include="this"
+        class="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
+      <input type="hidden" class="cr-inv-id" id="li-inv-id-${cidx}"/>
+      <div id="inv-results-${cidx}" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 divide-y divide-gray-100 hidden max-h-48 overflow-y-auto"></div>
+      <span id="inv-badge-${cidx}" class="hidden mt-1 inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5">
+        <span id="inv-badge-text-${cidx}"></span>
+        <button type="button" onclick="clearColInv('${cidx}')" class="text-blue-400 hover:text-blue-600 ml-1">×</button>
+      </span>
+    </div>
+    <div class="grid gap-2 items-center" style="grid-template-columns: 48px 1fr 70px 70px 80px 100px 32px;">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Qty</label>
+        <input type="number" class="cr-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Size / Diameter</label>
+        <input type="text" class="cr-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder='e.g. 4" Round'/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Ft</label>
+        <input type="number" class="cr-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">In</label>
+        <in

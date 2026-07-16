@@ -18,6 +18,8 @@ from app.routers import inventory as inventory_router
 from app.routers import reports as reports_router
 from app.routers import production as production_router
 from app.routers import packing as packing_router
+from app.routers import drawings as drawings_router
+from app.routers import fulfillment as fulfillment_router
 
 # ── Number sequencing helpers ─────────────────────────────────────────────
 import re
@@ -74,6 +76,8 @@ app.include_router(inventory_router.router)
 app.include_router(reports_router.router)
 app.include_router(production_router.router)
 app.include_router(packing_router.router)
+app.include_router(drawings_router.router)
+app.include_router(fulfillment_router.router)
 
 # ── Root redirect ─────────────────────────────────────────────────────────
 @app.get("/")
@@ -96,6 +100,8 @@ async def dashboard(
     from datetime import date, timedelta
     from sqlalchemy import func
     from app.models.order import Order, OrderStatus
+    from app.models.packing_list import PackingList as PL_model
+    from sqlalchemy import not_, exists, or_ as sa_or
     from app.models.invoice import Invoice, Payment, PaymentStatus
     from app.models.quote import Quote, QuoteStatus
 
@@ -142,6 +148,34 @@ async def dashboard(
     ).filter(
         Order.status.notin_([OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled])
     ).order_by(Order.created_at.desc()).all()
+
+    # ── Fulfillment pipeline counts (live) ────────────────────────────────
+    awaiting_pl_count = db.query(Order).filter(
+        Order.status == OrderStatus.ready,
+        ~exists().where(PL_model.order_id == Order.id),
+    ).count()
+
+    awaiting_check_count = db.query(PL_model).join(PL_model.order).filter(
+        Order.status == OrderStatus.ready,
+        PL_model.checker_id != None,
+        PL_model.check_confirmed == False,
+    ).count()
+
+    ready_to_fulfill_count = db.query(PL_model).join(PL_model.order).filter(
+        Order.status == OrderStatus.ready,
+        sa_or(PL_model.checker_id == None, PL_model.check_confirmed == True),
+    ).count()
+
+    fulfilled_today = db.query(PL_model).join(PL_model.order).filter(
+        Order.status.in_([OrderStatus.delivered, OrderStatus.paid]),
+        PL_model.date_shipped == today,
+    ).count()
+
+    pl_awaiting_check_alert = db.query(PL_model).join(PL_model.order).filter(
+        PL_model.checker_id != None,
+        PL_model.check_confirmed == False,
+        Order.status == OrderStatus.ready,
+    ).count()
 
     on_hold_count   = sum(1 for o in active_orders if o.status == OrderStatus.on_hold)
     ready_count     = sum(1 for o in active_orders if o.status == OrderStatus.ready)
@@ -223,4 +257,106 @@ async def dashboard(
 
     # ── Pipeline breakdown (from active_orders, no extra query) ──────────────
     pipeline = {
-        "confirmed":     sum(1 for o in active_orders
+        "confirmed":     sum(1 for o in active_orders if o.status.value == "confirmed"),
+        "in_production": sum(1 for o in active_orders if o.status.value == "in_production"),
+        "qa_review":     sum(1 for o in active_orders if o.status.value == "qa_review"),
+        "ready":         sum(1 for o in active_orders if o.status.value == "ready"),
+    }
+
+    # ── Overdue orders (promised_date past, still active) ─────────────────
+    overdue_orders = [
+        o for o in active_orders
+        if o.promised_date and o.promised_date < today
+    ]
+
+    orders_created = db.query(Order).filter(
+        func.date(Order.created_at) >= start_date,
+        func.date(Order.created_at) <= end_date,
+    ).count()
+
+    jobs_completed = db.query(Order).filter(
+        Order.status.in_([OrderStatus.delivered, OrderStatus.paid]),
+        func.date(Order.created_at) >= start_date,
+        func.date(Order.created_at) <= end_date,
+    ).count()
+
+    quotes_sent = db.query(Quote).filter(
+        Quote.status.notin_([QuoteStatus.draft]),
+        func.date(Quote.created_at) >= start_date,
+        func.date(Quote.created_at) <= end_date,
+    ).count()
+
+    quotes_converted = db.query(Quote).filter(
+        Quote.status == QuoteStatus.converted,
+        func.date(Quote.created_at) >= start_date,
+        func.date(Quote.created_at) <= end_date,
+    ).count()
+
+    # ── Quote pipeline (live — for pipeline section) ───────────────────────
+    from app.models.quote import QuoteLineItem
+    from sqlalchemy.orm import joinedload as jl2
+
+    pipeline_quotes_draft = db.query(Quote).options(
+        jl2(Quote.customer), jl2(Quote.line_items)
+    ).filter(Quote.status == QuoteStatus.draft).order_by(Quote.created_at.desc()).all()
+
+    pipeline_quotes_sent = db.query(Quote).options(
+        jl2(Quote.customer), jl2(Quote.line_items)
+    ).filter(Quote.status == QuoteStatus.sent).order_by(Quote.created_at.desc()).all()
+
+    def _quote_total(q):
+        lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120}
+        total = 0.0
+        for li in q.line_items:
+            total += (li.unit_price or 0) * li.quantity
+            if li.estimated_labor_hours and li.estimated_labor_dept:
+                total += li.estimated_labor_hours * lr.get(li.estimated_labor_dept, 0)
+        return total
+
+    draft_value = sum(_quote_total(q) for q in pipeline_quotes_draft) if can_fin else 0
+    sent_value  = sum(_quote_total(q) for q in pipeline_quotes_sent)  if can_fin else 0
+
+    return templates.TemplateResponse("dashboard/index.html", {
+        "request":          request,
+        "user":             user,
+        "can_see_financials": can_fin,
+        # period
+        "period":           period,
+        "period_label":     period_labels[period],
+        "period_labels":    period_labels,
+        "date_from":        date_from or "",
+        "date_to":          date_to or "",
+        # live
+        "active_orders":    active_orders,
+        "on_hold_count":    on_hold_count,
+        "ready_count":      ready_count,
+        "overdue_count":    overdue_count,
+        # period metrics
+        "revenue_collected":  revenue_collected,
+        "revenue_invoiced":   revenue_invoiced,
+        "outstanding":        outstanding,
+        "orders_created":     orders_created,
+        "jobs_completed":     jobs_completed,
+        "quotes_sent":        quotes_sent,
+        "quotes_converted":   quotes_converted,
+        "pipeline":           pipeline,
+        "overdue_orders":     overdue_orders,
+        "today":              today,
+        "pipeline_quotes_draft": pipeline_quotes_draft,
+        "pipeline_quotes_sent":  pipeline_quotes_sent,
+        "draft_value":           draft_value,
+        "sent_value":            sent_value,
+        "wip_backlog":        wip_backlog,
+        "wip_backlog_mat":    wip_backlog_mat if can_fin else 0,
+        "wip_in_shop":        wip_in_shop,
+        "wip_in_shop_mat":    wip_in_shop_mat if can_fin else 0,
+        "active_total":       active_total,
+        "on_hold_value":      on_hold_value,
+        "ready_value":        ready_value,
+        "overdue_amount":     overdue_amount,
+        "awaiting_pl_count":        awaiting_pl_count,
+        "awaiting_check_count":     awaiting_check_count,
+        "ready_to_fulfill_count":   ready_to_fulfill_count,
+        "fulfilled_today":          fulfilled_today,
+        "pl_awaiting_check_alert":  pl_awaiting_check_alert,
+    })

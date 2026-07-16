@@ -222,4 +222,15 @@ async def invoice_print(
 async def void_invoice(
     invoice_id: int,
     user: User = Depends(require_management),
-    db: Session
+    db: Session = Depends(get_db),
+):
+    inv = db.query(Invoice).options(joinedload(Invoice.order)).filter(Invoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404)
+
+    inv.payment_status = PaymentStatus.void
+    if inv.order:
+        inv.order.status = OrderStatus.delivered  # revert order to delivered
+
+    db.commit()
+    return RedirectResponse(f"/invoices/{invoice_id}", status_code=302)

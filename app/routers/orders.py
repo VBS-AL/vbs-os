@@ -31,7 +31,8 @@ from app.auth import require_user, require_foreman_up, require_management, finan
 from app.models.user import User, UserRole
 from app.models.order import Order, OrderLineItem, OrderStatus, JobType, Priority
 from app.models.customer import Customer
-from app.models.production import ProductionStage, StageType, StageStatus, QARecord, QAResult
+from app.models.inventory import InventoryItem
+from app.models.production import ProductionStage, StageType, StageStatus, QARecord, QAResult, DrawingRecord
 from app.models.labor import LaborEntry, BillingDept, BILLING_RATES
 from app.models.work_session import WorkSession, SessionStatus
 
@@ -132,10 +133,10 @@ async def create_order(
     promised_date: str = Form(""), notes: str = Form(""),
     delivery_surcharge: str = Form(""),
     customer_po: str = Form(""),
+    preferred_delivery_method: str = Form(""),
     user: User = Depends(require_user), db: Session = Depends(get_db),
 ):
     form = await request.form()
-    drawing_filename = await save_drawing(form)
 
     if not promised_date:
         customers = db.query(Customer).filter(Customer.is_active == True).order_by(Customer.name).all()
@@ -152,9 +153,10 @@ async def create_order(
     order = Order(
         order_number=order_num, customer_id=customer_id, job_type=job_type, priority=priority,
         status=OrderStatus.confirmed, description=description or None, drawings_required=drawings_required,
-        drawing_file=drawing_filename,
+        drawing_file=None,
         customer_po=customer_po.strip() or None,
         paint_spec=paint_spec or None,
+        preferred_delivery_method=preferred_delivery_method or None,
         promised_date=date.fromisoformat(promised_date) if promised_date else None,
         notes=notes or None, created_by_id=user.id,
     )
@@ -168,12 +170,19 @@ async def create_order(
             inv_id = int(inv_id_raw) if inv_id_raw else None
             labor_hrs = float(form.get(f"li_labor_{idx}") or 0) or None
             labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
+            # For retail orders, auto-calculate unit price from inventory cost × markup
+            form_price = float(form.get(f"li_price_{idx}") or 0) or None
+            if order.job_type == JobType.retail and inv_id and not form_price:
+                inv_item = db.query(InventoryItem).filter(InventoryItem.id == inv_id).first()
+                if inv_item and inv_item.cost_per_unit:
+                    markup = inv_item.retail_markup if inv_item.retail_markup else 3.0
+                    form_price = round(inv_item.cost_per_unit * markup, 2)
             db.add(OrderLineItem(
                 order_id=order.id, line_number=idx + 1, description=desc,
                 quantity=float(form.get(f"li_qty_{idx}", 1) or 1),
                 unit=form.get(f"li_unit_{idx}", "").strip() or None,
                 material=form.get(f"li_material_{idx}", "").strip() or None,
-                unit_price=float(form.get(f"li_price_{idx}") or 0) or None,
+                unit_price=form_price,
                 paint_override=form.get(f"li_paint_{idx}", "").strip() or None,
                 internal_notes=form.get(f"li_internal_notes_{idx}", "").strip() or None,
                 inventory_item_id=inv_id,
@@ -199,6 +208,34 @@ async def create_order(
         stage_list = [StageType.material_receiving, StageType.fabrication, StageType.qa_qc, StageType.delivery]
     for s in stage_list:
         db.add(ProductionStage(order_id=order.id, stage_type=s))
+
+    # Save any uploaded drawing files as DrawingRecord entries
+    from app.models.production import DrawingStatus
+    uploaded_files = form.getlist("files")
+    if uploaded_files:
+        dest_dir = os.path.join(DRAWINGS_DIR, order_num)
+        os.makedirs(dest_dir, exist_ok=True)
+        allowed_ext = {".pdf", ".dwg", ".dxf", ".png", ".jpg", ".jpeg", ".tiff", ".xlsx", ".docx"}
+        for upload in uploaded_files:
+            if not hasattr(upload, "filename") or not upload.filename:
+                continue
+            ext = os.path.splitext(upload.filename)[1].lower()
+            if ext not in allowed_ext:
+                continue
+            timestamp = int(datetime.utcnow().timestamp())
+            unique_filename = f"{timestamp}_{upload.filename}"
+            content = await upload.read()
+            with open(os.path.join(dest_dir, unique_filename), "wb") as fh:
+                fh.write(content)
+            db.add(DrawingRecord(
+                order_id=order.id,
+                drawing_type="drawing",
+                file_reference=unique_filename,
+                display_name=upload.filename,
+                uploaded_by_id=user.id,
+                status=DrawingStatus.pending,
+            ))
+
     db.commit()
     return RedirectResponse(f"/orders/{order.id}", status_code=302)
 
@@ -210,7 +247,9 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
         joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
         joinedload(Order.production_stages).joinedload(ProductionStage.assigned_to),
         joinedload(Order.labor_entries).joinedload(LaborEntry.employee),
-        joinedload(Order.qa_records), joinedload(Order.drawing_records), joinedload(Order.invoice),
+        joinedload(Order.qa_records),
+        joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
+        joinedload(Order.invoice),
     ).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(404, "Order not found")
@@ -261,6 +300,7 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
         "now_utc": datetime.utcnow(),
         "inv_block": inv_block,
         "inv_shortages": inv_shortages,
+        "status_error": request.query_params.get("status_error", ""),
     })
 
 @router.post("/{order_id}/promised-date")
@@ -304,6 +344,13 @@ async def update_status(
         raise HTTPException(403, "Only management can cancel orders")
     sorted_qa = sorted(order.qa_records, key=lambda q: q.inspected_at)
     has_qa_fail = bool(sorted_qa) and sorted_qa[-1].result == QAResult.fail
+    if target == OrderStatus.in_production and order.job_type != JobType.retail:
+        if not order.production_stages:
+            raise HTTPException(400, "Add production stages before starting production")
+        unassigned = [s for s in order.production_stages if not s.assigned_to_id]
+        if unassigned:
+            names = ", ".join(s.stage_type.value.replace("_", " ").title() for s in unassigned)
+            raise HTTPException(400, f"Assign workers to all stages before starting production: {names}")
     if target == OrderStatus.qa_review and not order.labor_entries:
         raise HTTPException(400, "Cannot send to QA — no labor has been logged for this order")
     if target == OrderStatus.ready and has_qa_fail:
@@ -348,8 +395,150 @@ async def update_status(
                 stage.status = StageStatus.complete
                 stage.completed_at = now
     elif target == OrderStatus.delivered:
+        # Block if someone is actively clocked in on the delivery stage — they must confirm from their queue
+        delivery_stage = next(
+            (s for s in order.production_stages if s.stage_type == StageType.delivery), None
+        )
+        if delivery_stage:
+            active_delivery_session = db.query(WorkSession).options(
+                joinedload(WorkSession.employee)
+            ).filter(
+                WorkSession.stage_id == delivery_stage.id,
+                WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+            ).first()
+            if active_delivery_session and active_delivery_session.employee:
+                emp = active_delivery_session.employee
+                name = f"{emp.first_name} {emp.last_name or ''}".strip()
+                from urllib.parse import quote
+                return RedirectResponse(
+                    f"/orders/{order_id}?status_error={quote(f'{name} is clocked in on Delivery — they need to confirm delivery from their queue.')}",
+                    status_code=302,
+                )
         for stage in order.production_stages:
             if stage.stage_type == StageType.delivery:
                 stage.status = StageStatus.complete
                 stage.completed_at = now
-    # ── Inventory availability check ──────────�
+    # ── Inventory availability check ──────────────────────────────────────
+    from app.models.inventory import InventoryItem as InvItem, InventoryAdjustment, AdjustmentReason
+    if target == OrderStatus.in_production and order.status == OrderStatus.confirmed:
+        shortages = []
+        for li in order.line_items:
+            if li.inventory_item_id:
+                inv = db.query(InvItem).filter(InvItem.id == li.inventory_item_id).first()
+                if inv and (inv.quantity_on_hand or 0) < (li.quantity or 0):
+                    shortages.append(inv.sku or inv.name)
+        if shortages:
+            return RedirectResponse(
+                f"/orders/{order_id}?inv_block=1",
+                status_code=302,
+            )
+
+    # ── Inventory auto-deduct / auto-reverse ──────────────────────────────
+    if target == OrderStatus.in_production and order.status == OrderStatus.confirmed:
+        # Deduct stock for all inventory-linked line items
+        for li in order.line_items:
+            if li.inventory_item_id:
+                inv = db.query(InvItem).filter(InvItem.id == li.inventory_item_id).first()
+                if inv:
+                    inv.quantity_on_hand = (inv.quantity_on_hand or 0) - li.quantity
+                    db.add(InventoryAdjustment(
+                        item_id=inv.id,
+                        delta=-li.quantity,
+                        reason=AdjustmentReason.used,
+                        order_id=order.id,
+                        notes=f"Auto-deducted for order {order.order_number}",
+                        recorded_by_id=user.id,
+                    ))
+    if target == OrderStatus.cancelled:
+        # Reverse any prior deductions tied to this order
+        prior = db.query(InventoryAdjustment).filter(
+            InventoryAdjustment.order_id == order.id,
+            InventoryAdjustment.reason == AdjustmentReason.used,
+            InventoryAdjustment.delta < 0,
+        ).all()
+        for deduction in prior:
+            inv = db.query(InvItem).filter(InvItem.id == deduction.item_id).first()
+            if inv:
+                inv.quantity_on_hand = (inv.quantity_on_hand or 0) + abs(deduction.delta)
+                db.add(InventoryAdjustment(
+                    item_id=inv.id,
+                    delta=abs(deduction.delta),
+                    reason=AdjustmentReason.correction,
+                    order_id=order.id,
+                    notes=f"Auto-reversed: order {order.order_number} cancelled",
+                    recorded_by_id=user.id,
+                ))
+
+    if target == OrderStatus.on_hold:
+        order.previous_status = order.status  # remember where we came from
+        order.hold_reason = hold_reason.strip()
+        order.hold_owner = f"{user.first_name} {user.last_name}"
+    else:
+        if order.status == OrderStatus.on_hold:
+            order.hold_reason = None
+            order.hold_owner = None
+            order.previous_status = None
+    order.status = target
+    if target == OrderStatus.delivered:
+        order.ship_date = date.today()
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}", status_code=302)
+
+@router.post("/{order_id}/labor")
+async def log_labor(
+    order_id: int, billing_dept: str = Form(...), hours: float = Form(...),
+    work_date: str = Form(...), is_rework: int = Form(0), notes: str = Form(""),
+    user: User = Depends(require_user), db: Session = Depends(get_db),
+):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(404)
+    dept = BillingDept(billing_dept)
+    rate = BILLING_RATES[dept]
+    db.add(LaborEntry(
+        order_id=order_id, employee_id=user.id, billing_dept=dept, hours=hours,
+        billing_rate=rate, billed_value=round(hours * rate, 2),
+        work_date=date.fromisoformat(work_date), is_rework=int(is_rework),
+        notes=notes.strip() or None,
+    ))
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}#labor", status_code=302)
+
+@router.post("/{order_id}/qa")
+async def log_qa(
+    order_id: int, result: str = Form(...), failure_reason: str = Form(""),
+    rework_notes: str = Form(""), certified_weld: bool = Form(False), cert_reference: str = Form(""),
+    user: User = Depends(require_user), db: Session = Depends(get_db),
+):
+    order = db.query(Order).options(joinedload(Order.production_stages)).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(404)
+    if order.status != OrderStatus.qa_review:
+        raise HTTPException(400, "QA records can only be logged when the order is in QA / Inspection status")
+    result_enum = QAResult(result)
+    if result_enum == QAResult.fail:
+        if not failure_reason.strip():
+            raise HTTPException(400, "Failure reason is required when result is Fail")
+        if not rework_notes.strip():
+            raise HTTPException(400, "Rework notes are required when result is Fail")
+    elif result_enum == QAResult.conditional:
+        if not failure_reason.strip():
+            raise HTTPException(400, "A condition note is required for Conditional Pass")
+    db.add(QARecord(
+        order_id=order_id, inspector_id=user.id, result=result_enum,
+        failure_reason=failure_reason.strip() or None, rework_notes=rework_notes.strip() or None,
+        certified_weld=certified_weld, cert_reference=cert_reference.strip() or None,
+    ))
+    now_qa = datetime.now(timezone.utc)
+    if result_enum == QAResult.fail:
+        for stage in order.production_stages:
+            if stage.stage_type == StageType.qa_qc:
+                stage.status = StageStatus.blocked
+        order.rework_count = (order.rework_count or 0) + 1
+        db.add(ProductionStage(
+            order_id=order_id, stage_type=StageType.fabrication,
+            notes=f"Rework — Cycle {order.rework_count}",
+        ))
+    elif result_enum in [QAResult.pass_result, QAResult.conditional]:
+        for stage in order.production_stages:
+            if stage.stage_type == StageType.qa_qc and stage.status in [StageStatus.in_progress, StageStatus.blocked, StageStat

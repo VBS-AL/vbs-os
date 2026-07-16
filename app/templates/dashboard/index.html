@@ -48,6 +48,16 @@
   </div>
 </div>
 
+<!-- Packing list check alert -->
+{% if pl_awaiting_check_alert > 0 %}
+<div class="bg-amber-50 border border-amber-200 rounded-xl mb-4 px-5 py-3 flex items-center justify-between">
+  <span class="text-amber-700 font-semibold text-sm">
+    ⏳ {{ pl_awaiting_check_alert }} packing list{{ 's' if pl_awaiting_check_alert != 1 }} awaiting checker confirmation
+  </span>
+  <a href="/fulfillment?status=awaiting_check" class="text-xs text-amber-600 hover:underline font-medium">View →</a>
+</div>
+{% endif %}
+
 <!-- Overdue alert -->
 {% if overdue_orders %}
 <div class="bg-red-50 border border-red-200 rounded-xl mb-6 overflow-hidden">
@@ -233,6 +243,45 @@
       <div class="bg-green-50 rounded-lg px-4 py-4 hover:bg-green-100 transition">
         <p class="text-3xl font-bold text-green-700">{{ pipeline.ready }}</p>
         <p class="text-xs text-green-500 mt-1 font-medium uppercase tracking-wide">Ready to Deliver</p>
+      </div>
+    </a>
+
+    <div class="text-gray-300 text-2xl font-light flex-shrink-0">›</div>
+
+    <a href="/fulfillment" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="rounded-lg px-4 py-4 transition
+        {% if awaiting_pl_count > 0 %}bg-orange-50 hover:bg-orange-100{% else %}bg-gray-50 hover:bg-gray-100{% endif %}">
+        <p class="text-3xl font-bold {% if awaiting_pl_count > 0 %}text-orange-600{% else %}text-gray-400{% endif %}">{{ awaiting_pl_count }}</p>
+        <p class="text-xs mt-1 font-medium uppercase tracking-wide {% if awaiting_pl_count > 0 %}text-orange-500{% else %}text-gray-400{% endif %}">No PL Yet</p>
+      </div>
+    </a>
+
+    <div class="text-gray-300 text-2xl font-light flex-shrink-0">›</div>
+
+    <a href="/fulfillment" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="rounded-lg px-4 py-4 transition
+        {% if awaiting_check_count > 0 %}bg-amber-50 hover:bg-amber-100{% else %}bg-gray-50 hover:bg-gray-100{% endif %}">
+        <p class="text-3xl font-bold {% if awaiting_check_count > 0 %}text-amber-600{% else %}text-gray-400{% endif %}">{{ awaiting_check_count }}</p>
+        <p class="text-xs mt-1 font-medium uppercase tracking-wide {% if awaiting_check_count > 0 %}text-amber-500{% else %}text-gray-400{% endif %}">Awaiting Check</p>
+      </div>
+    </a>
+
+    <div class="text-gray-300 text-2xl font-light flex-shrink-0">›</div>
+
+    <a href="/fulfillment?status=ready" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="rounded-lg px-4 py-4 transition
+        {% if ready_to_fulfill_count > 0 %}bg-blue-50 hover:bg-blue-100{% else %}bg-gray-50 hover:bg-gray-100{% endif %}">
+        <p class="text-3xl font-bold {% if ready_to_fulfill_count > 0 %}text-blue-600{% else %}text-gray-400{% endif %}">{{ ready_to_fulfill_count }}</p>
+        <p class="text-xs mt-1 font-medium uppercase tracking-wide {% if ready_to_fulfill_count > 0 %}text-blue-500{% else %}text-gray-400{% endif %}">Ready to Fulfill</p>
+      </div>
+    </a>
+
+    <div class="text-gray-300 text-2xl font-light flex-shrink-0">›</div>
+
+    <a href="/fulfillment?status=fulfilled" class="flex-1 text-center hover:opacity-80 transition">
+      <div class="bg-emerald-50 rounded-lg px-4 py-4 hover:bg-emerald-100 transition">
+        <p class="text-3xl font-bold text-emerald-600">{{ fulfilled_today }}</p>
+        <p class="text-xs text-emerald-500 mt-1 font-medium uppercase tracking-wide">Fulfilled Today</p>
       </div>
     </a>
 

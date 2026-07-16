@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ order.order_number }} — Van Buren Steel{% endblock %}
+{% block title %}{{ order.order_number }} -- Van Buren Steel{% endblock %}
 {% block content %}
 
 <div class="max-w-5xl mx-auto">
@@ -30,7 +30,7 @@
       </span>
       {% if order.priority.value != 'standard' %}
       <div class="mt-1 text-sm {% if order.priority.value == 'urgent' %}text-red-600 font-bold{% else %}text-yellow-600{% endif %}">
-        {% if order.priority.value == 'urgent' %}⚡ URGENT{% else %}↑ Priority{% endif %}
+        {% if order.priority.value == 'urgent' %}&#x26A1; URGENT{% else %}&#x2191; Priority{% endif %}
       </div>
       {% endif %}
     </div>
@@ -51,7 +51,7 @@
           </div>
           <div class="flex justify-between">
             <span class="text-gray-500">Invoice #</span>
-            <span class="font-mono">{{ order.invoice.invoice_number if order.invoice else '—' }}</span>
+            <span class="font-mono">{{ order.invoice.invoice_number if order.invoice else '&mdash;' }}</span>
           </div>
           {% if order.customer_po %}
           <div class="flex justify-between">
@@ -61,14 +61,14 @@
           {% endif %}
           <div class="flex justify-between">
             <span class="text-gray-500">Description</span>
-            <span class="text-right max-w-xs truncate">{{ order.description or '—' }}</span>
+            <span class="text-right max-w-xs truncate">{{ order.description or '&mdash;' }}</span>
           </div>
           <!-- Promised Date with inline owner-only edit -->
           <div class="flex flex-col">
             <div class="flex justify-between items-center">
               <span class="text-gray-500">Promised</span>
               <div class="flex items-center gap-2">
-                <span>{{ order.promised_date or '—' }}</span>
+                <span>{{ order.promised_date or '&mdash;' }}</span>
                 {% if user.role.value == 'owner' %}
                 <button onclick="document.getElementById('promised-date-form').classList.toggle('hidden')"
                   class="text-xs text-steel-mid hover:underline">
@@ -93,18 +93,25 @@
             {% endif %}
           </div>
           <div class="flex justify-between">
-            <span class="text-gray-500">Drawings</span>
+            <span class="text-gray-500">Drawings Required</span>
             <span class="flex items-center gap-2">
-              {{ 'Yes' if order.drawings_required else 'No' }}
-              {% if order.drawing_file %}
-              <a href="/static/drawings/{{ order.drawing_file }}" target="_blank"
-                 class="text-xs text-blue-600 hover:underline font-medium">📄 Open</a>
+              {% if order.drawings_required %}
+              <span class="inline-block px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200 font-medium">Yes</span>
+              {% else %}
+              <span class="text-gray-400 text-xs">No</span>
+              {% endif %}
+              {% if order.drawing_records %}
+              <span class="inline-block px-1.5 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium">{{ order.drawing_records | length }} file(s)</span>
               {% endif %}
             </span>
           </div>
           <div class="flex justify-between">
             <span class="text-gray-500">Paint Spec</span>
-            <span>{{ order.paint_spec or '—' }}</span>
+            <span>{{ order.paint_spec or '&mdash;' }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Delivery</span>
+            <span>{% if order.preferred_delivery_method == 'customer_pickup' %}🏭 Customer Pickup{% elif order.preferred_delivery_method == 'delivery' %}🚚 Delivery{% else %}&mdash;{% endif %}</span>
           </div>
           <div class="flex justify-between">
             <span class="text-gray-500">Rework Count</span>
@@ -119,6 +126,105 @@
           <span class="font-semibold text-yellow-800">Hold: </span>
           <span class="text-yellow-700">{{ order.hold_reason }}</span>
           {% if order.hold_owner %}<span class="text-yellow-500 ml-1">({{ order.hold_owner }})</span>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Drawings & Files -->
+      <div class="bg-white rounded-xl shadow p-5" id="drawings">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Drawings &amp; Files</h2>
+          <button onclick="toggleDrawingUpload()" class="text-xs text-steel-mid hover:underline">+ Upload</button>
+        </div>
+        <div id="drawing-upload-form" class="hidden bg-steel-light rounded-lg p-4 mb-4">
+          <form method="POST" action="/orders/{{ order.id }}/drawings" enctype="multipart/form-data" class="space-y-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Files <span class="text-red-500">*</span></label>
+              <input type="file" name="files" multiple required accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.tiff,.xlsx,.docx"
+                class="w-full text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-steel-mid file:text-white hover:file:bg-steel-dark"/>
+              <p class="text-xs text-gray-400 mt-1">Allowed: .pdf .dwg .dxf .png .jpg .jpeg .tiff .xlsx .docx</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Display Name (optional)</label>
+                <input type="text" name="display_name" placeholder="e.g. Floor Plan Rev A"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Revision (optional)</label>
+                <input type="text" name="revision" placeholder="e.g. Rev A, Final"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Type</label>
+                <select name="drawing_type" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                  <option value="drawing">Drawing</option>
+                  <option value="qa_photo">QA Photo</option>
+                  <option value="delivery_photo">Delivery Photo</option>
+                  <option value="document">Document</option>
+                </select>
+              </div>
+              <div class="flex items-end">
+                <button type="submit" class="w-full bg-steel-dark text-white text-sm py-1.5 rounded-md hover:bg-steel-mid transition">Upload</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        {% set sorted_records = order.drawing_records | sort(attribute='created_at', reverse=True) %}
+        {% if sorted_records %}
+        <div class="space-y-2">
+          {% for dr in sorted_records %}
+          {% set ext = dr.file_reference.rsplit('.', 1)[-1].lower() if dr.file_reference and '.' in dr.file_reference else '' %}
+          {% if dr.drawing_type in ['qa_photo', 'delivery_photo'] or ext in ['jpg', 'jpeg', 'png', 'tiff'] %}
+            {% set file_icon = 'photo' %}
+          {% elif dr.drawing_type in ['document'] or ext in ['xlsx', 'docx'] %}
+            {% set file_icon = 'doc' %}
+          {% else %}
+            {% set file_icon = 'drawing' %}
+          {% endif %}
+          <div class="flex items-start justify-between gap-3 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+            <div class="flex items-start gap-2 min-w-0">
+              <span class="text-base flex-shrink-0 mt-0.5">
+                {% if file_icon == 'photo' %}🖼{% elif file_icon == 'doc' %}📋{% else %}📄{% endif %}
+              </span>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <a href="/static/drawings/{{ order.order_number }}/{{ dr.file_reference }}" target="_blank"
+                     class="text-sm font-medium text-blue-600 hover:underline truncate">
+                    {{ dr.display_name or dr.file_reference }}
+                  </a>
+                  {% if dr.revision %}
+                  <span class="inline-block px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-500 border border-gray-200 font-mono flex-shrink-0">{{ dr.revision }}</span>
+                  {% endif %}
+                  {% if dr.stage_context %}
+                  <span class="inline-block px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-600 border border-blue-200 flex-shrink-0">{{ dr.stage_context.replace('_',' ').title() }}</span>
+                  {% endif %}
+                </div>
+                <div class="text-xs text-gray-400 mt-0.5">
+                  {% if dr.uploaded_by %}{{ dr.uploaded_by.first_name }} {{ dr.uploaded_by.last_name or '' }} &middot; {% endif %}
+                  {{ dr.created_at.strftime('%b %d, %Y').replace(' 0',' ') if dr.created_at else '' }}
+                </div>
+              </div>
+            </div>
+            {% if user.role.value in ['owner', 'ops_manager', 'shop_foreman'] %}
+            <form method="POST" action="/orders/{{ order.id }}/drawings/{{ dr.id }}/delete"
+                  onsubmit="return confirm('Delete this file?')" class="flex-shrink-0">
+              <button type="submit" class="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition">✕</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">No files uploaded yet.</p>
+        {% endif %}
+        {% if order.drawing_file and not order.drawing_records %}
+        <div class="mt-3 pt-3 border-t border-gray-100">
+          <p class="text-xs text-gray-400 mb-1">Legacy file:</p>
+          <a href="/static/drawings/{{ order.drawing_file }}" target="_blank"
+             class="text-sm text-blue-600 hover:underline">📄 {{ order.drawing_file }}</a>
         </div>
         {% endif %}
       </div>
@@ -167,15 +273,15 @@
                 {% if li.estimated_labor_hours %}
                   {{ li.estimated_labor_hours }}h
                   {% if li.estimated_labor_dept %}
-                    · {% if li.estimated_labor_dept == 'general_labor' %}Gen Labor
+                    &middot; {% if li.estimated_labor_dept == 'general_labor' %}Gen Labor
                     {% elif li.estimated_labor_dept == 'steel_fabrication' %}Steel Fab
                     {% elif li.estimated_labor_dept == 'aluminum_structural' %}Aluminum
                     {% endif %}
                   {% endif %}
-                {% else %}—{% endif %}
+                {% else %}&mdash;{% endif %}
               </td>
               <td class="text-right py-2 text-indigo-600 font-medium">
-                {% if labor_line > 0 %}${{ '%.2f'|format(labor_line) }}{% else %}—{% endif %}
+                {% if labor_line > 0 %}${{ '%.2f'|format(labor_line) }}{% else %}&mdash;{% endif %}
               </td>
               {% endif %}
             </tr>
@@ -183,7 +289,7 @@
             <tr>
               <td colspan="7" class="pb-2 pt-0">
                 <div class="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-800">
-                  <span class="mt-0.5">🔒</span>
+                  <span class="mt-0.5">&#x1F512;</span>
                   <span>{{ li.internal_notes }}</span>
                 </div>
               </td>
@@ -202,9 +308,7 @@
             </tr>
             {% if ns.surcharge > 0 %}
             <tr>
-              <td colspan="5" class="text-right pt-1 text-gray-500">
-                <span class="inline-flex items-center gap-1">🚚 Delivery</span>
-              </td>
+              <td colspan="5" class="text-right pt-1 text-gray-500">Delivery</td>
               <td class="text-right pt-1 font-medium text-gray-700">${{ '%.2f'|format(ns.surcharge) }}</td>
             </tr>
             {% endif %}
@@ -229,7 +333,6 @@
           {% endif %}
         </div>
 
-        <!-- Estimated Labor summary -->
         {% set lr2 = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
         {% set est_hrs = namespace(v=0) %}
         {% set est_cost = namespace(v=0) %}
@@ -275,14 +378,12 @@
         </div>
         {% endif %}
 
-        <!-- Rework banner -->
         {% if has_qa_fail %}
         <div class="mb-3 bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
-          ⚠ Active QA failure — labor logged now will be flagged as <strong>Rework</strong>.
+          &#x26A0; Active QA failure -- labor logged now will be flagged as <strong>Rework</strong>.
         </div>
         {% endif %}
 
-        <!-- Labor entry form (hidden by default) -->
         {% if user.role.value in ['owner','ops_manager','shop_foreman'] and order.status.value in ['in_production','qa_review','ready'] %}
         <div id="labor-form" class="hidden bg-steel-light rounded-lg p-4 mb-4">
           <form method="POST" action="/orders/{{ order.id }}/labor">
@@ -319,7 +420,6 @@
         </div>
         {% endif %}
 
-        <!-- Actual labor entries -->
         <div id="labor-list">
           {% if order.labor_entries %}
           <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 {% if est_hrs.v > 0 %}mt-2{% endif %}">Actual Logged</div>
@@ -348,13 +448,13 @@
                   {% if l.is_rework %}
                   <span class="inline-block px-1.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded mr-1">Rework</span>
                   {% endif %}
-                  {{ l.employee.first_name if l.employee else '—' }} {{ l.employee.last_name if l.employee else '' }}
+                  {{ l.employee.first_name if l.employee else '&mdash;' }} {{ l.employee.last_name if l.employee else '' }}
                 </td>
                 <td class="py-1.5 text-gray-500 text-xs">
                   {% if l.stage %}
                   <span class="text-steel-mid font-medium">{{ stage_label_map.get(l.stage.stage_type.value, l.stage.stage_type.value) }}</span>
-                  <span class="text-gray-400 ml-1">· {{ l.billing_dept.value.replace('_',' ').title() }}</span>
-                  <span class="ml-1 inline-block px-1 py-0.5 rounded bg-green-50 text-green-600 text-xs font-medium">⏱ Timer</span>
+                  <span class="text-gray-400 ml-1">&middot; {{ l.billing_dept.value.replace('_',' ').title() }}</span>
+                  <span class="ml-1 inline-block px-1 py-0.5 rounded bg-green-50 text-green-600 text-xs font-medium">Timer</span>
                   {% else %}
                   {{ l.billing_dept.value.replace('_',' ').title() }}
                   {% endif %}
@@ -396,8 +496,6 @@
           <button onclick="toggleQAForm()" class="text-xs text-steel-mid hover:underline">+ Add QA Record</button>
           {% endif %}
         </div>
-
-        <!-- QA entry form -->
         {% if user.role.value in ['owner','ops_manager','shop_foreman'] and order.status.value == 'qa_review' %}
         <div id="qa-form" class="hidden bg-steel-light rounded-lg p-4 mb-4">
           <form method="POST" action="/orders/{{ order.id }}/qa">
@@ -408,20 +506,20 @@
                   onchange="handleQAResultChange(this.value)"
                   class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
                   <option value="pass">Pass</option>
-                  <option value="fail">Fail — Rework Required</option>
+                  <option value="fail">Fail -- Rework Required</option>
                   <option value="conditional">Conditional Pass</option>
                 </select>
               </div>
               <div>
                 <label class="block text-xs text-gray-500 mb-1" id="failure-reason-label">Failure / Condition Note</label>
                 <input type="text" name="failure_reason" id="failure-reason"
-                  placeholder="Required for Fail or Conditional…"
+                  placeholder="Required for Fail or Conditional..."
                   class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
               </div>
               <div class="col-span-2">
                 <label class="block text-xs text-gray-500 mb-1" id="rework-notes-label">Rework Notes</label>
                 <textarea name="rework_notes" id="rework-notes" rows="2"
-                  placeholder="Required for Fail — what needs to be redone…"
+                  placeholder="Required for Fail -- what needs to be redone..."
                   class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"></textarea>
               </div>
               <div class="col-span-2 flex justify-end">
@@ -434,8 +532,6 @@
           </form>
         </div>
         {% endif %}
-
-        <!-- QA records list -->
         <div id="qa-list">
           {% if order.qa_records %}
           <div class="space-y-2">
@@ -447,15 +543,15 @@
                 {% elif qa.result.value == 'conditional' %}bg-yellow-100 text-yellow-700
                 {% else %}bg-gray-100 text-gray-700{% endif %}">
                 {% if qa.result.value == 'pass' %}Pass
-                {% elif qa.result.value == 'fail' %}Fail — Rework Required
+                {% elif qa.result.value == 'fail' %}Fail -- Rework Required
                 {% elif qa.result.value == 'conditional' %}Conditional Pass
                 {% else %}{{ qa.result.value }}{% endif %}
               </span>
               <div>
-                <span class="font-medium">{{ qa.inspector.first_name if qa.inspector else '—' }}</span>
+                <span class="font-medium">{{ qa.inspector.first_name if qa.inspector else '&mdash;' }}</span>
                 <span class="text-gray-400 ml-2 text-xs">{{ qa.inspected_at.strftime('%b %d, %Y').replace(' 0',' ') if qa.inspected_at else '' }}</span>
                 {% if qa.failure_reason %}<p class="text-gray-600 text-xs mt-0.5">{{ qa.failure_reason }}</p>{% endif %}
-                {% if qa.rework_notes %}<p class="text-gray-400 text-xs">↳ {{ qa.rework_notes }}</p>{% endif %}
+                {% if qa.rework_notes %}<p class="text-gray-400 text-xs">&#x21B3; {{ qa.rework_notes }}</p>{% endif %}
               </div>
             </div>
             {% endfor %}
@@ -466,18 +562,27 @@
         </div>
       </div>
 
+
     </div><!-- /left column -->
 
     <!-- Right column: status + customer + stages -->
     <div class="space-y-4">
+
+      <!-- Status error banner -->
+      {% if status_error %}
+      <div class="bg-red-50 border border-red-300 rounded-xl p-4 flex items-start gap-3">
+        <span class="text-red-500 text-lg leading-none mt-0.5">⚠</span>
+        <p class="text-sm text-red-700">{{ status_error }}</p>
+      </div>
+      {% endif %}
 
       <!-- Status Update -->
       {% if next_statuses %}
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Update Status</h2>
         {% set status_labels = {
-          'confirmed': 'Resume — Back to Confirmed' if order.status.value == 'on_hold' else 'Confirm Order',
-          'in_production': 'Resume Production' if order.status.value == 'on_hold' else ('← Back to Production' if order.status.value == 'qa_review' else 'Start Production'),
+          'confirmed': 'Resume -- Back to Confirmed' if order.status.value == 'on_hold' else 'Confirm Order',
+          'in_production': 'Resume Production' if order.status.value == 'on_hold' else ('Back to Production' if order.status.value == 'qa_review' else 'Start Production'),
           'qa_review': 'Send to QA / Inspection',
           'ready': 'Mark as Ready',
           'delivered': 'Mark as Delivered',
@@ -489,15 +594,14 @@
         {% if inv_block and inv_shortages %}
         <div class="mb-3 bg-red-50 border border-red-300 rounded-lg p-4">
           <div class="flex items-start gap-2">
-            <span class="text-red-500 text-lg">⛔</span>
             <div>
-              <p class="text-sm font-semibold text-red-700 mb-2">Cannot start production — insufficient inventory:</p>
+              <p class="text-sm font-semibold text-red-700 mb-2">Cannot start production -- insufficient inventory:</p>
               <ul class="space-y-1">
                 {% for s in inv_shortages %}
                 <li class="text-sm text-red-600">
                   <span class="font-mono text-xs text-red-400 mr-1">{{ s.sku }}</span>
                   <span class="font-medium">{{ s.name }}</span>
-                  — need <strong>{{ s.need }} {{ s.unit }}</strong>, have <strong>{{ s.have }} {{ s.unit }}</strong>
+                  -- need <strong>{{ s.need }} {{ s.unit }}</strong>, have <strong>{{ s.have }} {{ s.unit }}</strong>
                 </li>
                 {% endfor %}
               </ul>
@@ -507,12 +611,12 @@
         </div>
         {% elif inv_shortages %}
         <div class="mb-3 bg-amber-50 border border-amber-300 rounded-lg p-3">
-          <p class="text-xs font-semibold text-amber-700 mb-1">⚠ Low inventory on this order:</p>
+          <p class="text-xs font-semibold text-amber-700 mb-1">&#x26A0; Low inventory on this order:</p>
           <ul class="space-y-0.5">
             {% for s in inv_shortages %}
             <li class="text-xs text-amber-700">
               <span class="font-medium">{{ s.name }}</span>
-              — have {{ s.have }} {{ s.unit }}, need {{ s.need }} {{ s.unit }}
+              -- have {{ s.have }} {{ s.unit }}, need {{ s.need }} {{ s.unit }}
             </li>
             {% endfor %}
           </ul>
@@ -522,22 +626,30 @@
         {% for ns in next_statuses %}
           {% if ns.value == 'qa_review' and total_hours == 0 %}
           <div class="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-            &#x26D4; Cannot send to QA — log labor before inspection.
+            Cannot send to QA -- log labor before inspection.
           </div>
           {% elif ns.value == 'ready' and has_qa_fail %}
           <div class="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-            &#x26D4; Cannot mark Ready — open QA failure must be resolved first.
+            Cannot mark Ready -- open QA failure must be resolved first.
           </div>
           {% elif ns.value == 'invoiced' and not order.invoice %}
           <div class="mb-2 text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
             &#x26A0; Generate the invoice below before marking as Invoiced.
           </div>
           {% elif (ns.value == 'qa_review' and total_hours == 0) or (ns.value == 'ready' and has_qa_fail) %}
-          {# button already shown as blocked above — skip the form #}
+          {# blocked above #}
+          {% elif ns.value == 'in_production' and order.job_type.value != 'retail' and not order.production_stages %}
+          <div class="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+            &#x26A0; Add production stages before starting production.
+          </div>
+          {% elif ns.value == 'in_production' and order.job_type.value != 'retail' and (order.production_stages | rejectattr('assigned_to_id') | list) %}
+          <div class="mb-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+            &#x26A0; Assign workers to all stages before starting production.
+          </div>
           {% elif ns.value == 'in_production' and inv_shortages %}
           <button disabled
                   class="w-full mb-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200">
-            ⛔ Start Production — Inventory Shortage
+            Start Production -- Inventory Shortage
           </button>
           {% else %}
           <form method="POST" action="/orders/{{ order.id }}/status" class="mb-2">
@@ -600,7 +712,6 @@
       </div>
       {% endif %}
 
-
       <!-- Customer -->
       {% if order.customer %}
       <div class="bg-white rounded-xl shadow p-5">
@@ -620,7 +731,7 @@
       <div class="bg-white rounded-xl shadow p-5">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Production Stages</h2>
-          <a href="/production" class="text-xs text-steel-mid hover:underline">Board ↗</a>
+          <a href="/production" class="text-xs text-steel-mid hover:underline">Board &#x2197;</a>
         </div>
         <div class="space-y-2">
           {% set non_del = order.production_stages | selectattr('stage_type.value', 'ne', 'delivery') | list %}
@@ -628,9 +739,8 @@
           {% for stage in (non_del | sort(attribute='id')) + del_stages %}
           <div class="rounded-lg px-2.5 py-2 {% if stage.status.value == 'blocked' %}bg-red-50 border border-red-100{% elif stage.status.value == 'in_progress' %}bg-blue-50 border border-blue-100{% elif stage.completed_at %}bg-gray-50{% else %}bg-white{% endif %}">
             <div class="flex items-center gap-2">
-              <!-- Status dot -->
               {% if stage.status.value == 'blocked' %}
-              <span class="text-red-500 font-bold text-xs flex-shrink-0">✕</span>
+              <span class="text-red-500 font-bold text-xs flex-shrink-0">X</span>
               {% elif stage.completed_at %}
               <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
               {% elif stage.started_at %}
@@ -638,20 +748,17 @@
               {% else %}
               <span class="w-2 h-2 rounded-full bg-gray-200 flex-shrink-0"></span>
               {% endif %}
-              <!-- Stage name -->
               <span class="text-sm flex-1 {% if stage.completed_at %}text-gray-400 line-through{% elif stage.status.value == 'blocked' %}text-red-600 font-medium{% elif stage.status.value == 'in_progress' %}text-blue-700 font-medium{% else %}text-gray-600{% endif %}">
                 {% if stage.stage_type.value == 'qa_qc' %}QA / Inspection{% else %}{{ stage.stage_type.value.replace('_',' ').title() }}{% endif %}
               </span>
-              <!-- Status label -->
               {% if stage.status.value == 'blocked' %}
               <span class="text-xs text-red-500 font-medium">Blocked</span>
               {% elif stage.status.value == 'in_progress' %}
               <span class="text-xs text-blue-600 font-medium">In Progress</span>
               {% elif stage.completed_at %}
-              <span class="text-xs text-gray-400">✓ Done</span>
+              <span class="text-xs text-gray-400">Done</span>
               {% endif %}
             </div>
-            <!-- Assigned employee (if set) -->
             {% if stage.assigned_to %}
             <div class="flex items-center gap-1.5 mt-1.5 ml-4">
               <span class="w-5 h-5 rounded-full bg-steel-mid text-white text-xs flex items-center justify-center font-bold flex-shrink-0">
@@ -660,9 +767,8 @@
               <span class="text-xs text-gray-500">{{ stage.assigned_to.first_name }} {{ stage.assigned_to.last_name or '' }}</span>
             </div>
             {% else %}
-            <div class="ml-4 mt-1 text-xs text-yellow-500">⚠ Unassigned</div>
+            <div class="ml-4 mt-1 text-xs text-yellow-500">&#x26A0; Unassigned</div>
             {% endif %}
-            <!-- Active timer indicator -->
             {% if active_session_by_stage and stage.id in active_session_by_stage %}
             {% set ws = active_session_by_stage[stage.id] %}
             <div class="flex items-center gap-1.5 mt-1.5 ml-4">
@@ -672,12 +778,11 @@
                 <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
               <span class="text-xs text-green-600 font-medium">
-                ⏱ {{ ws.employee.first_name }} {{ ws.employee.last_name or '' }} — clocked in
+                {{ ws.employee.first_name }} {{ ws.employee.last_name or '' }} -- clocked in
               </span>
               {% else %}
-              <span class="text-yellow-500 text-xs">⏸</span>
               <span class="text-xs text-yellow-600 font-medium">
-                {{ ws.employee.first_name }} {{ ws.employee.last_name or '' }} — paused
+                {{ ws.employee.first_name }} {{ ws.employee.last_name or '' }} -- paused
               </span>
               {% endif %}
             </div>
@@ -697,8 +802,8 @@
         <a href="/orders/{{ order.id }}/packing-list"
           class="flex items-center justify-between text-sm font-medium
             {% if order.packing_list %}text-steel-mid hover:text-steel-dark{% else %}text-yellow-600 hover:text-yellow-800{% endif %}">
-          <span>🚚 Packing List{% if not order.packing_list %} <span class="text-xs font-normal text-yellow-500">(not yet generated)</span>{% endif %}</span>
-          <span>View / Print ↗</span>
+          <span>Packing List{% if not order.packing_list %} <span class="text-xs font-normal text-yellow-500">(not yet generated)</span>{% endif %}</span>
+          <span>View / Print &#x2197;</span>
         </a>
       </div>
       {% endif %}
@@ -748,4 +853,56 @@
           </div>
           {% if total_labor %}
           <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-bold text-steel-dark">
-            <span>Actua
+            <span>Actual Total</span>
+            <span>${{ '%.2f'|format(mat_sum.v + (total_labor or 0)) }}</span>
+          </div>
+          {% set overall_variance = (mat_sum.v + (total_labor or 0)) - (mat_sum.v + est_labor_sum.v) %}
+          <div class="flex justify-between text-xs font-semibold {% if overall_variance > 0 %}text-red-600{% elif overall_variance < 0 %}text-green-600{% else %}text-gray-400{% endif %}">
+            <span>vs. Estimate</span>
+            <span>{% if overall_variance > 0 %}+{% endif %}${{ '%.2f'|format(overall_variance) }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /right column -->
+  </div><!-- /grid -->
+</div>
+
+<script>
+function toggleDrawingUpload() {
+  const f = document.getElementById('drawing-upload-form');
+  if (f) f.classList.toggle('hidden');
+}
+function toggleLaborForm() {
+  const f = document.getElementById('labor-form');
+  if (!f) return;
+  f.classList.toggle('hidden');
+  if (!f.classList.contains('hidden')) {
+    const dp = document.getElementById('labor-date-picker');
+    if (dp && !dp.value) dp.value = '{{ today }}';
+  }
+}
+function toggleQAForm() {
+  const f = document.getElementById('qa-form');
+  if (!f) return;
+  f.classList.toggle('hidden');
+}
+function handleQAResultChange(val) {
+  const fr = document.getElementById('failure-reason');
+  const rn = document.getElementById('rework-notes');
+  if (!fr || !rn) return;
+  if (val === 'fail') {
+    fr.required = true; rn.required = true;
+    fr.style.borderColor = '#ef4444'; rn.style.borderColor = '#ef4444';
+  } else if (val === 'conditional') {
+    fr.required = true; rn.required = false;
+    fr.style.borderColor = '#f59e0b'; rn.style.borderColor = '';
+  } else {
+    fr.required = false; rn.required = false;
+    fr.style.borderColor = ''; rn.style.borderColor = '';
+  }
+}
+</script>
+{% endblock %}

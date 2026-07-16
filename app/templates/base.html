@@ -37,6 +37,9 @@
       {% endif %}
       <a href="/inventory"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Inventory</a>
       <a href="/production" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Production</a>
+      {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
+      <a href="/fulfillment" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Fulfillment</a>
+      {% endif %}
       {% if user.role.value in ["owner","ops_manager"] %}
       <a href="/reports" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Reports</a>
       <a href="/users"   class="text-sm hover:text-amber-300 transition whitespace-nowrap">Team</a>
@@ -81,6 +84,9 @@
       {% endif %}
       <a href="/inventory"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Inventory</a>
       <a href="/production" class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Production</a>
+      {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
+      <a href="/fulfillment" class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Fulfillment</a>
+      {% endif %}
       {% if user.role.value in ["owner","ops_manager"] %}
       <a href="/reports"    class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Reports</a>
       <a href="/users"      class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Team</a>

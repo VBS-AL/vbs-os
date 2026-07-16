@@ -22,11 +22,14 @@
         {% endif %}
       </h1>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3">
       {% if can_manage %}
       <a href="/production/queue" class="text-sm text-steel-mid hover:underline">My Queue</a>
       {% endif %}
       <a href="/production" class="text-sm text-gray-400 hover:text-steel-mid">← Board</a>
+      {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
+      <a href="/fulfillment" class="text-sm text-gray-400 hover:text-steel-mid">Fulfillment</a>
+      {% endif %}
     </div>
   </div>
 
@@ -212,9 +215,52 @@
             ▶ Resume the timer to fill out the packing list and complete delivery.
           </p>
         </div>
+        {% elif s.order.packing_list %}
+        <!-- Packing list already saved — show confirmation view -->
+        <div class="mt-4 border-t border-gray-100 pt-4 space-y-3">
+          <div class="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+            <span>✅ Packing list saved</span>
+            {% if s.order.packing_list.pl_number %}
+            <span class="font-mono font-semibold">{{ s.order.packing_list.pl_number }}</span>
+            {% endif %}
+            <a href="/orders/{{ s.order_id }}/packing-list" target="_blank"
+              class="ml-auto text-xs text-steel-mid underline hover:text-steel-dark">View / Print ↗</a>
+          </div>
+          {% set pl = s.order.packing_list %}
+          {% if pl.checker_id and not pl.check_confirmed %}
+          <!-- Awaiting checker confirmation -->
+          <div class="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+            <span>⏳ Awaiting check from <strong>{{ pl.checked_by or 'assigned checker' }}</strong></span>
+          </div>
+          <button disabled
+            class="w-full px-4 py-2 bg-gray-200 text-gray-400 text-sm font-semibold rounded-lg cursor-not-allowed">
+            {% if s.order.preferred_delivery_method == 'customer_pickup' %}🏭 Confirm Pickup{% else %}🚚 Confirm Delivery{% endif %} &amp; Stop Timer
+          </button>
+          {% else %}
+          {% if pl.checker_id and pl.check_confirmed %}
+          <div class="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+            <span>✅ Checked by <strong>{{ pl.checked_by }}</strong></span>
+          </div>
+          {% endif %}
+          <form method="POST" action="/orders/{{ s.order_id }}/confirm-delivery">
+            <button type="submit"
+              class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition">
+              {% if s.order.preferred_delivery_method == 'customer_pickup' %}🏭 Confirm Pickup{% else %}🚚 Confirm Delivery{% endif %} &amp; Stop Timer
+            </button>
+          </form>
+          {% endif %}
+        </div>
         {% else %}
         <div class="mt-4 border-t border-gray-100 pt-4">
-          <p class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">🚚 Delivery / Packing List</p>
+          <p class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">{% if s.order.preferred_delivery_method == 'customer_pickup' %}🏭 Customer Pickup / Packing List{% else %}🚚 Delivery / Packing List{% endif %}</p>
+          {# Auto-calculate estimated weight from line items #}
+          {% set wns = namespace(est_weight=0.0) %}
+          {% for li in s.order.line_items %}
+            {% if not li.is_delivery_surcharge and li.inventory_item and li.inventory_item.weight_per_unit %}
+              {% set wns.est_weight = wns.est_weight + (li.quantity * li.inventory_item.weight_per_unit) %}
+            {% endif %}
+          {% endfor %}
+
           <form method="POST" action="/production/stages/{{ s.stage_id }}/delivery-complete" class="space-y-3">
 
             <!-- Shipped Via -->
@@ -223,8 +269,9 @@
                 <label class="block text-xs text-gray-500 mb-1">Shipped Via</label>
                 <select name="shipped_via" id="shipped-via-select"
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
-                  <option value="vbs_delivery">VBS Delivery</option>
-                  <option value="customer_pickup">Customer Pickup</option>
+                  {% set pdm = s.order.preferred_delivery_method %}
+                  <option value="vbs_delivery" {% if pdm == 'delivery' %}selected{% endif %}>VBS Delivery</option>
+                  <option value="customer_pickup" {% if pdm == 'customer_pickup' %}selected{% endif %}>Customer Pickup</option>
                   <option value="third_party_freight">3rd Party Freight</option>
                   <option value="courier">Courier (UPS/FedEx/etc.)</option>
                   <option value="other">Other…</option>
@@ -236,9 +283,9 @@
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
               </div>
               <div>
-                <label class="block text-xs text-gray-500 mb-1">Date Shipped</label>
+                <label class="block text-xs text-gray-500 mb-1">{% if s.order.preferred_delivery_method == 'customer_pickup' %}Pickup Date{% else %}Date Shipped{% endif %}</label>
                 <input type="date" name="date_shipped"
-                  value="{{ s.order.promised_date.isoformat() if s.order.promised_date else '' }}"
+                  value="{{ today.isoformat() }}"
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
               </div>
             </div>
@@ -268,21 +315,572 @@
 {{ s.order.customer.email }}{% endif %}{% endif %}</textarea>
             </div>
 
-            <!-- Ship To -->
+            <!-- Ship To — with verification warning -->
             <div>
-              <label class="block text-xs text-gray-500 mb-1">Ship To Address</label>
-              <textarea name="ship_to" rows="2" placeholder="Delivery address…"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">{% if s.order.customer and s.order.customer.address_line1 %}{{ s.order.customer.address_line1 }}{% if s.order.customer.city %}, {{ s.order.customer.city }}{% endif %}{% if s.order.customer.state %}, {{ s.order.customer.state }}{% endif %}{% if s.order.customer.zip_code %} {{ s.order.customer.zip_code }}{% endif %}{% endif %}</textarea>
+              <div class="flex items-center justify-between mb-1">
+                {% if s.order.preferred_delivery_method == 'customer_pickup' %}
+                <label class="text-xs text-gray-500">Pickup Location (if applicable)</label>
+                {% else %}
+                <label class="text-xs text-gray-500">Ship To Address</label>
+                <span class="text-xs text-amber-600 font-medium">⚠ Verify — may differ from billing address</span>
+                {% endif %}
+              </div>
+              <textarea name="ship_to" rows="2"
+                placeholder="{% if s.order.preferred_delivery_method == 'customer_pickup' %}Customer in shop pickup{% else %}Delivery address…{% endif %}"
+                class="w-full border {% if s.order.preferred_delivery_method == 'customer_pickup' %}border-gray-300 focus:ring-steel-mid{% else %}border-amber-300 focus:ring-amber-400{% endif %} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2">{% if s.order.preferred_delivery_method == 'customer_pickup' %}Customer in shop pickup{% elif s.order.customer and s.order.customer.address_line1 %}{{ s.order.customer.address_line1 }}{% if s.order.customer.city %}, {{ s.order.customer.city }}{% endif %}{% if s.order.customer.state %}, {{ s.order.customer.state }}{% endif %}{% if s.order.customer.zip_code %} {{ s.order.customer.zip_code }}{% endif %}{% endif %}</textarea>
             </div>
 
             <!-- Weight / Cartons -->
             <div class="grid grid-cols-3 gap-3">
               <div>
-                <label class="block text-xs text-gray-500 mb-1">Total Weight (lbs)</label>
-                <input type="number" step="0.1" name="total_weight" placeholder="Auto or manual"
+                <label class="block text-xs text-gray-500 mb-1">
+                  Est. Weight (lbs)
+                  {% if wns.est_weight > 0 %}<span class="text-blue-500">· auto</span>{% endif %}
+                </label>
+                <input type="number" step="0.1" name="total_weight"
+                  value="{{ '%.1f'|format(wns.est_weight) if wns.est_weight > 0 else '' }}"
+                  placeholder="—"
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
               </div>
               <div>
                 <label class="block text-xs text-gray-500 mb-1">Cartons</label>
                 <input type="number" name="cartons" placeholder="—"
-                  class="w-full border border-g
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+              </div>
+              <div class="flex flex-col gap-2 pt-4">
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" name="order_complete" value="true" class="rounded border-gray-300"> Order Complete
+                </label>
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" name="balance_to_follow" value="true" class="rounded border-gray-300"> Balance to Follow
+                </label>
+              </div>
+            </div>
+
+            <!-- Packed/Checked by -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Packed By</label>
+                <input type="text" name="packed_by"
+                  value="{{ view_employee.first_name }} {{ view_employee.last_name or '' }}"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Checked By <span class="text-red-500">*</span></label>
+                {% set other_employees = all_employees | selectattr('id', 'ne', view_employee.id) | list %}
+                {% if other_employees %}
+                <select name="checker_id" required
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+                  <option value="">— Select employee —</option>
+                  {% for emp in other_employees %}
+                  <option value="{{ emp.id }}">{{ emp.first_name }} {{ emp.last_name or '' }}</option>
+                  {% endfor %}
+                </select>
+                {% else %}
+                <div class="w-full border border-red-200 bg-red-50 rounded-lg px-3 py-2 text-sm text-red-600">
+                  ⚠ No other employees in the system. Add team members under <a href="/users" class="underline font-medium">Team</a> before completing {% if s.order.preferred_delivery_method == 'customer_pickup' %}pickup{% else %}delivery{% endif %}.
+                </div>
+                <input type="hidden" name="checker_id" value="">
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Notes -->
+            <input type="text" name="session_notes" placeholder="{% if s.order.preferred_delivery_method == 'customer_pickup' %}Pickup notes (optional)…{% else %}Delivery notes (optional)…{% endif %}"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+
+            <button type="submit"
+              class="w-full px-4 py-2 bg-steel-dark hover:bg-steel-mid text-white text-sm font-semibold rounded-lg transition">
+              📋 Save &amp; Preview Packing List
+            </button>
+          </form>
+        </div>
+        {% endif %}{# end packing_list/active check #}
+        {% endif %}{# end delivery check #}
+      </div>
+
+      {% else %}
+      <!-- No active session nudge -->
+      <div class="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-5 text-center text-sm text-gray-400">
+        No active timer. Clock in on a stage below to start tracking time.
+      </div>
+      {% endif %}
+
+      <!-- ── Pending Packing List Checks ── -->
+      {% if pending_checks %}
+      <div class="bg-white rounded-xl shadow border-l-4 border-amber-400 p-5">
+        <h2 class="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">
+          📋 Check Required — Packing List{{ 's' if pending_checks|length > 1 else '' }}
+        </h2>
+        <div class="space-y-3">
+          {% for pl in pending_checks %}
+          <div class="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <div class="text-sm">
+              <span class="font-semibold text-gray-800">{{ pl.order.order_number }}</span>
+              {% if pl.order.customer %}
+              <span class="text-gray-500 ml-2">{{ pl.order.customer.name }}</span>
+              {% endif %}
+              {% if pl.pl_number %}
+              <span class="font-mono text-xs text-gray-400 ml-2">{{ pl.pl_number }}</span>
+              {% endif %}
+              {% if pl.created_by %}
+              <div class="text-xs text-gray-500 mt-0.5">Packed by {{ pl.created_by.first_name }} {{ pl.created_by.last_name or '' }}</div>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-2 ml-4 shrink-0">
+              <a href="/orders/{{ pl.order_id }}/packing-list" target="_blank"
+                class="text-xs px-3 py-1.5 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+                View ↗
+              </a>
+              <form method="POST" action="/orders/{{ pl.order_id }}/packing-list/confirm-check">
+                <button type="submit"
+                  class="text-xs px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-semibold transition">
+                  ✅ Confirm Check
+                </button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ── Job card macro ── -->
+      {# Renders one job card. auto_expand=true removes 'hidden' from work items panel #}
+      {% macro job_card(job, auto_expand=false) %}
+      {% set o = job.order %}
+      {% set is_overdue = o.promised_date and o.promised_date < today %}
+      <div class="border {% if auto_expand %}border-green-200{% else %}border-gray-100{% endif %} rounded-lg">
+
+        <!-- Order header -->
+        <div class="flex items-center justify-between px-4 pt-3 pb-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <a href="/orders/{{ o.id }}" class="font-mono font-semibold text-steel-mid hover:underline text-sm">{{ o.order_number }}</a>
+            <span class="text-gray-600 text-sm font-medium">{{ o.customer.name if o.customer else '—' }}</span>
+            {% if o.priority.value == 'urgent' %}
+            <span class="inline-block px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 font-semibold">URGENT</span>
+            {% elif o.priority.value == 'priority' %}
+            <span class="inline-block px-1.5 py-0.5 rounded text-xs bg-orange-100 text-orange-700 font-semibold">PRIORITY</span>
+            {% endif %}
+            {% if o.paint_spec %}
+            <span class="inline-block px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-500">Paint: {{ o.paint_spec }}</span>
+            {% endif %}
+            {% if o.drawing_records %}
+            <div class="relative inline-block">
+              <button onclick="toggleDrawings('dq-{{ o.id }}')"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition">
+                📄 {{ o.drawing_records | length }}
+              </button>
+              <div id="dq-{{ o.id }}" class="hidden absolute left-0 top-6 z-30 bg-white border border-gray-200 rounded-xl shadow-lg w-64 p-2 space-y-1">
+                {% for dr in o.drawing_records | sort(attribute='created_at', reverse=True) %}
+                <a href="/static/drawings/{{ o.order_number }}/{{ dr.file_reference }}" target="_blank"
+                   class="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-gray-50 text-xs text-gray-700 truncate">
+                  {% set dext = dr.file_reference.rsplit('.', 1)[-1].lower() if dr.file_reference and '.' in dr.file_reference else '' %}
+                  {% if dr.drawing_type in ['qa_photo', 'delivery_photo'] or dext in ['jpg', 'jpeg', 'png', 'tiff'] %}📷
+                  {% elif dr.drawing_type in ['document'] or dext in ['xlsx', 'docx'] %}📋
+                  {% else %}📄{% endif %}
+                  <span class="truncate">{{ dr.display_name or dr.file_reference }}</span>
+                  {% if dr.revision %}<span class="text-gray-400 font-mono flex-shrink-0">{{ dr.revision }}</span>{% endif %}
+                </a>
+                {% endfor %}
+                <div class="border-t border-gray-100 pt-1">
+                  <form method="POST" action="/orders/{{ o.id }}/drawings" enctype="multipart/form-data" class="flex items-center gap-1 px-1">
+                    <input type="hidden" name="stage_context" value="queue"/>
+                    <input type="file" name="files" multiple required accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.tiff,.xlsx,.docx"
+                      class="text-xs flex-1 min-w-0"/>
+                    <button type="submit" class="text-xs bg-steel-dark text-white px-2 py-1 rounded hover:bg-steel-mid flex-shrink-0">＋</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            {% elif o.drawing_file %}
+            <a href="/static/drawings/{{ o.drawing_file }}" target="_blank"
+               class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition">
+              📄 Drawing
+            </a>
+            {% else %}
+            <div class="relative inline-block">
+              <button onclick="toggleDrawings('dq-new-{{ o.id }}')"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100 transition">
+                ＋ File
+              </button>
+              <div id="dq-new-{{ o.id }}" class="hidden absolute left-0 top-6 z-30 bg-white border border-gray-200 rounded-xl shadow-lg w-64 p-2">
+                <form method="POST" action="/orders/{{ o.id }}/drawings" enctype="multipart/form-data" class="flex items-center gap-1 px-1">
+                  <input type="hidden" name="stage_context" value="queue"/>
+                  <input type="file" name="files" required accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.tiff,.xlsx,.docx"
+                    class="text-xs flex-1 min-w-0"/>
+                  <button type="submit" class="text-xs bg-steel-dark text-white px-2 py-1 rounded hover:bg-steel-mid flex-shrink-0">＋</button>
+                </form>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+          <div class="text-xs {% if is_overdue %}text-red-500 font-semibold{% else %}text-gray-400{% endif %}">
+            {% if o.promised_date %}Due {{ o.promised_date.strftime('%b %d') }}{% if is_overdue %} ⚠{% endif %}{% else %}—{% endif %}
+          </div>
+        </div>
+
+        <!-- Line items — auto-expanded for active job, collapsed otherwise -->
+        {% if o.line_items %}
+        <div id="items-{{ o.id }}" class="{% if not auto_expand %}hidden {% endif %}border-t border-gray-100 bg-gray-50 px-4 py-3">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Work Items</p>
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-gray-400">
+                <th class="text-left pb-1 font-medium">Description</th>
+                <th class="text-right pb-1 font-medium pr-3">Qty</th>
+                <th class="text-right pb-1 font-medium pr-3">Unit Price</th>
+                <th class="text-right pb-1 font-medium pr-3">Materials</th>
+                <th class="text-left pb-1 font-medium">Paint</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {% for li in o.line_items | sort(attribute='line_number') %}
+              {% if not li.is_delivery_surcharge %}
+              {% set mat_total = (li.quantity * li.unit_price) if li.unit_price else None %}
+              <tr>
+                <td class="py-1 font-medium text-gray-700">
+                  {{ li.description }}
+                  {% if li.inventory_item %}<span class="ml-1 font-mono text-blue-600 text-xs">{{ li.inventory_item.sku }}</span>{% endif %}
+                </td>
+                <td class="py-1 text-right pr-3 text-gray-600">{{ li.quantity }}{% if li.unit %} {{ li.unit }}{% endif %}</td>
+                <td class="py-1 text-right pr-3 text-gray-500">{% if li.unit_price %}${{ '%.2f'|format(li.unit_price) }}{% else %}—{% endif %}</td>
+                <td class="py-1 text-right pr-3 font-medium text-gray-700">{% if mat_total %}${{ '%.2f'|format(mat_total) }}{% else %}—{% endif %}</td>
+                <td class="py-1 text-gray-500">{{ li.paint_override or o.paint_spec or '—' }}</td>
+              </tr>
+              {% if li.internal_notes %}
+              <tr>
+                <td colspan="5" class="pb-1.5 pt-0">
+                  <div class="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-800">
+                    <span class="mt-0.5 shrink-0">🔒</span>
+                    <span>{{ li.internal_notes }}</span>
+                  </div>
+                </td>
+              </tr>
+              {% endif %}
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          {% if o.description %}
+          <p class="text-xs text-gray-400 mt-2 italic">{{ o.description }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Stages -->
+        <div class="divide-y divide-gray-50 border-t border-gray-100">
+          {% for stage in job.stages %}
+          {% set is_active_session = (my_session and my_session.stage_id == stage.id) %}
+          <div class="flex items-center justify-between text-sm py-2 px-4
+            {% if stage.status.value == 'in_progress' %}bg-blue-50
+            {% elif stage.status.value == 'blocked' %}bg-red-50
+            {% else %}bg-white{% endif %}">
+            <div class="flex items-center gap-2">
+              {% if o.line_items %}
+              <button onclick="toggleItems('items-{{ o.id }}')"
+                class="text-xs {% if stage.status.value == 'in_progress' %}text-blue-700{% elif stage.status.value == 'blocked' %}text-red-600{% else %}text-gray-400{% endif %} font-bold w-3 hover:opacity-70 transition-opacity"
+                title="{{ o.line_items | length }} item{{ 's' if o.line_items | length != 1 else '' }}">
+                {% if stage.status.value == 'in_progress' %}▶
+                {% elif stage.status.value == 'blocked' %}⚠
+                {% else %}○{% endif %}
+              </button>
+              {% else %}
+              <span class="text-xs {% if stage.status.value == 'in_progress' %}text-blue-700{% elif stage.status.value == 'blocked' %}text-red-600{% else %}text-gray-400{% endif %} font-bold w-3">
+                {% if stage.status.value == 'in_progress' %}▶
+                {% elif stage.status.value == 'blocked' %}⚠
+                {% else %}○{% endif %}
+              </span>
+              {% endif %}
+              <span class="font-medium {% if stage.status.value == 'blocked' %}text-red-600{% elif stage.status.value == 'in_progress' %}text-blue-700{% else %}text-gray-700{% endif %}">
+                {{ stage_labels.get(stage.stage_type.value, stage.stage_type.value) }}
+              </span>
+              {% if is_active_session %}
+              <span class="inline-flex items-center gap-1 text-xs text-green-600 font-semibold">
+                <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
+                Active
+              </span>
+              {% endif %}
+              {% if stage.notes %}
+              <span class="text-xs text-gray-400 italic">— {{ stage.notes }}</span>
+              {% endif %}
+            </div>
+            {% if stage.status.value in ['in_progress', 'blocked'] and not is_active_session and o.status.value in ['in_production', 'on_hold', 'qa_review', 'ready'] %}
+            <div class="flex items-center gap-2">
+            {% if stage.status.value == 'in_progress' %}
+            <form class="stage-complete-form" method="POST" action="/production/stages/{{ stage.id }}/status">
+              <input type="hidden" name="status" value="complete">
+              <input type="hidden" name="redirect_to" value="/production/queue">
+              <button class="text-xs px-3 py-1.5 rounded-md transition font-medium
+                {% if stage.stage_type.value == 'delivery' %}bg-blue-100 text-blue-700 hover:bg-blue-200{% else %}bg-green-100 text-green-700 hover:bg-green-200{% endif %}">
+                {% if stage.stage_type.value == 'delivery' %}
+                  {% if o.preferred_delivery_method == 'customer_pickup' %}🏭 Confirm Pickup{% else %}🚚 Confirm Delivery{% endif %}
+                {% else %}✓ Done{% endif %}
+              </button>
+            </form>
+            <span class="stage-done-error hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1"></span>
+            {% endif %}
+            <div class="relative">
+              <button onclick="toggleClockIn('ci-{{ stage.id }}')"
+                class="text-xs px-3 py-1.5 bg-steel-mid text-white rounded-md hover:bg-steel-dark transition font-medium">
+                Clock In
+              </button>
+              <div id="ci-{{ stage.id }}" class="hidden absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-56">
+                <form method="POST" action="/production/stages/{{ stage.id }}/clock-in" class="space-y-2">
+                  <p class="text-xs font-semibold text-gray-600 mb-1">{{ stage_labels.get(stage.stage_type.value, '') }}</p>
+                  {% if stage.stage_type.value == 'delivery' %}
+                  <input type="hidden" name="billing_dept" value="general_labor">
+                  <p class="text-xs text-gray-400 italic">Time tracked for internal use — no labor charge added.</p>
+                  {% else %}
+                  <label class="block text-xs text-gray-500">Billing Department</label>
+                  <select name="billing_dept" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-steel-mid">
+                    {% for dept, label in billing_options %}
+                    <option value="{{ dept.value }}" {% if default_billing and dept == default_billing %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  {% endif %}
+                  <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-medium py-1.5 rounded-md transition">
+                    Start Timer
+                  </button>
+                </form>
+              </div>
+            </div>
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+
+      </div>
+      {% endmacro %}
+
+      <!-- ── Active Job ── -->
+      {% if my_session %}
+      {% for job in job_list %}
+      {% if job.order.id == my_session.order_id %}
+      <div class="bg-white rounded-xl shadow border-l-4 border-green-400 p-5">
+        <h2 class="text-xs font-semibold text-green-700 uppercase tracking-wide mb-3">⚡ Active Job</h2>
+        {{ job_card(job, auto_expand=true) }}
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% endif %}
+
+      <!-- ── Assigned Jobs ── -->
+      {% if job_list %}
+      {% set other_jobs = [] %}
+      {% for job in job_list %}
+        {% if not my_session or job.order.id != my_session.order_id %}
+          {% set _ = other_jobs.append(job) %}
+        {% endif %}
+      {% endfor %}
+      {% if other_jobs %}
+      <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-4">Assigned Jobs</h2>
+        <div class="space-y-4">
+          {% for job in other_jobs %}
+          {{ job_card(job, auto_expand=false) }}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="bg-white rounded-xl shadow p-5 text-center text-sm text-gray-400">
+        No stages currently assigned to {{ 'you' if view_employee.id == user.id else view_employee.first_name }}.
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Right column -->
+    <div class="space-y-4">
+
+      <!-- Employee info card -->
+      <div class="bg-white rounded-xl shadow p-4">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-full bg-steel-mid flex items-center justify-center text-white font-bold text-sm">
+            {{ view_employee.first_name[0] }}{{ view_employee.last_name[0] if view_employee.last_name else '' }}
+          </div>
+          <div>
+            <div class="font-semibold text-steel-dark text-sm">{{ view_employee.first_name }} {{ view_employee.last_name or '' }}</div>
+            <div class="text-xs text-gray-500">{{ view_employee.role.value.replace('_',' ').title() }}</div>
+          </div>
+        </div>
+        {% if view_employee.default_billing_dept %}
+        <div class="text-xs text-gray-500">Default billing: <span class="font-medium text-steel-mid">{{ view_employee.default_billing_dept.value.replace('_',' ').title() }}</span></div>
+        {% endif %}
+        <div class="text-xs text-gray-400 mt-1">Shift: 7:00 AM – 4:00 PM EST</div>
+      </div>
+
+      <!-- My Stats -->
+      <div class="bg-white rounded-xl shadow p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">My Stats</h2>
+          <div class="flex gap-1">
+            {% for period, label in [('day','Day'),('week','Week'),('month','Month')] %}
+            <a href="?{% if emp_id %}emp_id={{ emp_id }}&{% endif %}stat_period={{ period }}"
+              class="text-xs px-2 py-0.5 rounded-md transition
+                {% if stat_period == period %}bg-steel-dark text-white{% else %}bg-gray-100 text-gray-500 hover:bg-gray-200{% endif %}">
+              {{ label }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-gray-50 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold text-steel-dark">{{ stat_hours }}</div>
+            <div class="text-xs text-gray-400 mt-0.5">Hours Logged</div>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold text-steel-dark">{{ stat_orders }}</div>
+            <div class="text-xs text-gray-400 mt-0.5">Orders Worked</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Management: all employees summary -->
+      {% if can_manage and all_employees_summary %}
+      <div class="bg-white rounded-xl shadow p-4">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">All Employees</h2>
+        <div class="space-y-2">
+          {% for row in all_employees_summary %}
+          <a href="/production/queue?emp_id={{ row.employee.id }}"
+            class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-gray-50 transition
+              {% if row.employee.id == view_employee.id %}bg-blue-50{% endif %}">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-full bg-steel-mid flex items-center justify-center text-white text-xs font-bold">
+                {{ row.employee.first_name[0] }}{{ row.employee.last_name[0] if row.employee.last_name else '' }}
+              </div>
+              <span class="text-sm font-medium text-gray-700">{{ row.employee.first_name }} {{ row.employee.last_name or '' }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              {% if row.session %}
+                {% if row.session.status.value == 'active' %}
+                <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
+                {% else %}
+                <span class="text-yellow-500 text-xs">⏸</span>
+                {% endif %}
+              {% endif %}
+              <span class="text-xs text-gray-400">{{ row.stage_count }} stage{{ 's' if row.stage_count != 1 else '' }}</span>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+<!-- Dropdown toggle helper -->
+<script>
+function toggleClockIn(id) {
+  // Close any other open dropdowns first
+  document.querySelectorAll('[id^="ci-"], [id="pause-menu"], [id^="dq-"]').forEach(function(el) {
+    if (el.id !== id) el.classList.add('hidden');
+  });
+  document.getElementById(id).classList.toggle('hidden');
+}
+function toggleDrawings(id) {
+  document.querySelectorAll('[id^="ci-"], [id="pause-menu"], [id^="dq-"]').forEach(function(el) {
+    if (el.id !== id) el.classList.add('hidden');
+  });
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('hidden');
+}
+function toggleItems(id) {
+  var el = document.getElementById(id);
+  var btn = document.getElementById('toggle-' + id);
+  el.classList.toggle('hidden');
+  if (btn) {
+    var isOpen = !el.classList.contains('hidden');
+    btn.textContent = btn.textContent.replace(isOpen ? '▶' : '▼', isOpen ? '▼' : '▶');
+  }
+}
+// Close dropdowns on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('[id^="ci-"], [id="pause-menu"], [id^="dq-"], button[onclick^="toggleClockIn"], button[onclick^="toggleDrawings"]')) {
+    document.querySelectorAll('[id^="ci-"], [id="pause-menu"], [id^="dq-"]').forEach(function(el) {
+      el.classList.add('hidden');
+    });
+  }
+});
+
+// Intercept ✓ Done form — show inline error if time hasn't been logged
+document.addEventListener('submit', function(e) {
+  const form = e.target.closest('.stage-complete-form');
+  if (!form) return;
+  e.preventDefault();
+  const errEl = form.nextElementSibling;
+  fetch(form.action, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams(new FormData(form))
+  }).then(function(resp) {
+    if (resp.ok) {
+      window.location.href = '/production/queue';
+    } else {
+      return resp.json().then(function(data) {
+        if (errEl) {
+          errEl.textContent = data.detail || 'Cannot complete stage';
+          errEl.classList.remove('hidden');
+        }
+      });
+    }
+  }).catch(function() {
+    if (errEl) {
+      errEl.textContent = 'Something went wrong';
+      errEl.classList.remove('hidden');
+    }
+  });
+});
+</script>
+
+<!-- Delivery form interactivity -->
+<script>
+(function() {
+  const sel = document.getElementById('shipped-via-select');
+  const wrap = document.getElementById('shipped-via-other-wrap');
+  if (sel && wrap) {
+    sel.addEventListener('change', function() {
+      wrap.classList.toggle('hidden', sel.value !== 'other');
+    });
+  }
+})();
+</script>
+
+<!-- QA form interactivity -->
+<script>
+(function() {
+  // Radio button visual highlighting
+  const resultColors = {
+    pass:        ['border-green-500',  'bg-green-50',  'text-green-700'],
+    conditional: ['border-yellow-500', 'bg-yellow-50', 'text-yellow-700'],
+    rework:      ['border-orange-500', 'bg-orange-50', 'text-orange-700'],
+    fail:        ['border-red-500',    'bg-red-50',    'text-red-700'],
+  };
+  document.querySelectorAll('.qa-result-btn input[type=radio]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      // Reset all
+      document.querySelectorAll('.qa-result-btn span').forEach(function(span) {
+        span.className = 'block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold cursor-pointer transition';
+      });
+      // Highlight selected
+      const span = radio.closest('label').querySelector('span');
+      const colors = resultColors[radio.value] || [];
+      span.classList.add(...colors, 'border-2');
+
+      // Show/hide failure fields
+      const failureFields = document.getElementById('qa-failure-fields');
+      if (failureFields) {
+        failureFields.classList.toggle('hidden', !['fail', 'rework', 'conditional'].includes(radio.value));
+      }
+    });
+  });
+
+  // Certified weld ref field toggle
+  const certChk = document.getElementById('cert-weld-chk');
+  const certRef  = document.getElementById('cert-ref-input');
+  if (certChk && certRef) {
+    cer
