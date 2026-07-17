@@ -28,6 +28,11 @@ class Customer(Base):
     quotes = relationship("Quote", back_populates="customer")
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
 
+    @property
+    def display_name(self) -> str:
+        """Company name if set, otherwise the contact's name."""
+        return self.company or self.name
+
 
 class Contact(Base):
     """Additional / secondary contacts for a customer account."""
@@ -40,6 +45,4 @@ class Contact(Base):
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str |None] = mapped_column(String(200))
     notes: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
-
-    customer = relationship("Customer", back_populates="contacts")
+    cre

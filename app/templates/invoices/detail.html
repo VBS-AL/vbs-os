@@ -16,7 +16,7 @@
         <a href="/orders/{{ inv.order.id }}" class="hover:text-steel-mid font-mono">{{ inv.order.order_number }}</a>
       </div>
       <h1 class="text-2xl font-bold text-steel-dark">Invoice {{ inv.invoice_number }}</h1>
-      <p class="text-gray-500 text-sm mt-0.5">{{ inv.order.customer.name if inv.order.customer else '—' }}</p>
+      <p class="text-gray-500 text-sm mt-0.5">{{ inv.order.customer.display_name if inv.order.customer else '—' }}</p>
     </div>
     <div class="text-right">
       <a href="/invoices/{{ inv.id }}/print" target="_blank"
@@ -242,4 +242,4 @@
 </div>
 
 {% endif %}
-{% endblock %}
+{% endb

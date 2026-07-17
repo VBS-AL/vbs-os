@@ -78,7 +78,7 @@
 
         <!-- Customer -->
         <td class="px-4 py-3 font-medium">
-          {{ o.customer.name if o.customer else '—' }}
+          {{ o.customer.display_name if o.customer else '—' }}
         </td>
 
         <!-- Ship Date -->
@@ -169,4 +169,4 @@
 </div>
 {% endif %}
 
-{% endblock %}
+{% endb

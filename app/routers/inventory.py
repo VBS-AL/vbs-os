@@ -21,28 +21,64 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 templates = Jinja2Templates(directory="app/templates")
 
 CATEGORY_LABELS = {
-    # Carbon Steel
-    "steel_pipe":           "Steel — Pipe (Sched 40 / DOM)",
-    "steel_rect_tube":      "Steel — Rectangular Tubing",
-    "steel_sq_tube":        "Steel — Square Tubing",
+    # Carbon Steel — Tube & Pipe
+    "steel_pipe":           "Steel — Pipe (Sched 40)",
+    "steel_rect_tube":      "Steel — Rect Tube",
+    "steel_sq_tube":        "Steel — Sq Tube",
+    "steel_dom_tube":       "Steel — DOM Tube",
+    # Carbon Steel — Structural
     "steel_channel":        "Steel — Channel",
-    "steel_bar":            "Steel — Bar / Strip / Angle",
+    "steel_angle":          "Steel — Angle (Equal)",
+    "steel_angle_unequal":  "Steel — Angle (Unequal)",
     "steel_ibeam":          "Steel — I-Beam",
-    "wide_flange":          "Wide Flange Beams",
-    "columns":              "Columns",
-    "steel_plate":          "Steel — Plate",
-    "steel_sheet":          "Steel — Sheet (incl. Galvanized)",
-    # Aluminum
-    "aluminum_structural":  "Aluminum — Structural",
-    "aluminum_sheet":       "Aluminum — Sheet",
+    "steel_wide_flange":    "Steel — Wide Flange",
+    "steel_tstock":         "Steel — T-Stock",
+    "steel_columns":        "Steel — Columns",
+    # Carbon Steel — Bar
+    "steel_flat_bar":       "Steel — Flat Bar",
+    "steel_round_bar":      "Steel — Round Bar",
+    "steel_square_bar":     "Steel — Square Bar",
+    "steel_strip_hr":       "Steel — HR Strip",
+    # Carbon Steel — Plate & Sheet
+    "steel_plate_a36":      "Steel — Plate A36",
+    "steel_plate_ar400":    "Steel — Plate AR400",
+    "steel_floor_plate":    "Steel — Floor Plate",
+    "steel_sheet_hr":       "Steel — Sheet HR",
+    "steel_sheet_cr":       "Steel — Sheet CR",
+    "steel_sheet_galv":     "Steel — Sheet Galvanized",
+    "steel_sheet_perf":     "Steel — Sheet Perforated",
+    # Carbon Steel — Misc Shapes
+    "steel_expanded":       "Steel — Expanded Metal",
+    "steel_grip_strut":     "Steel — Grip Strut",
+    "steel_bar_grating":    "Steel — Bar Grating",
+    "steel_decking":        "Steel — Floor Decking",
+    "steel_rebar":          "Steel — Rebar",
+    # Aluminum — Structural
+    "alum_angle":           "Alum — Angle (Equal)",
+    "alum_angle_unequal":   "Alum — Angle (Unequal)",
+    "alum_channel":         "Alum — Channel",
+    "alum_flat_bar":        "Alum — Flat Bar",
+    "alum_round":           "Alum — Round Bar",
+    "alum_square_bar":      "Alum — Square Bar",
+    "alum_sq_tube":         "Alum — Sq Tube",
+    "alum_grip_strut":      "Alum — Grip Strut",
+    # Aluminum — Sheet
+    "alum_sheet":           "Alum — Sheet",
+    "alum_treadbrite":      "Alum — Tread Brite",
     # Stainless
-    "stainless_structural": "Stainless — Structural",
-    "stainless_sheet":      "Stainless — Sheet",
+    "ss_round_bar":         "Stainless — Round Bar",
+    "ss_square_bar":        "Stainless — Square Bar",
+    "ss_sheet":             "Stainless — Sheet",
+    # Hardware
+    "hardware_fasteners":   "Hardware — Fasteners",
+    "hardware_caps":        "Hardware — Caps",
+    "hardware_gussets":     "Hardware — Gussets",
+    "hardware_base_plates": "Hardware — Base Plates",
+    "hardware_handrail":    "Hardware — Handrail",
+    "hardware_hinges":      "Hardware — Hinges",
     # Other
-    "misc":                 "Miscellaneous",
     "bumper_posts":         "Bumper Posts",
     "consumables":          "Consumables",
-    "hardware":             "Hardware",
     "retail":               "Retail / Walk-In",
 }
 
@@ -355,7 +391,7 @@ async def download_import_template(user=Depends(get_current_user)):
     _style_header(ws, len(IMPORT_COLS))
     # Example row
     example = [
-        "", '1/2" A36 HR Steel Plate', "steel_plate", "ea",
+        "", '1/2" A36 HR Steel Plate', "steel_plate_a36", "ea",
         500, 100, 281.89, 489.92, 3.0, "Plate / Rack A", "Steel Supply Co.", "555-1234", "", "",
     ]
     for c, v in enumerate(example, 1):
@@ -386,28 +422,64 @@ async def download_import_template(user=Depends(get_current_user)):
 
     rows = [
         # (section_heading, code, label, description)
-        ("Carbon Steel",       None,                   None,                              None),
-        (None, "steel_pipe",           "Steel — Pipe (Sched 40 / DOM)",   "Schedule 40 Pipe, DOM tubing"),
-        (None, "steel_rect_tube",      "Steel — Rectangular Tubing",       "Rectangular hollow structural tubing"),
-        (None, "steel_sq_tube",        "Steel — Square Tubing",            "Square hollow structural tubing"),
+        ("Carbon Steel — Tube & Pipe", None, None, None),
+        (None, "steel_pipe",           "Steel — Pipe (Sched 40)",          "Schedule 40 Pipe"),
+        (None, "steel_rect_tube",      "Steel — Rect Tube",                "Rectangular hollow structural tubing"),
+        (None, "steel_sq_tube",        "Steel — Sq Tube",                  "Square hollow structural tubing"),
+        (None, "steel_dom_tube",       "Steel — DOM Tube",                 "DOM (drawn over mandrel) round tube"),
+        ("Carbon Steel — Structural",  None, None, None),
         (None, "steel_channel",        "Steel — Channel",                  "C-channel / structural channel"),
-        (None, "steel_bar",            "Steel — Bar / Strip / Angle",      "HR/CR Bar (Flat/Sq/Rd), HR Dry Strip, Angle Iron, Uneven Angle"),
+        (None, "steel_angle",          "Steel — Angle (Equal)",            "Equal leg angle iron"),
+        (None, "steel_angle_unequal",  "Steel — Angle (Unequal)",          "Unequal leg angle iron"),
         (None, "steel_ibeam",          "Steel — I-Beam",                   "Standard I-beams (S-series)"),
-        (None, "wide_flange",          "Wide Flange Beams",                "W-series wide flange beams"),
-        (None, "columns",              "Columns",                          "Columns (N/S options)"),
-        (None, "steel_plate",          "Steel — Plate",                    "Plate — AR / Floor / Hot Rolled"),
-        (None, "steel_sheet",          "Steel — Sheet (incl. Galvanized)", "Steel Sheet (CR/HR), Galvanized (GA / GA Perf)"),
-        ("Aluminum",           None,                   None,                              None),
-        (None, "aluminum_structural",  "Aluminum — Structural",            "Al Angle / Sq Tube / Channel / Round / Square / Flat"),
-        (None, "aluminum_sheet",       "Aluminum — Sheet",                 "Aluminum Sheet — Standard / Tread Brite"),
-        ("Stainless",          None,                   None,                              None),
-        (None, "stainless_structural", "Stainless — Structural",           "SS Round bar, SS Square bar"),
-        (None, "stainless_sheet",      "Stainless — Sheet",                "SS Sheet — #4 / 2B / STD"),
-        ("Other",              None,                   None,                              None),
-        (None, "misc",                 "Miscellaneous",                    "Decking, Exp. Metal, Grip Struts, Bar Grating, Rebar, Steel Wire"),
+        (None, "steel_wide_flange",    "Steel — Wide Flange",              "W-series wide flange beams"),
+        (None, "steel_tstock",         "Steel — T-Stock",                  "T-shaped structural stock"),
+        (None, "steel_columns",        "Steel — Columns",                  "Columns (N/S)"),
+        ("Carbon Steel — Bar",         None, None, None),
+        (None, "steel_flat_bar",       "Steel — Flat Bar",                 "HR/CR flat bar"),
+        (None, "steel_round_bar",      "Steel — Round Bar",                "HR/CR round bar"),
+        (None, "steel_square_bar",     "Steel — Square Bar",               "HR/CR square bar"),
+        (None, "steel_strip_hr",       "Steel — HR Strip",                 "Hot-rolled dry strip"),
+        ("Carbon Steel — Plate & Sheet", None, None, None),
+        (None, "steel_plate_a36",      "Steel — Plate A36",                "A36 structural plate"),
+        (None, "steel_plate_ar400",    "Steel — Plate AR400",              "AR400 abrasion-resistant plate"),
+        (None, "steel_floor_plate",    "Steel — Floor Plate",              "Diamond / tread plate"),
+        (None, "steel_sheet_hr",       "Steel — Sheet HR",                 "Hot-rolled sheet"),
+        (None, "steel_sheet_cr",       "Steel — Sheet CR",                 "Cold-rolled sheet"),
+        (None, "steel_sheet_galv",     "Steel — Sheet Galvanized",         "Galvanized sheet"),
+        (None, "steel_sheet_perf",     "Steel — Sheet Perforated",         "Perforated sheet"),
+        ("Carbon Steel — Misc",        None, None, None),
+        (None, "steel_expanded",       "Steel — Expanded Metal",           "Expanded metal mesh"),
+        (None, "steel_grip_strut",     "Steel — Grip Strut",               "Steel grip strut / safety grating"),
+        (None, "steel_bar_grating",    "Steel — Bar Grating",              "Welded bar grating panels"),
+        (None, "steel_decking",        "Steel — Floor Decking",            "Corrugated floor decking"),
+        (None, "steel_rebar",          "Steel — Rebar",                    "Deformed reinforcing bar"),
+        ("Aluminum — Structural",      None, None, None),
+        (None, "alum_angle",           "Alum — Angle (Equal)",             "Aluminum equal leg angle"),
+        (None, "alum_angle_unequal",   "Alum — Angle (Unequal)",           "Aluminum unequal leg angle"),
+        (None, "alum_channel",         "Alum — Channel",                   "Aluminum channel"),
+        (None, "alum_flat_bar",        "Alum — Flat Bar",                  "Aluminum flat bar"),
+        (None, "alum_round",           "Alum — Round Bar",                 "Aluminum round bar"),
+        (None, "alum_square_bar",      "Alum — Square Bar",                "Aluminum square bar"),
+        (None, "alum_sq_tube",         "Alum — Sq Tube",                   "Aluminum square tube"),
+        (None, "alum_grip_strut",      "Alum — Grip Strut",                "Aluminum grip strut / safety grating"),
+        ("Aluminum — Sheet",           None, None, None),
+        (None, "alum_sheet",           "Alum — Sheet",                     "Aluminum sheet (3003 / 5052 / 6061)"),
+        (None, "alum_treadbrite",      "Alum — Tread Brite",               "Aluminum tread brite sheet"),
+        ("Stainless",                  None, None, None),
+        (None, "ss_round_bar",         "Stainless — Round Bar",            "Stainless round bar"),
+        (None, "ss_square_bar",        "Stainless — Square Bar",           "Stainless square bar"),
+        (None, "ss_sheet",             "Stainless — Sheet",                "SS Sheet — #4 / 2B / STD"),
+        ("Hardware",                   None, None, None),
+        (None, "hardware_fasteners",   "Hardware — Fasteners",             "Nuts, washers, anchors, threaded rod, studs, pipe elbows"),
+        (None, "hardware_caps",        "Hardware — Caps",                  "Square steel caps, dome caps"),
+        (None, "hardware_gussets",     "Hardware — Gussets",               "Gusset plates"),
+        (None, "hardware_base_plates", "Hardware — Base Plates",           "Base plates"),
+        (None, "hardware_handrail",    "Hardware — Handrail",              "Handrail covers, elbows (90°/55°/35°)"),
+        (None, "hardware_hinges",      "Hardware — Hinges",                "Butt hinges, piano hinges"),
+        ("Other",                      None, None, None),
         (None, "bumper_posts",         "Bumper Posts",                     "Bumper Posts — L-D / H-D"),
         (None, "consumables",          "Consumables",                      "Welding wire, gas, grinding discs, bandsaw blades, paint drums"),
-        (None, "hardware",             "Hardware",                         "Bolts, nuts, anchors, fasteners"),
         (None, "retail",               "Retail / Walk-In",                 "Walk-in retail items (3× cost markup applied automatically)"),
     ]
 
@@ -655,132 +727,4 @@ async def process_audit(
         if notes_raw:
             audit_note += f" Note: {notes_raw}"
 
-        item.quantity_on_hand = counted
-        db.add(InventoryAdjustment(
-            item_id=item.id, delta=delta,
-            reason=AdjustmentReason.correction,
-            notes=audit_note,
-            recorded_by_id=user.id,
-        ))
-        adjusted.append({
-            "sku": sku, "name": item.name,
-            "old": old_qty, "new": counted,
-            "delta": delta, "unit": item.unit,
-        })
-
-    db.commit()
-    return templates.TemplateResponse("inventory/audit_result.html", {
-        "request": request, "user": user,
-        "can_see_financials": financials_visible(user),
-        "adjusted": adjusted, "no_change": no_change,
-        "not_found": not_found, "errors": errors,
-    })
-
-
-# ── Detail ────────────────────────────────────────────────────────────────
-@router.get("/{item_id}", response_class=HTMLResponse)
-async def item_detail(
-    request: Request,
-    item_id: int,
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not user:
-        return RedirectResponse("/auth/login", status_code=302)
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        return RedirectResponse("/inventory", status_code=302)
-
-    return templates.TemplateResponse("inventory/detail.html", {
-        "request":         request,
-        "user":            user,
-        "can_see_financials": financials_visible(user),
-        "item":            item,
-        "category_labels": CATEGORY_LABELS,
-        "reason_labels":   REASON_LABELS,
-        "reasons":         list(AdjustmentReason),
-    })
-
-
-# ── Adjust stock ──────────────────────────────────────────────────────────
-@router.post("/{item_id}/adjust")
-async def adjust_stock(
-    item_id: int,
-    action: str             = Form(...),   # "add" or "remove"
-    amount: float           = Form(...),
-    reason: str             = Form(...),
-    notes: Optional[str]    = Form(None),
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not user:
-        return RedirectResponse("/auth/login", status_code=302)
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        return RedirectResponse("/inventory", status_code=302)
-
-    delta = amount if action == "add" else -amount
-    item.quantity_on_hand = (item.quantity_on_hand or 0) + delta
-
-    adj = InventoryAdjustment(
-        item_id=item.id,
-        delta=delta,
-        reason=AdjustmentReason(reason),
-        notes=notes,
-        recorded_by_id=user.id,
-    )
-    db.add(adj)
-    db.commit()
-    return RedirectResponse(f"/inventory/{item_id}", status_code=302)
-
-
-# ── Edit ──────────────────────────────────────────────────────────────────
-@router.get("/{item_id}/edit", response_class=HTMLResponse)
-async def edit_item_form(
-    request: Request,
-    item_id: int,
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not user:
-        return RedirectResponse("/auth/login", status_code=302)
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        return RedirectResponse("/inventory", status_code=302)
-    return templates.TemplateResponse("inventory/edit.html", {
-        "request":         request,
-        "user":            user,
-        "can_see_financials": financials_visible(user),
-        "item":            item,
-        "categories":      list(InventoryCategory),
-        "category_labels": CATEGORY_LABELS,
-    })
-
-
-@router.post("/{item_id}/edit")
-async def save_item(
-    item_id: int,
-    name: str                          = Form(...),
-    category: str                      = Form(...),
-    description: Optional[str]         = Form(None),
-    unit: str                          = Form(...),
-    reorder_threshold: Optional[float] = Form(None),
-    cost_per_unit: Optional[float]     = Form(None),
-    location: Optional[str]            = Form(None),
-    supplier_name: Optional[str]       = Form(None),
-    supplier_contact: Optional[str]    = Form(None),
-    notes: Optional[str]               = Form(None),
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not user:
-        return RedirectResponse("/auth/login", status_code=302)
-    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
-    if not item:
-        return RedirectResponse("/inventory", status_code=302)
-
-    item.name              = name
-    item.category          = InventoryCategory(category)
-    item.description       = description
-    item.unit              = unit
-    item.reorder_
+        item.quantity_on_hand = 

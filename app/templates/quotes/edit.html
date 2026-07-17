@@ -15,7 +15,7 @@
         <div class="col-span-2">
           <label class="block text-sm font-medium text-gray-700 mb-1">Customer</label>
           <div class="flex items-center gap-3">
-            <span class="font-semibold text-steel-dark">{{ quote.customer.name }}</span>
+            <span class="font-semibold text-steel-dark">{{ quote.customer.display_name }}</span>
             {% if quote.customer.company %}<span class="text-gray-400 text-sm">{{ quote.customer.company }}</span>{% endif %}
           </div>
           <input type="hidden" name="customer_id" value="{{ quote.customer_id }}"/>
@@ -362,4 +362,4 @@ function onJobTypeChange(val) {
   document.getElementById('beam-notice').classList.toggle('hidden', val !== 'beam');
 }
 </script>
-{% endblock %}
+{% endb

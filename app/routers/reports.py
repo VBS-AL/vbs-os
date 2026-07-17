@@ -17,6 +17,7 @@ from app.models.production import ProductionStage, StageType, StageStatus
 from sqlalchemy import or_, case
 from app.models.settings import AppSetting
 from app.models.user import UserRole
+from app.models.inventory import InventoryItem
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 templates = Jinja2Templates(directory="app/templates")
@@ -236,12 +237,81 @@ async def reports_index(
     fab_pct    = round(fab_revenue_raw    / revenue_invoiced * 100, 1) if revenue_invoiced else None
 
     dept_labels = {
-        "fab":      "Fabrication",
-        "weld":     "Welding",
-        "paint":    "Paint",
-        "install":  "Installation",
-        "other":    "Other",
+        "general_labor":       "General Labor",
+        "steel_fabrication":   "Steel Fabrication",
+        "aluminum_structural": "Aluminum / Structural",
+        "fab":                 "Fabrication",
+        "weld":                "Welding",
+        "paint":               "Paint",
+        "install":             "Installation",
+        "other":               "Other",
     }
+
+    # ── Monthly revenue trend (last 12 months) ────────────────────────────
+    trend_start = date(today.year - 1, today.month, 1)
+    monthly_raw = db.query(
+        func.strftime('%Y-%m', Invoice.invoice_date).label('month'),
+        func.sum(Invoice.total).label('revenue'),
+    ).filter(
+        Invoice.invoice_date >= trend_start,
+        Invoice.payment_status != PaymentStatus.void,
+    ).group_by(func.strftime('%Y-%m', Invoice.invoice_date)).all()
+
+    monthly_map = {row.month: float(row.revenue or 0) for row in monthly_raw}
+    monthly_trend = []
+    for i in range(11, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        key   = f"{y:04d}-{m:02d}"
+        label = date(y, m, 1).strftime('%b %y')
+        monthly_trend.append({"key": key, "label": label, "revenue": monthly_map.get(key, 0.0)})
+    trend_max = max((t["revenue"] for t in monthly_trend), default=1) or 1
+
+    # ── AR aging breakdown ────────────────────────────────────────────────
+    ar_open = db.query(Invoice).options(
+        joinedload(Invoice.order).joinedload(Order.customer)
+    ).filter(
+        Invoice.balance_due > 0,
+        Invoice.payment_status.notin_([PaymentStatus.paid, PaymentStatus.void]),
+    ).all()
+
+    ar_buckets = [
+        {"label": "Current (0–30 days)",  "key": "current",  "invoices": [], "total": 0.0},
+        {"label": "31–60 days",           "key": "days3160", "invoices": [], "total": 0.0},
+        {"label": "61–90 days",           "key": "days6190", "invoices": [], "total": 0.0},
+        {"label": "90+ days",             "key": "over90",   "invoices": [], "total": 0.0},
+    ]
+    for inv in ar_open:
+        age = (today - inv.invoice_date).days
+        if age <= 30:   b = ar_buckets[0]
+        elif age <= 60: b = ar_buckets[1]
+        elif age <= 90: b = ar_buckets[2]
+        else:           b = ar_buckets[3]
+        b["invoices"].append({"inv": inv, "age": age,
+                              "customer": inv.order.customer.display_name if inv.order and inv.order.customer else "—"})
+        b["total"] += inv.balance_due or 0.0
+    ar_total = sum(b["total"] for b in ar_buckets)
+
+    # ── Inventory value snapshot ──────────────────────────────────────────
+    inventory_value = db.query(
+        func.sum(InventoryItem.quantity_on_hand * InventoryItem.cost_per_unit)
+    ).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.cost_per_unit != None,
+    ).scalar() or 0.0
+
+    inventory_total_count  = db.query(InventoryItem).filter(InventoryItem.is_active == True).count()
+    inventory_costed_count = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True, InventoryItem.cost_per_unit != None,
+    ).count()
+    inventory_low_stock = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.reorder_threshold != None,
+        InventoryItem.quantity_on_hand <= InventoryItem.reorder_threshold,
+    ).count()
 
     return templates.TemplateResponse("reports/index.html", {
         "request":          request,
@@ -292,6 +362,17 @@ async def reports_index(
         "max_cycle_days":            max_cycle_days,
         "method_rows":               method_rows,
         "total_fulfilled":           total_fulfilled,
+        # monthly trend
+        "monthly_trend":             monthly_trend,
+        "trend_max":                 trend_max,
+        # AR aging
+        "ar_buckets":                ar_buckets,
+        "ar_total":                  ar_total,
+        # inventory
+        "inventory_value":           inventory_value,
+        "inventory_total_count":     inventory_total_count,
+        "inventory_costed_count":    inventory_costed_count,
+        "inventory_low_stock":       inventory_low_stock,
     })
 
 
@@ -315,130 +396,43 @@ DEPT_LABELS = {
 
 
 # ── Margin & Estimating Report ────────────────────────────────────────────
-@router.get("/margin", response_class=HTMLResponse)
-async def margin_report(
-    request: Request,
-    sort_by: str = "margin_pct",
-    sort_dir: str = "asc",
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not user:
-        return RedirectResponse("/auth/login", status_code=302)
-    if user.role != UserRole.owner:
-        return RedirectResponse("/reports", status_code=302)
 
-    labor_cost_rates = _get_labor_cost_rates(db)
+MARGIN_PERIOD_LABELS = {
+    "all": "All Time",
+    "ytd": "Year to Date",
+    "qtd": "Quarter to Date",
+    "mtd": "Month to Date",
+    "90d": "Last 90 Days",
+    "30d": "Last 30 Days",
+}
 
-    # Load all invoiced/paid orders with everything we need
-    orders = (
-        db.query(Order)
-        .options(
-            joinedload(Order.customer),
-            joinedload(Order.invoice),
-            joinedload(Order.quote),
-            joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
-            joinedload(Order.labor_entries).joinedload(LaborEntry.employee),
-        )
-        .filter(Order.status.in_([OrderStatus.invoiced, OrderStatus.paid]))
-        .all()
-    )
+JOB_TYPE_LABELS = {
+    "fabrication": "Fabrication",
+    "retail":      "Retail",
+    "custom":      "Custom",
+    "other":       "Other",
+}
 
+
+def _build_margin_rows(orders):
+    """Convert a list of Order ORM objects into margin row dicts."""
     rows = []
     for order in orders:
         inv = order.invoice
-        if not inv or inv.payment_status.value == "void":
+        if not inv:
             continue
 
         revenue = inv.total or 0.0
 
-        # Materials cost — only inventory-linked items have cost data
         mat_cost = 0.0
         has_partial_cost = False
         for li in order.line_items:
-            if li.is_delivery_surcharge:
+            if getattr(li, "is_delivery_surcharge", False):
                 continue
             if li.inventory_item and li.inventory_item.cost_per_unit:
                 mat_cost += li.inventory_item.cost_per_unit * (li.quantity or 1)
             else:
-                has_partial_cost = True  # non-linked item — cost unknown
+                has_partial_cost = True
 
-        # Labor cost at each employee's individual cost rate
         labor_cost = sum(
-            (e.hours or 0) * (e.employee.hourly_cost_rate or 0)
-            for e in order.labor_entries
-            if e.employee
-        )
-
-        total_cost = mat_cost + labor_cost
-        gross_profit = revenue - total_cost
-        margin_pct = round(gross_profit / revenue * 100, 1) if revenue > 0 else None
-
-        # Estimate accuracy (requires linked quote with total_estimated)
-        estimate = None
-        variance = None
-        variance_pct = None
-        if order.quote and order.quote.total_estimated:
-            estimate = order.quote.total_estimated
-            variance = revenue - estimate
-            variance_pct = round(variance / estimate * 100, 1) if estimate > 0 else None
-
-        rows.append({
-            "order":         order,
-            "revenue":       revenue,
-            "mat_cost":      mat_cost,
-            "labor_cost":    labor_cost,
-            "total_cost":    total_cost,
-            "gross_profit":  gross_profit,
-            "margin_pct":    margin_pct,
-            "partial_cost":  has_partial_cost,
-            "estimate":      estimate,
-            "variance":      variance,
-            "variance_pct":  variance_pct,
-        })
-
-    # Sort
-    def _sort_key(r):
-        if sort_by == "revenue":        return r["revenue"] or 0
-        if sort_by == "gross_profit":   return r["gross_profit"] or 0
-        if sort_by == "mat_cost":       return r["mat_cost"] or 0
-        if sort_by == "labor_cost":     return r["labor_cost"] or 0
-        if sort_by == "total_cost":     return r["total_cost"] or 0
-        if sort_by == "estimate":       return r["estimate"] or 0
-        if sort_by == "variance_pct":   return r["variance_pct"] or 0
-        if sort_by == "customer":
-            return (r["order"].customer.name if r["order"].customer else "")
-        if sort_by == "order_number":
-            return r["order"].order_number or ""
-        return r["margin_pct"] if r["margin_pct"] is not None else -999
-
-    rows.sort(key=_sort_key, reverse=(sort_dir == "desc"))
-
-    # Summary stats (only rows with a margin_pct)
-    margin_rows = [r for r in rows if r["margin_pct"] is not None]
-    avg_margin   = round(sum(r["margin_pct"] for r in margin_rows) / len(margin_rows), 1) if margin_rows else None
-    total_rev    = sum(r["revenue"] for r in rows)
-    total_profit = sum(r["gross_profit"] for r in rows)
-    total_cost   = sum(r["total_cost"] for r in rows)
-
-    # Estimate accuracy summary
-    est_rows     = [r for r in rows if r["variance_pct"] is not None]
-    avg_variance = round(sum(r["variance_pct"] for r in est_rows) / len(est_rows), 1) if est_rows else None
-    over_count   = sum(1 for r in est_rows if (r["variance"] or 0) > 0)
-    under_count  = sum(1 for r in est_rows if (r["variance"] or 0) < 0)
-
-    from app.models.user import User as UserModel
-    rates_configured = db.query(UserModel).filter(
-        UserModel.hourly_cost_rate != None,
-        UserModel.hourly_cost_rate > 0,
-    ).count() > 0
-
-    return templates.TemplateResponse("reports/margin.html", {
-        "request":           request,
-        "user":              user,
-        "can_see_financials": True,
-        "orders":            order_rows,
-        "sort_by":           sort_by,
-        "sort_dir":          sort_dir,
-        "rates_configured":  rates_configured,
-    })
+            (e.hours or 0) * (e.employee

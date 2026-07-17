@@ -63,6 +63,19 @@
                  class="w-full border border-gray-200 rounded-lg pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
         </div>
       </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Weight per Unit <span class="text-gray-400 font-normal">(lbs)</span></label>
+        <input type="number" name="weight_per_unit" step="0.01" min="0"
+               value="{{ item.weight_per_unit if item.weight_per_unit is not none else '' }}"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Retail Markup <span class="text-gray-400 font-normal">(×)</span></label>
+        <input type="number" name="retail_markup" step="0.1" min="0"
+               value="{{ item.retail_markup if item.retail_markup is not none else '' }}"
+               placeholder="e.g. 3.0"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
       <div class="col-span-3">
         <label class="block text-xs font-medium text-gray-600 mb-1">Shop Location</label>
         <input type="hidden" name="location" id="location-value" value="{{ item.location or '' }}">
@@ -109,28 +122,4 @@
       <div class="col-span-2">
         <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
         <textarea name="notes" rows="2"
-                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">{{ item.notes or '' }}</textarea>
-      </div>
-    </div>
-  </div>
-
-  <div class="flex gap-3">
-    <button type="submit" class="bg-steel-dark text-white px-6 py-2 rounded-lg hover:bg-steel-mid transition text-sm font-medium">
-      Save Changes
-    </button>
-    <a href="/inventory/{{ item.id }}" class="px-6 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</a>
-  </div>
-</form>
-
-<script>
-function buildLocation() {
-  const area = document.getElementById('loc-area').value;
-  const rack = document.getElementById('loc-rack').value;
-  const row  = document.getElementById('loc-row').value;
-  const parts = [area, rack, row].filter(Boolean);
-  const val = parts.join(' / ');
-  document.getElementById('location-value').value = val;
-  document.getElementById('location-preview').textContent = val ? '📍 ' + val : '';
-}
-</script>
-{% endblock %}
+                  class="w-full border border-gray-200 rou

@@ -115,7 +115,7 @@
         </td>
 
         <!-- Customer -->
-        <td class="px-4 py-3 font-medium text-gray-800">{{ o.customer.name if o.customer else '&#x2014;' }}</td>
+        <td class="px-4 py-3 font-medium text-gray-800">{{ o.customer.display_name if o.customer else '&#x2014;' }}</td>
 
         <!-- Priority -->
         <td class="px-4 py-3">
@@ -533,4 +533,4 @@ document.addEventListener('submit', function(e) {
   });
 });
 </script>
-{% endblock %}
+{% endb

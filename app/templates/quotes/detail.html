@@ -48,7 +48,7 @@
         <span class="font-mono font-semibold text-steel-mid">{{ quote.quote_number }}</span>
       </div>
       <h1 class="text-2xl font-bold text-steel-dark">
-        {{ quote.customer.name if quote.customer else '—' }}
+        {{ quote.customer.display_name if quote.customer else '—' }}
         <span class="text-base font-normal text-gray-400 ml-2">{{ quote.job_type.replace('_',' ').title() }}</span>
       </h1>
     </div>
@@ -313,7 +313,7 @@
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Customer</h2>
         <div class="text-sm space-y-1">
-          <div class="font-semibold">{{ quote.customer.name }}</div>
+          <div class="font-semibold">{{ quote.customer.display_name }}</div>
           {% if quote.customer.company %}<div class="text-gray-500">{{ quote.customer.company }}</div>{% endif %}
           {% if quote.customer.phone %}<div class="text-gray-500">{{ quote.customer.phone }}</div>{% endif %}
           {% if quote.customer.email %}<div class="text-gray-500">{{ quote.customer.email }}</div>{% endif %}
@@ -324,4 +324,3 @@
     </div>
   </div>
 </div>
-{% endblock %}

@@ -107,9 +107,9 @@
     <tbody class="divide-y divide-gray-100">
       {% for o in orders %}
       <tr class="hover:bg-steel-light cursor-pointer transition order-row" onclick="window.location='/orders/{{ o.id }}'"
-          data-search="{{ o.order_number }} {{ o.customer.name if o.customer else '' }} {{ o.status.value }} {{ o.job_type.value }}">
+          data-search="{{ o.order_number }} {{ o.customer.display_name if o.customer else '' }} {{ o.status.value }} {{ o.job_type.value }}">
         <td class="px-4 py-3 font-mono font-semibold text-steel-mid">{{ o.order_number }}</td>
-        <td class="px-4 py-3 font-medium">{{ o.customer.name if o.customer else '—' }}</td>
+        <td class="px-4 py-3 font-medium">{{ o.customer.display_name if o.customer else '—' }}</td>
         <td class="px-4 py-3 text-gray-600 capitalize">{{ o.job_type.value.replace('_',' ') }}</td>
         <td class="px-4 py-3">
           {% set s = o.status.value %}
@@ -176,4 +176,3 @@
   });
 })();
 </script>
-{% endblock %}

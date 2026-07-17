@@ -70,7 +70,7 @@
       {% set days_late = (today - o.promised_date).days %}
       <tr class="hover:bg-red-100 cursor-pointer transition" onclick="window.location='/orders/{{ o.id }}'">
         <td class="px-5 py-2.5 font-mono font-medium text-steel-mid">{{ o.order_number }}</td>
-        <td class="px-5 py-2.5 text-gray-700">{{ o.customer.name if o.customer else '—' }}</td>
+        <td class="px-5 py-2.5 text-gray-700">{{ o.customer.display_name if o.customer else '—' }}</td>
         <td class="px-5 py-2.5">
           <span class="px-2 py-0.5 rounded-full text-xs font-medium
             {% if o.status.value == 'on_hold' %}bg-yellow-100 text-yellow-800
@@ -130,23 +130,37 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
   <a href="/orders?status=active" class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid hover:shadow-md hover:bg-steel-light transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Active Orders Value</p>
-    <p class="text-2xl font-bold text-steel-dark mt-1">${{ "{:,.0f}".format(active_total) }}</p>
+    <p class="text-2xl font-bold text-steel-dark mt-1">${{ "{:,.2f}".format(active_total) }}</p>
     <p class="text-xs text-gray-400 mt-1">Total pipeline</p>
   </a>
   <a href="/orders?status=on_hold" class="bg-white rounded-xl shadow p-5 border-l-4 border-yellow-400 hover:shadow-md hover:bg-yellow-50 transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">On Hold Value</p>
-    <p class="text-2xl font-bold text-yellow-600 mt-1">${{ "{:,.0f}".format(on_hold_value) }}</p>
+    <p class="text-2xl font-bold text-yellow-600 mt-1">${{ "{:,.2f}".format(on_hold_value) }}</p>
     <p class="text-xs text-gray-400 mt-1">Tied-up value</p>
   </a>
   <a href="/orders?status=ready" class="bg-white rounded-xl shadow p-5 border-l-4 border-green-400 hover:shadow-md hover:bg-green-50 transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Ready to Invoice</p>
-    <p class="text-2xl font-bold text-green-600 mt-1">${{ "{:,.0f}".format(ready_value) }}</p>
+    <p class="text-2xl font-bold text-green-600 mt-1">${{ "{:,.2f}".format(ready_value) }}</p>
     <p class="text-xs text-gray-400 mt-1">Waiting to go out</p>
   </a>
   <a href="/invoices" class="bg-white rounded-xl shadow p-5 border-l-4 border-red-400 hover:shadow-md hover:bg-red-50 transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Overdue Amount</p>
-    <p class="text-2xl font-bold text-red-600 mt-1">${{ "{:,.0f}".format(overdue_amount) }}</p>
+    <p class="text-2xl font-bold text-red-600 mt-1">${{ "{:,.2f}".format(overdue_amount) }}</p>
     <p class="text-xs text-gray-400 mt-1">Outstanding invoices</p>
+  </a>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-6">
+  <a href="/inventory?filter=low_stock" class="bg-white rounded-xl shadow p-5 border-l-4 {% if low_stock_count > 0 %}border-amber-400 hover:bg-amber-50{% else %}border-gray-200 hover:bg-steel-light{% endif %} hover:shadow-md transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Low Stock Alerts</p>
+    <p class="text-2xl font-bold {% if low_stock_count > 0 %}text-amber-600{% else %}text-gray-400{% endif %} mt-1">{{ low_stock_count }}</p>
+    <p class="text-xs text-gray-400 mt-1">{% if low_stock_count > 0 %}Item{{ 's' if low_stock_count != 1 }} at or below reorder threshold{% else %}All items stocked{% endif %}</p>
+  </a>
+  <a href="/reports" class="bg-white rounded-xl shadow p-5 border-l-4 {% if ar_aging_30_count > 0 %}border-orange-400 hover:bg-orange-50{% else %}border-gray-200 hover:bg-steel-light{% endif %} hover:shadow-md transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">AR Aging 30+ Days</p>
+    <p class="text-2xl font-bold {% if ar_aging_30_count > 0 %}text-orange-600{% else %}text-gray-400{% endif %} mt-1">
+      {% if ar_aging_30_count > 0 %}${{ "{:,.2f}".format(ar_aging_30_amount) }}{% else %}$0{% endif %}
+    </p>
+    <p class="text-xs text-gray-400 mt-1">{% if ar_aging_30_count > 0 %}{{ ar_aging_30_count }} invoice{{ 's' if ar_aging_30_count != 1 }} over 30 days old{% else %}No aging receivables{% endif %}</p>
   </a>
 </div>
 {% endif %}
@@ -158,13 +172,13 @@
     <p class="text-xs text-gray-500 uppercase tracking-wide">Awaiting Customer Response</p>
     <p class="text-3xl font-bold text-blue-600 mt-1">{{ pipeline_quotes_sent|length }}</p>
     {% if can_see_financials and sent_value > 0 %}
-    <p class="text-xs text-gray-400 mt-1">Potential: ${{ "{:,.0f}".format(sent_value) }}</p>
+    <p class="text-xs text-gray-400 mt-1">Potential: ${{ "{:,.2f}".format(sent_value) }}</p>
     {% endif %}
   </a>
   {% if can_see_financials %}
   <a href="/quotes" class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-400 hover:shadow-md hover:bg-emerald-50 transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Total Pipeline Value</p>
-    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.0f}".format(draft_value + sent_value) }}</p>
+    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.2f}".format(draft_value + sent_value) }}</p>
     <p class="text-xs text-gray-400 mt-1">{{ pipeline_quotes_draft|length }} draft{{ 's' if pipeline_quotes_draft|length != 1 }} · {{ pipeline_quotes_sent|length }} sent</p>
   </a>
   {% else %}
@@ -182,26 +196,26 @@
 <div class="grid grid-cols-3 gap-4 mb-8">
   <a href="/orders?status=confirmed" class="bg-white rounded-xl shadow p-5 border-l-4 border-indigo-400 hover:shadow-md hover:bg-indigo-50 transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Backlog (Confirmed, Not Started)</p>
-    <p class="text-3xl font-bold text-indigo-700 mt-1">${{ "{:,.0f}".format(wip_backlog) }}</p>
+    <p class="text-3xl font-bold text-indigo-700 mt-1">${{ "{:,.2f}".format(wip_backlog) }}</p>
     <div class="mt-2 flex justify-between text-xs text-gray-400">
       <span>{{ pipeline.confirmed }} order{{ 's' if pipeline.confirmed != 1 }}</span>
-      <span>Materials: ${{ "{:,.0f}".format(wip_backlog_mat) }} · Labor: ${{ "{:,.0f}".format(wip_backlog - wip_backlog_mat) }}</span>
+      <span>Materials: ${{ "{:,.2f}".format(wip_backlog_mat) }} · Labor: ${{ "{:,.2f}".format(wip_backlog - wip_backlog_mat) }}</span>
     </div>
   </a>
   <a href="/orders?status=wip" class="bg-white rounded-xl shadow p-5 border-l-4 border-blue-500 hover:shadow-md hover:bg-blue-50 transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Active WIP (In Shop)</p>
-    <p class="text-3xl font-bold text-blue-700 mt-1">${{ "{:,.0f}".format(wip_in_shop) }}</p>
+    <p class="text-3xl font-bold text-blue-700 mt-1">${{ "{:,.2f}".format(wip_in_shop) }}</p>
     <div class="mt-2 flex justify-between text-xs text-gray-400">
       <span>In Production · QA · On Hold · Ready</span>
-      <span>Materials: ${{ "{:,.0f}".format(wip_in_shop_mat) }} · Labor: ${{ "{:,.0f}".format(wip_in_shop - wip_in_shop_mat) }}</span>
+      <span>Materials: ${{ "{:,.2f}".format(wip_in_shop_mat) }} · Labor: ${{ "{:,.2f}".format(wip_in_shop - wip_in_shop_mat) }}</span>
     </div>
   </a>
   <a href="/orders?status=active" class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-dark hover:shadow-md hover:bg-steel-light transition block">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Total WIP Value</p>
-    <p class="text-3xl font-bold text-steel-dark mt-1">${{ "{:,.0f}".format(wip_backlog + wip_in_shop) }}</p>
+    <p class="text-3xl font-bold text-steel-dark mt-1">${{ "{:,.2f}".format(wip_backlog + wip_in_shop) }}</p>
     <div class="mt-2 flex justify-between text-xs text-gray-400">
       <span>All active orders</span>
-      <span>Materials: ${{ "{:,.0f}".format(wip_backlog_mat + wip_in_shop_mat) }} · Labor: ${{ "{:,.0f}".format((wip_backlog - wip_backlog_mat) + (wip_in_shop - wip_in_shop_mat)) }}</span>
+      <span>Materials: ${{ "{:,.2f}".format(wip_backlog_mat + wip_in_shop_mat) }} · Labor: ${{ "{:,.2f}".format((wip_backlog - wip_backlog_mat) + (wip_in_shop - wip_in_shop_mat)) }}</span>
     </div>
   </a>
 </div>
@@ -294,36 +308,7 @@
   {% if can_see_financials %}
   <div class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-500">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Revenue Collected</p>
-    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.0f}".format(revenue_collected) }}</p>
+    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.2f}".format(revenue_collected) }}</p>
   </div>
   <div class="bg-white rounded-xl shadow p-5 border-l-4 border-teal-400">
     <p class="text-xs text-gray-500 uppercase tracking-wide">Revenue Invoiced</p>
-    <p class="text-3xl font-bold text-teal-700 mt-1">${{ "{:,.0f}".format(revenue_invoiced) }}</p>
-  </div>
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-orange-400">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Outstanding Balance</p>
-    <p class="text-3xl font-bold text-orange-700 mt-1">${{ "{:,.0f}".format(outstanding) }}</p>
-  </div>
-  {% endif %}
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Orders Created</p>
-    <p class="text-3xl font-bold text-steel-dark mt-1">{{ orders_created }}</p>
-  </div>
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-green-400">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Jobs Completed</p>
-    <p class="text-3xl font-bold text-green-700 mt-1">{{ jobs_completed }}</p>
-  </div>
-  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-purple-400">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Quote Conversion</p>
-    {% if quotes_sent > 0 %}
-    <p class="text-3xl font-bold text-purple-700 mt-1">{{ "%.0f"|format(quotes_converted / quotes_sent * 100) }}%</p>
-    <p class="text-xs text-gray-400 mt-1">{{ quotes_converted }} of {{ quotes_sent }} sent</p>
-    {% else %}
-    <p class="text-3xl font-bold text-purple-700 mt-1">—</p>
-    <p class="text-xs text-gray-400 mt-1">No quotes sent</p>
-    {% endif %}
-  </div>
-</div>
-
-
-{% endblock %}

@@ -142,6 +142,10 @@
     <div class="bg-white rounded-xl shadow p-5">
       <h3 class="font-semibold text-steel-dark mb-3 text-sm">Item Info</h3>
       <dl class="space-y-2 text-sm">
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">SKU</dt>
+          <dd class="text-gray-700 mt-0.5 font-mono">{{ item.sku or '—' }}</dd>
+        </div>
         {% if item.description %}
         <div>
           <dt class="text-xs text-gray-400 uppercase tracking-wide">Description</dt>
@@ -152,16 +156,22 @@
           <dt class="text-xs text-gray-400 uppercase tracking-wide">Unit</dt>
           <dd class="text-gray-700 mt-0.5">{{ item.unit }}</dd>
         </div>
-        {% if item.location %}
         <div>
           <dt class="text-xs text-gray-400 uppercase tracking-wide">Shop Location</dt>
-          <dd class="text-gray-700 mt-0.5">{{ item.location }}</dd>
+          <dd class="mt-0.5 {% if item.location %}text-gray-700{% else %}text-gray-400 italic{% endif %}">
+            {{ item.location or 'Not set' }}
+          </dd>
         </div>
-        {% endif %}
         {% if can_see_financials and item.cost_per_unit %}
         <div>
           <dt class="text-xs text-gray-400 uppercase tracking-wide">Cost / Unit</dt>
           <dd class="text-gray-700 mt-0.5">${{ "%.2f"|format(item.cost_per_unit) }}</dd>
+        </div>
+        {% endif %}
+        {% if item.weight_per_unit %}
+        <div>
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Weight / Unit</dt>
+          <dd class="text-gray-700 mt-0.5">{{ item.weight_per_unit }} lbs</dd>
         </div>
         {% endif %}
       </dl>
@@ -177,21 +187,4 @@
         </div>
         {% if item.supplier_contact %}
         <div>
-          <dt class="text-xs text-gray-400 uppercase tracking-wide">Contact</dt>
-          <dd class="text-gray-700 mt-0.5">{{ item.supplier_contact }}</dd>
-        </div>
-        {% endif %}
-      </dl>
-    </div>
-    {% endif %}
-
-    {% if item.notes %}
-    <div class="bg-white rounded-xl shadow p-5">
-      <h3 class="font-semibold text-steel-dark mb-2 text-sm">Notes</h3>
-      <p class="text-sm text-gray-600">{{ item.notes }}</p>
-    </div>
-    {% endif %}
-  </div>
-
-</div>
-{% endblock %}
+      

@@ -28,21 +28,21 @@
 
     <!-- Desktop nav links -->
     <div class="hidden lg:flex items-center gap-5 flex-1 ml-4">
-      <a href="/dashboard" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Dashboard</a>
-      <a href="/quotes"    class="text-sm hover:text-amber-300 transition whitespace-nowrap">Quotes</a>
-      <a href="/orders"    class="text-sm hover:text-amber-300 transition whitespace-nowrap">Orders</a>
-      {% if can_see_financials %}<a href="/invoices" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Invoices</a>{% endif %}
-      {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
-      <a href="/customers"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Customers</a>
-      {% endif %}
-      <a href="/inventory"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Inventory</a>
+      <a href="/dashboard"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Dashboard</a>
+      <a href="/quotes"     class="text-sm hover:text-amber-300 transition whitespace-nowrap">Quotes</a>
+      <a href="/orders"     class="text-sm hover:text-amber-300 transition whitespace-nowrap">Orders</a>
       <a href="/production" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Production</a>
       {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
       <a href="/fulfillment" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Fulfillment</a>
       {% endif %}
+      {% if can_see_financials %}<a href="/invoices" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Invoices</a>{% endif %}
+      <a href="/inventory"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Inventory</a>
+      {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
+      <a href="/customers"  class="text-sm hover:text-amber-300 transition whitespace-nowrap">Customers</a>
+      {% endif %}
       {% if user.role.value in ["owner","ops_manager"] %}
-      <a href="/reports" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Reports</a>
       <a href="/users"   class="text-sm hover:text-amber-300 transition whitespace-nowrap">Team</a>
+      <a href="/reports" class="text-sm hover:text-amber-300 transition whitespace-nowrap">Reports</a>
       {% endif %}
     </div>
 
@@ -76,20 +76,20 @@
       <a href="/dashboard"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Dashboard</a>
       <a href="/quotes"     class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Quotes</a>
       <a href="/orders"     class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Orders</a>
-      {% if can_see_financials %}
-      <a href="/invoices"   class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Invoices</a>
-      {% endif %}
-      {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
-      <a href="/customers"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Customers</a>
-      {% endif %}
-      <a href="/inventory"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Inventory</a>
       <a href="/production" class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Production</a>
       {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
       <a href="/fulfillment" class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Fulfillment</a>
       {% endif %}
+      {% if can_see_financials %}
+      <a href="/invoices"   class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Invoices</a>
+      {% endif %}
+      <a href="/inventory"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Inventory</a>
+      {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
+      <a href="/customers"  class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Customers</a>
+      {% endif %}
       {% if user.role.value in ["owner","ops_manager"] %}
-      <a href="/reports"    class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Reports</a>
       <a href="/users"      class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Team</a>
+      <a href="/reports"    class="py-2 text-sm hover:text-amber-300 transition border-b border-blue-900">Reports</a>
       {% endif %}
       <!-- User info + logout at bottom of mobile menu -->
       <div class="pt-2 flex items-center justify-between">
@@ -122,4 +122,4 @@
 </main>
 
 </body>
-</html>
+</htm

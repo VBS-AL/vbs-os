@@ -58,9 +58,9 @@
       <tbody class="divide-y divide-gray-100">
         {% for inv in invoices %}
         <tr class="hover:bg-gray-50 transition invoice-row"
-            data-search="{{ inv.invoice_number }} {{ inv.order.customer.name if inv.order and inv.order.customer else '' }} {{ inv.payment_status.value }}">
+            data-search="{{ inv.invoice_number }} {{ inv.order.customer.display_name if inv.order and inv.order.customer else '' }} {{ inv.payment_status.value }}">
           <td class="px-5 py-3 font-mono font-semibold text-steel-mid">{{ inv.invoice_number }}</td>
-          <td class="px-5 py-3 font-medium">{{ inv.order.customer.name if inv.order and inv.order.customer else '—' }}</td>
+          <td class="px-5 py-3 font-medium">{{ inv.order.customer.display_name if inv.order and inv.order.customer else '—' }}</td>
           <td class="px-5 py-3 text-gray-500">{{ inv.invoice_date.strftime('%b %d, %Y') if inv.invoice_date else '—' }}</td>
           <td class="px-5 py-3 {% if inv.due_date and inv.due_date < today and inv.payment_status.value not in ['paid','void'] %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">
             {{ inv.due_date.strftime('%b %d, %Y') if inv.due_date else '—' }}
@@ -106,4 +106,3 @@
 })();
 </script>
 {% endif %}
-{% endblock %}

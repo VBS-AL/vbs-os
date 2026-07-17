@@ -220,7 +220,7 @@
   <div>
     <h1>Packing List — {{ order.order_number }}</h1>
     <div style="font-size:11px; opacity:0.8; margin-top:2px;">
-      {{ order.customer.name if order.customer else '—' }}
+      {{ order.customer.display_name if order.customer else '—' }}
       {% if pl and pl.date_shipped %} · {% if order and order.preferred_delivery_method == 'customer_pickup' %}Picked Up{% else %}Shipped{% endif %} {{ pl.date_shipped.strftime('%b %d, %Y') }}{% endif %}
     </div>
   </div>
@@ -361,5 +361,4 @@ ________________{% endif %}</div>
         <div class="footer-label">Cartons</div>
         <div class="footer-value">{{ pl.cartons if pl and pl.cartons is not none else '____' }}</div>
       </div>
-      <div class="footer-box">
-      
+      <div class="footer-box"

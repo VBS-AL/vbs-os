@@ -104,6 +104,7 @@ async def dashboard(
     from sqlalchemy import not_, exists, or_ as sa_or
     from app.models.invoice import Invoice, Payment, PaymentStatus
     from app.models.quote import Quote, QuoteStatus
+    from app.models.inventory import InventoryItem
 
     # ── Period start date ──────────────────────────────────────────────────
     today = date.today()
@@ -316,6 +317,26 @@ async def dashboard(
     draft_value = sum(_quote_total(q) for q in pipeline_quotes_draft) if can_fin else 0
     sent_value  = sum(_quote_total(q) for q in pipeline_quotes_sent)  if can_fin else 0
 
+    # ── Low stock alert ───────────────────────────────────────────────────
+    low_stock_count = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.reorder_threshold != None,
+        InventoryItem.quantity_on_hand <= InventoryItem.reorder_threshold,
+    ).count()
+
+    # ── AR aging signal (30+ days) ────────────────────────────────────────
+    ar_aging_cutoff = today - timedelta(days=30)
+    ar_aging_30_count = db.query(Invoice).filter(
+        Invoice.balance_due > 0,
+        Invoice.payment_status.notin_([PaymentStatus.paid, PaymentStatus.void]),
+        Invoice.invoice_date <= ar_aging_cutoff,
+    ).count() if can_fin else 0
+    ar_aging_30_amount = db.query(func.sum(Invoice.balance_due)).filter(
+        Invoice.balance_due > 0,
+        Invoice.payment_status.notin_([PaymentStatus.paid, PaymentStatus.void]),
+        Invoice.invoice_date <= ar_aging_cutoff,
+    ).scalar() or 0.0 if can_fin else 0.0
+
     return templates.TemplateResponse("dashboard/index.html", {
         "request":          request,
         "user":             user,
@@ -334,29 +355,4 @@ async def dashboard(
         # period metrics
         "revenue_collected":  revenue_collected,
         "revenue_invoiced":   revenue_invoiced,
-        "outstanding":        outstanding,
-        "orders_created":     orders_created,
-        "jobs_completed":     jobs_completed,
-        "quotes_sent":        quotes_sent,
-        "quotes_converted":   quotes_converted,
-        "pipeline":           pipeline,
-        "overdue_orders":     overdue_orders,
-        "today":              today,
-        "pipeline_quotes_draft": pipeline_quotes_draft,
-        "pipeline_quotes_sent":  pipeline_quotes_sent,
-        "draft_value":           draft_value,
-        "sent_value":            sent_value,
-        "wip_backlog":        wip_backlog,
-        "wip_backlog_mat":    wip_backlog_mat if can_fin else 0,
-        "wip_in_shop":        wip_in_shop,
-        "wip_in_shop_mat":    wip_in_shop_mat if can_fin else 0,
-        "active_total":       active_total,
-        "on_hold_value":      on_hold_value,
-        "ready_value":        ready_value,
-        "overdue_amount":     overdue_amount,
-        "awaiting_pl_count":        awaiting_pl_count,
-        "awaiting_check_count":     awaiting_check_count,
-        "ready_to_fulfill_count":   ready_to_fulfill_count,
-        "fulfilled_today":          fulfilled_today,
-        "pl_awaiting_check_alert":  pl_awaiting_check_alert,
-    })
+        "outstanding":        outstan

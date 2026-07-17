@@ -52,9 +52,9 @@
       <tbody class="divide-y divide-gray-100">
         {% for qt in quotes %}
         <tr class="hover:bg-gray-50 cursor-pointer transition quote-row" onclick="window.location='/quotes/{{ qt.id }}'"
-            data-search="{{ qt.quote_number }} {{ qt.customer.name if qt.customer else '' }} {{ qt.status.value }} {{ qt.job_type or '' }}">
+            data-search="{{ qt.quote_number }} {{ qt.customer.display_name if qt.customer else '' }} {{ qt.status.value }} {{ qt.job_type or '' }}">
           <td class="px-5 py-3 font-mono font-semibold text-steel-mid">{{ qt.quote_number }}</td>
-          <td class="px-5 py-3 font-medium">{{ qt.customer.name if qt.customer else '—' }}</td>
+          <td class="px-5 py-3 font-medium">{{ qt.customer.display_name if qt.customer else '—' }}</td>
           <td class="px-5 py-3 text-center">
             <span class="px-2 py-0.5 rounded text-xs font-medium
               {% if qt.status.value == 'converted' %}bg-green-100 text-green-700
@@ -108,4 +108,3 @@
   });
 })();
 </script>
-{% endblock %}
