@@ -100,15 +100,30 @@
         </tr>
       </thead>
       <tbody>
-        {% set ns = namespace(delivery=0) %}
+        {% set ns = namespace(delivery=0, subtotal=0) %}
         {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {# Determine whether to use actual or estimated labor #}
+        {% set tel = namespace(v=0) %}
+        {% for li in inv.order.line_items %}
+          {% if not li.is_delivery_surcharge %}
+            {% set tel.v = tel.v + (li.estimated_labor_hours or 0) * labor_rates.get(li.estimated_labor_dept or '', 0) %}
+          {% endif %}
+        {% endfor %}
+        {% set total_actual_labor = inv.order.labor_entries | sum(attribute='billed_value') if inv.order.labor_entries else 0 %}
+        {% set use_actual = total_actual_labor > tel.v %}
         {% for li in inv.order.line_items %}
         {% if li.is_delivery_surcharge %}
           {% set ns.delivery = ns.delivery + (li.unit_price or 0) * li.quantity %}
         {% else %}
         {% set mat = (li.unit_price or 0) * li.quantity %}
-        {% set labor = (li.estimated_labor_hours or 0) * labor_rates.get(li.estimated_labor_dept or '', 0) %}
+        {% set est_labor = (li.estimated_labor_hours or 0) * labor_rates.get(li.estimated_labor_dept or '', 0) %}
+        {% if use_actual and tel.v > 0 %}
+          {% set labor = total_actual_labor * (est_labor / tel.v) %}
+        {% else %}
+          {% set labor = est_labor %}
+        {% endif %}
         {% set line_total = mat + labor %}
+        {% set ns.subtotal = ns.subtotal + line_total %}
         {% set unit_price = line_total / li.quantity if li.quantity else 0 %}
         <tr class="border-b border-gray-100">
           <td class="py-2">{{ li.description }}</td>
@@ -119,25 +134,18 @@
         </tr>
         {% endif %}
         {% endfor %}
-        {% if inv.order.labor_entries %}
-        {% set actual_labor = inv.order.labor_entries | sum(attribute='billed_value') %}
-        <tr class="border-b border-gray-100">
-          <td class="py-2 text-gray-600">Fabrication & Labor Services</td>
-          <td class="py-2">—</td>
-          <td class="text-right pr-4 py-2">—</td>
-          <td class="text-right py-2">${{ '%.2f'|format(actual_labor) }}</td>
-        </tr>
-        {% endif %}
       </tbody>
     </table>
   </div>
   {% endif %}
 
-  <!-- Totals -->
+  <!-- Totals — computed from displayed line items so they always match -->
+  {% set displayed_total = ns.subtotal + ns.delivery + inv.tax %}
+  {% set displayed_balance = displayed_total - (inv.amount_paid or 0) %}
   <div class="flex justify-end mb-8">
     <div class="w-64 text-sm space-y-2">
       <div class="flex justify-between text-gray-600">
-        <span>Subtotal</span><span>${{ '%.2f'|format(inv.subtotal) }}</span>
+        <span>Subtotal</span><span>${{ '%.2f'|format(ns.subtotal) }}</span>
       </div>
       {% if ns.delivery > 0 %}
       <div class="flex justify-between text-gray-600">
@@ -150,31 +158,11 @@
       </div>
       {% endif %}
       <div class="flex justify-between font-bold text-lg border-t-2 border-gray-800 pt-2">
-        <span>Total Due</span><span>${{ '%.2f'|format(inv.total) }}</span>
+        <span>Total Due</span><span>${{ '%.2f'|format(displayed_total) }}</span>
       </div>
       {% if inv.amount_paid > 0 %}
       <div class="flex justify-between text-green-600">
         <span>Amount Paid</span><span>${{ '%.2f'|format(inv.amount_paid) }}</span>
       </div>
-      <div class="flex justify-between font-semibold border-t border-gray-300 pt-2 {% if inv.balance_due > 0 %}text-red-600{% else %}text-green-600{% endif %}">
-        <span>Balance Due</span><span>${{ '%.2f'|format(inv.balance_due) }}</span>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- Notes -->
-  {% if inv.notes %}
-  <div class="border-t border-gray-200 pt-4 mb-6 text-sm text-gray-600">
-    <div class="font-semibold text-gray-700 mb-1">Notes</div>
-    {{ inv.notes }}
-  </div>
-  {% endif %}
-
-  <!-- Footer -->
-  <div class="border-t border-gray-200 pt-4 text-xs text-gray-400 text-center">
-    Thank you for your business. Please remit payment by {{ inv.due_date.strftime('%B %d, %Y') if inv.due_date else 'the due date' }}.
-  </div>
-
-{% endif %}
-</body>
+      <div class="flex justify-between font-semibold border-t border-gray-300 pt-2 {% if displayed_balance > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+        <span>Balance Due</span><span>${{ '%.2f'|f

@@ -11,6 +11,7 @@ class StageType(str, enum.Enum):
     welding             = "welding"
     finishing           = "finishing"
     qa_qc               = "qa_qc"
+    rework              = "rework"
     delivery            = "delivery"
 
 class StageStatus(str, enum.Enum):
@@ -83,4 +84,4 @@ class DrawingRecord(Base):
     stage_context  = Column(String, nullable=True)
 
     order          = relationship("Order", back_populates="drawing_records")
-    uploaded_by    = relationship("User", foreign_keys=[uploaded_by_id])
+    uploaded_by    = relationship("Use

@@ -2,8 +2,8 @@
 {% block title %}Reports — Van Buren Steel{% endblock %}
 {% block content %}
 
-<!-- Header + period filter -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
   <div>
     <h1 class="text-2xl font-bold text-steel-dark">Reports</h1>
     {% if period == 'custom' %}
@@ -12,46 +12,55 @@
     <p class="text-gray-500 text-sm">{{ period_label }} &mdash; since {{ start_date.strftime('%B %d, %Y') }}</p>
     {% endif %}
   </div>
-  <div class="flex flex-wrap gap-2 items-center">
+  <!-- Sub-report links -->
+  <div class="flex flex-wrap gap-2">
     <a href="/reports/margin"
        class="px-3 py-1.5 rounded-md text-sm font-semibold transition bg-amber-500 hover:bg-amber-400 text-white">
       📊 Margin &amp; Estimating →
     </a>
-    {% for key, label in period_labels.items() %}
-    {% if key != 'custom' %}
-    <a href="?period={{ key }}"
-       class="px-3 py-1.5 rounded-md text-sm font-medium transition border
-         {% if period == key %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
-      {{ label }}
+    <a href="/reports/production"
+       class="px-3 py-1.5 rounded-md text-sm font-semibold transition bg-indigo-600 hover:bg-indigo-500 text-white">
+      🏭 Production Analytics →
     </a>
-    {% endif %}
-    {% endfor %}
+  </div>
+</div>
 
-    <!-- Custom date range -->
-    <div class="relative">
-      <button type="button" onclick="document.getElementById('rpt-custom-picker').classList.toggle('hidden')"
-              class="px-3 py-1.5 rounded-md text-sm font-medium transition border
-                {% if period == 'custom' %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
-        📅 {% if period == 'custom' %}{{ date_from }} – {{ date_to }}{% else %}Custom Range{% endif %}
-      </button>
-      <div id="rpt-custom-picker" class="{% if period != 'custom' %}hidden{% endif %} absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-20 w-64">
-        <form method="get" action="/reports" class="flex flex-col gap-3">
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">From</label>
-            <input type="date" name="date_from" value="{{ date_from }}"
-                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">To</label>
-            <input type="date" name="date_to" value="{{ date_to }}"
-                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
-          </div>
-          <button type="submit"
-                  class="bg-steel-dark text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-steel-mid transition">
-            Apply
-          </button>
-        </form>
-      </div>
+<!-- Period filter -->
+<div class="flex flex-wrap gap-2 items-center mb-6">
+  {% for key, label in period_labels.items() %}
+  {% if key != 'custom' %}
+  <a href="?period={{ key }}"
+     class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+       {% if period == key %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+    {{ label }}
+  </a>
+  {% endif %}
+  {% endfor %}
+
+  <!-- Custom date range -->
+  <div class="relative">
+    <button type="button" onclick="document.getElementById('rpt-custom-picker').classList.toggle('hidden')"
+            class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+              {% if period == 'custom' %}bg-steel-dark text-white border-steel-dark{% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+      📅 {% if period == 'custom' %}{{ date_from }} – {{ date_to }}{% else %}Custom Range{% endif %}
+    </button>
+    <div id="rpt-custom-picker" class="{% if period != 'custom' %}hidden{% endif %} absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-20 w-64">
+      <form method="get" action="/reports" class="flex flex-col gap-3">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">From</label>
+          <input type="date" name="date_from" value="{{ date_from }}"
+                 class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">To</label>
+          <input type="date" name="date_to" value="{{ date_to }}"
+                 class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        </div>
+        <button type="submit"
+                class="bg-steel-dark text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-steel-mid transition">
+          Apply
+        </button>
+      </form>
     </div>
   </div>
 </div>
@@ -274,9 +283,4 @@
   <table class="w-full text-sm">
     <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
       <tr>
-        <th class="px-5 py-3 text-left">Department</th>
-        <th class="px-5 py-3 text-right">Hours</th>
-        <th class="px-5 py-3 text-right">Billed Value</th>
-      </tr>
-    </thead>
-    <tbody class="divide-
+        <

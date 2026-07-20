@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% block title %}Production Analytics — Van Buren Steel{% endblock %}
+{% block content %}
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 gap-3">
+  <div>
+    <nav class="text-sm text-gray-400 mb-1">
+      <a href="/reports" class="hover:text-steel-mid">Reports</a> / Production Analytics
+    </nav>
+    <h1 class="text-2xl font-bold text-steel-dark">Production Analytics</h1>
+    {% if period == 'custom' %}
+    <p class="text-gray-500 text-sm">{{ date_from }} – {{ date_to }}</p>
+    {% elif period == 'all' %}
+    <p class="text-gray-500 text-sm">All completed orders</p>
+    {% else %}
+    <p class="text-gray-500 text-sm">{{ period_labels[period] }} — since {{ start_date.strftime('%B %d, %Y') }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Period filter -->
+<div class="flex flex-wrap gap-2 items-center mb-6">
+  {% for key, label in period_labels.items() %}
+  {% if key != 'custom' %}
+  <a href="?period={{ key }}"
+     class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+       {% if period == key %}bg-steel-dark text-white border-steel-dark
+       {% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+    {{ label }}
+  </a>
+  {% endif %}
+  {% endfor %}
+  <div class="relative">
+    <button type="button" onclick="document.getElementById('prod-custom-picker').classList.toggle('hidden')"
+            class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+              {% if period == 'custom' %}bg-steel-dark text-white border-steel-dark
+              {% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+      📅 {% if period == 'custom' %}{{ date_from }} – {{ date_to }}{% else %}Custom{% endif %}
+    </button>
+    <div id="prod-custom-picker" class="{% if period != 'custom' %}hidden{% endif %} absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-20 w-64">
+      <form method="get" class="flex flex-col gap-3">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">From</label>
+          <input type="date" name="date_from" value="{{ date_from }}"
+                 class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">To</label>
+          <input type="date" name="date_to" value="{{ date_to }}"
+                 class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        </div>
+        <button type="submit"
+                class="bg-steel-dark text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-steel-mid transition">
+          Apply
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  <div class="bg-white rounded-xl shadow p-4">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Orders Completed</p>
+    <p class="text-2xl font-bold text-steel-dark">{{ total_completed }}</p>
+    {% if rework_count > 0 %}
+    <p class="text-xs text-orange-500 mt-1">{{ rework_count }} had rework</p>
+    {% else %}
+    <p class="text-xs text-green-500 mt-1">No rework</p>
+    {% endif %}
+  </div>
+  <div class="bg-white rounded-xl shadow p-4">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Hours Logged</p>
+    <p class="text-2xl font-bold text-steel-dark">{{ agg_act_hours }}h</p>
+    <p class="text-xs text-gray-400 mt-1">Est. {{ agg_est_hours }}h</p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-4">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Labor Variance</p>
+    {% if agg_var_pct is not none %}
+    <p class="text-2xl font-bold {% if agg_var_cost > 0 %}text-red-600{% elif agg_var_cost < 0 %}text-green-600{% else %}text-steel-dark{% endif %}">
+      {% if agg_var_pct > 0 %}+{% endif %}{{ agg_var_pct }}%
+    </p>
+    <p class="text-xs text-gray-400 mt-1">
+      {% if agg_var_cost > 0 %}+{% endif %}${{ '%.0f'|format(agg_var_cost) }} vs estimate
+    </p>
+    {% else %}
+    <p class="text-2xl font-bold text-gray-300">—</p>
+    <p class="text-xs text-gray-400 mt-1">No estimates on file</p>
+    {% endif %}
+  </div>
+  <div class="bg-white rounded-xl shadow p-4">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Rework Rate</p>
+    <p class="text-2xl font-bold {% if rework_rate > 20 %}text-red-600{% elif rework_rate > 10 %}text-orange-500{% else %}text-steel-dark{% endif %}">
+      {{ rework_rate }}%
+    </p>
+    <p class="text-xs text-gray-400 mt-1">{{ total_rework_cycles }} total rework cycle{{ 's' if total_rework_cycles != 1 else '' }}</p>
+  </div>
+</div>
+
+<!-- Two-column layout -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+
+  <!-- Labor variance section (2/3 width) -->
+  <div class="lg:col-span-2 space-y-6">
+
+    <!-- Aggregate labor summary -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-4">Labor: Actual vs Estimated</h2>
+      <div class="grid grid-cols-3 gap-4 mb-4">
+        <div class="text-center">
+          <p class="text-xs text-gray-400 mb-1">Estimated</p>
+          <p class="text-lg font-bold text-steel-dark">{{ agg_est_hours }}h</p>
+          <p class="text-sm text-gray-500">${{ '{:,.0f}'.format(agg_est_cost) }}</p>
+        </div>
+        <div class="text-center">
+          <p class="text-xs text-gray-400 mb-1">Actual</p>
+          <p class="text-lg font-bold text-steel-dark">{{ agg_act_hours }}h</p>
+          <p class="text-sm text-gray-500">${{ '{:,.0f}'.format(agg_act_cost) }}</p>
+        </div>
+        <div class="text-center">
+          <p class="text-xs text-gray-400 mb-1">Variance</p>
+          <p class="text-lg font-bold {% if agg_var_hours > 0 %}text-red-600{% elif agg_var_hours < 0 %}text-green-600{% else %}text-gray-400{% endif %}">
+            {% if agg_var_hours > 0 %}+{% endif %}{{ agg_var_hours }}h
+          </p>
+          <p class="text-sm {% if agg_var_cost > 0 %}text-red-500{% elif agg_var_cost < 0 %}text-green-500{% else %}text-gray-400{% endif %}">
+            {% if agg_var_cost > 0 %}+{% endif %}${{ '{:,.0f}'.format(agg_var_cost) }}
+          </p>
+        </div>
+      </div>
+      {% if labor_rows %}
+      <div class="flex gap-4 text-xs text-gray-500 border-t border-gray-100 pt-3">
+        <span class="text-red-500 font-medium">{{ over_budget }} over estimate</span>
+        <span class="text-gray-300">|</span>
+        <span class="text-green-500 font-medium">{{ under_budget }} under estimate</span>
+        <span class="text-gray-300">|</span>
+        <span>{{ labor_rows | length }} orders with data</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Per-order labor variance table -->
+    {% if labor_rows %}
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Per-Order Labor Variance</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Sorted by largest overrun first</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <tr>
+              <th class="px-4 py-2 text-left">Order</th>
+              <th class="px-4 py-2 text-left">Customer</th>
+              <th class="px-4 py-2 text-right">Est h</th>
+              <th class="px-4 py-2 text-right">Act h</th>
+              <th class="px-4 py-2 text-right">Var h</th>
+              <th class="px-4 py-2 text-right">Var $</th>
+              <th class="px-4 py-2 text-right">Var %</th>
+              <th class="px-4 py-2 text-center">Rework</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for r in labor_rows %}
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2">
+                <a href="/orders/{{ r.order.id }}" class="font-mono text-xs text-steel-mid hover:underline">
+                  {{ r.order.order_number }}
+                </a>
+              </td>
+              <td class="px-4 py-2 text-gray-600 text-xs">{{ r.order.customer.display_name if r.order.customer else '—' }}</td>
+              <td class="px-4 py-2 text-right text-gray-500">{{ r.est_hours }}</td>
+              <td class="px-4 py-2 text-right font-medium">{{ r.act_hours }}</td>
+              <td class="px-4 py-2 text-right font-medium {% if r.var_hours > 0 %}text-red-600{% elif r.var_hours < 0 %}text-green-600{% else %}text-gray-400{% endif %}">
+                {% if r.var_hours > 0 %}+{% endif %}{{ r.var_hours }}
+              </td>
+              <td class="px-4 py-2 text-right {% if r.var_cost > 0 %}text-red-600{% elif r.var_cost < 0 %}text-green-600{% else %}text-gray-400{% endif %}">
+                {% if r.var_cost > 0 %}+{% endif %}${{ '%.0f'|format(r.var_cost) }}
+              </td>
+              <td class="px-4 py-2 text-right">
+                {% if r.var_pct is not none %}
+                <span class="px-1.5 py-0.5 rounded text-xs font-medium
+                  {% if r.var_pct > 15 %}bg-red-100 text-red-700
+                  {% elif r.var_pct > 0 %}bg-orange-100 text-orange-700
+                  {% elif r.var_pct < -5 %}bg-green-100 text-green-700
+                  {% else %}bg-gray-100 text-gray-500{% endif %}">
+                  {% if r.var_pct > 0 %}+{% endif %}{{ r.var_pct }}%
+                </span>
+                {% else %}
+                <span class="text-gray-300 text-xs">—</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-2 text-center">
+                {% if r.rework_count > 0 %}
+                <span class="px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">{{ r.rework_count }}×</span>
+                {% else %}
+                <span class="text-gray-300 text-xs">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-xl shadow p-8 text-center text-gray-400 text-sm">
+      No completed orders in this period.
+    </div>
+    {% endif %}
+
+  </div><!-- /left col -->
+
+  <!-- Right column: rework + employee productivity -->
+  <div class="space-y-6">
+
+    <!-- Rework rate -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-4">Rework Rate</h2>
+      {% if rework_by_job_type %}
+      <div class="space-y-3">
+        {% for jt in rework_by_job_type %}
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-gray-600 font-medium">{{ jt.label }}</span>
+            <span class="{% if jt.rate > 20 %}text-red-600{% elif jt.rate > 10 %}text-orange-500{% else %}text-gray-500{% endif %} font-medium">
+              {{ jt.rework }}/{{ jt.total }} ({{ jt.rate }}%)
+            </span>
+          </div>
+          <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div class="h-full rounded-full {% if jt.rate > 20 %}bg-red-400{% elif jt.rate > 10 %}bg-orange-400{% else %}bg-green-400{% endif %}"
+                 style="width: {{ [jt.rate, 100] | min }}%"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-sm text-gray-400">No completed orders in this period.</p>
+      {% endif %}
+      {% if top_rework_customers %}
+      <div class="mt-4 pt-4 border-t border-gray-100">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Top Rework Customers</p>
+        <div class="space-y-1.5">
+          {% for c in top_rework_customers %}
+          <div class="flex justify-between text-xs">
+            <span class="text-gray-600 truncate max-w-[140px]">{{ c.name }}</span>
+            <span class="text-orange-600 font-medium ml-2 flex-shrink-0">{{ c.rework }} rework / {{ c.total }} jobs</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Dept breakdown -->
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Hours by Department</h2>
+      {% if dept_rows %}
+      <div class="space-y-2">
+        {% for d in dept_rows %}
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-gray-600">{{ d.label }}</span>
+          <div class="text-right">
+            <span class="font-medium text-steel-dark">{{ d.hours }}h</span>
+            <span class="text-gray-400 text-xs ml-1">${{ '{:,.0f}'.format(d.billed_value) }}</span>
+          </div>
+        </div>
+        {% endfor %}
+        <div class="border-t border-gray-100 pt-2 mt-1 flex justify-between text-sm font-semibold text-steel-dark">
+          <span>Total</span>
+          <div class="text-right">
+            <span>{{ total_prod_hours }}h</span>
+            <span class="text-gray-400 font-normal text-xs ml-1">${{ '{:,.0f}'.format(total_billed_val) }}</span>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-gray-400">No labor logged in this period.</p>
+      {% endif %}
+    </div>
+
+  </div><!-- /right col -->
+</div>
+
+<!-- Employee Productivity Table -->
+<div class="bg-white rounded-xl shadow overflow-hidden mb-8">
+  <div class="px-5 py-4 border-b border-gray-100">
+    <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Employee Productivity</h2>
+    <p class="text-xs text-gray-400 mt-0.5">Based on labor entries with work dates in this period</p>
+  </div>
+  {% if employee_rows %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+        <tr>
+          <th class="px-4 py-2 text-left">Employee</th>
+          <th class="px-4 py-2 text-right">Hours</th>
+          <th class="px-4 py-2 text-right">Billed Value</th>
+          <th class="px-4 py-2 text-right">Orders</th>
+          <th class="px-4 py-2 text-left">Dept Breakdown</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for e in employee_rows %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 font-medium text-steel-dark">
+            {{ e.employee.first_name }} {{ e.employee.last_name or '' }}
+          </td>
+          <td class="px-4 py-3 text-right font-mono font-medium">{{ e.hours }}h</td>
+          <td class="px-4 py-3 text-right">${{ '{:,.2f}'.format(e.billed_value) }}</td>
+          <td class="px-4 py-3 text-right text-gray-500">{{ e.order_count }}</td>
+          <td class="px-4 py-3">
+            <div class="flex flex-wrap gap-1">
+              {% for dept, hrs in e.dept_hours.items() %}
+              <span class="px-2 py-0.5 rounded-full text-xs bg-steel-light text-steel-dark">
+                {{ dept_label_map.get(dept, dept) }}: {{ '%.1f'|format(hrs) }}h
+              </span>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="p-8 text-center text-gray-400 text-sm">No labor logged in this period.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

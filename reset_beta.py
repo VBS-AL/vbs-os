@@ -14,6 +14,8 @@ Run from the vbs-os directory:
 """
 
 import sys
+import shutil
+import os
 from sqlalchemy import create_engine, text
 
 DB_PATH = "vbs.db"
@@ -68,9 +70,6 @@ def main():
 
         conn.execute(text("PRAGMA foreign_keys = ON"))
 
-    print("\nDone. Inventory, customers, and team are untouched.")
-    print("Restart the server and you're ready for a clean run.")
-
-
-if __name__ == "__main__":
-    main()
+    # Remove uploaded drawings for orders and quotes (files on disk)
+    drawings_dir = os.path.join("app", "static", "drawings")
+    removed_dirs = 

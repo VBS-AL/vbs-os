@@ -344,7 +344,7 @@ ________________{% endif %}</div>
         {% set ns.has_items = true %}
         <tr>
           <td class="right">{{ li.quantity | int if li.quantity == (li.quantity | int) else li.quantity }}</td>
-          <td>{{ li.description }}</td>
+          <td>{{ li.internal_notes if li.internal_notes else li.description }}</td>
           <td>{{ li.unit or '—' }}</td>
         </tr>
         {% endif %}
@@ -359,6 +359,4 @@ ________________{% endif %}</div>
     <div class="footer-grid">
       <div class="footer-box">
         <div class="footer-label">Cartons</div>
-        <div class="footer-value">{{ pl.cartons if pl and pl.cartons is not none else '____' }}</div>
-      </div>
-      <div class="footer-box"
+        <div class="footer-value">{{ pl.cartons if pl and pl.cartons is not none else '____' }}</div

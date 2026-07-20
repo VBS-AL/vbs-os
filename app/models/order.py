@@ -67,6 +67,7 @@ class Order(Base):
     invoice             = relationship("Invoice", back_populates="order", uselist=False)
     packing_list        = relationship("PackingList", back_populates="order", uselist=False)
     scrap_records       = relationship("ScrapRecord", back_populates="order")
+    remnant_records     = relationship("RemnantRecord", back_populates="order")
     work_sessions       = relationship("WorkSession", back_populates="order")
 
 class OrderLineItem(Base):
@@ -86,6 +87,3 @@ class OrderLineItem(Base):
     inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
     estimated_labor_hours = Column(Float, nullable=True)
     estimated_labor_dept  = Column(String, nullable=True)
-    is_delivery_surcharge = Column(Boolean, default=False)
-
-    order           

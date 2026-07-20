@@ -247,9 +247,10 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
         joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
         joinedload(Order.production_stages).joinedload(ProductionStage.assigned_to),
         joinedload(Order.labor_entries).joinedload(LaborEntry.employee),
-        joinedload(Order.qa_records),
+        joinedload(Order.qa_records).joinedload(QARecord.inspector),
         joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
         joinedload(Order.invoice),
+        joinedload(Order.remnant_records),
     ).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(404, "Order not found")
@@ -264,6 +265,11 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
         next_statuses = [resume] + next_statuses
     total_labor = sum(e.billed_value for e in order.labor_entries)
     total_hours = sum(e.hours for e in order.labor_entries)
+    # Stage → actual hours map for production history display
+    stage_hours: dict[int, float] = {}
+    for e in order.labor_entries:
+        if e.stage_id:
+            stage_hours[e.stage_id] = stage_hours.get(e.stage_id, 0.0) + (e.hours or 0.0)
     employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
 
     # Active work sessions
@@ -293,6 +299,7 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
         "request": request, "user": user, "order": order,
         "next_statuses": next_statuses, "has_qa_fail": has_qa_fail,
         "total_labor": total_labor, "total_hours": total_hours,
+        "stage_hours": stage_hours,
         "employees": employees, "billing_depts": BillingDept, "billing_rates": BILLING_RATES,
         "qa_results": QAResult, "stage_types": StageType, "today": date.today().isoformat(),
         "can_see_financials": financials_visible(user),
@@ -541,4 +548,29 @@ async def log_qa(
         ))
     elif result_enum in [QAResult.pass_result, QAResult.conditional]:
         for stage in order.production_stages:
-            if stage.stage_type == StageType.qa_qc and stage.status in [StageStatus.in_progress, StageStatus.blocked, StageStat
+            if stage.stage_type == StageType.qa_qc and stage.status in [StageStatus.in_progress, StageStatus.blocked, StageStatus.pending]:
+                stage.status = StageStatus.complete
+                stage.completed_at = now_qa
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}#qa", status_code=302)
+
+
+@router.get("/search/customers", response_class=HTMLResponse)
+async def customer_search(
+    _customer_search: str = "", user: User = Depends(require_user), db: Session = Depends(get_db),
+):
+    q = _customer_search.strip()
+    if len(q) < 2:
+        return HTMLResponse("")
+    results = db.query(Customer).filter(
+        (Customer.name.ilike(f"%{q}%") | Customer.phone.ilike(f"%{q}%")),
+        Customer.is_active == True,
+    ).limit(8).all()
+    if not results:
+        return HTMLResponse('<div class="px-3 py-2 text-sm text-gray-400">No customers found</div>')
+    html = ""
+    for c in results:
+        company = f'  <span class="text-gray-400 text-xs">{c.company}</span>' if c.company else ""
+        phone = f'  <span class="text-gray-400 text-xs">{c.phone}</span>' if c.phone else ""
+        html += f'<div data-customer-id="{c.id}" data-customer-name="{c.name}" class="px-3 py-2 cursor-pointer hover:bg-steel-light text-sm">{c.name}{company}{phone}</div>'
+    return HTMLResponse(html)

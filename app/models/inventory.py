@@ -68,12 +68,13 @@ class InventoryCategory(str, enum.Enum):
 
 
 class AdjustmentReason(str, enum.Enum):
-    received   = "received"    # stock in from supplier
-    used       = "used"        # consumed in production
-    damaged    = "damaged"     # damaged / scrapped
-    correction = "correction"  # physical count correction
-    returned   = "returned"    # returned to supplier
-    other      = "other"
+    received       = "received"        # stock in from supplier
+    used           = "used"            # consumed in production
+    damaged        = "damaged"         # damaged / scrapped
+    correction     = "correction"      # physical count correction
+    returned       = "returned"        # returned to supplier
+    return_to_stock = "return_to_stock" # remnant returned from job
+    other          = "other"
 
 
 class InventoryItem(Base):
@@ -109,5 +110,4 @@ class InventoryAdjustment(Base):
     id             = Column(Integer, primary_key=True, index=True)
     item_id        = Column(Integer, ForeignKey("inventory_items.id"), nullable=False)
     delta          = Column(Float, nullable=False)   # + = add, − = remove
-    reason         = Column(SAEnum(AdjustmentReason), nullable=False)
-    order_id       = Column(Integer, ForeignKey("orders.id"), nullable=True)  #
+    reason         = Column(SAEnum(Ad

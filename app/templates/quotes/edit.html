@@ -255,7 +255,7 @@ function addLine(desc='', qty=1, price='', paint='Same as Job', notes='', intern
       </div>
       <div class="col-span-1">
         <label class="block text-xs text-gray-500 mb-1">Labor hrs <span class="text-red-400">*</span></label>
-        <input type="number" name="li_labor_${idx}" id="li-labor-${idx}" step="0.25" min="0.25" value="${laborHrs || ''}" placeholder="0"
+        <input type="number" name="li_labor_${idx}" id="li-labor-${idx}" step="0.05" min="0.05" value="${laborHrs || ''}" placeholder="0"
           oninput="updateLaborCost(${idx})"
           class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
       </div>

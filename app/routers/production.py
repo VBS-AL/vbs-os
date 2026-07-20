@@ -35,6 +35,7 @@ STAGE_LABELS = {
     "welding":            "Welding",
     "finishing":          "Finishing",
     "qa_qc":              "QA / Inspection",
+    "rework":             "Rework",
     "delivery":           "Delivery",
 }
 
@@ -46,6 +47,7 @@ STAGE_DEFAULT_BILLING = {
     StageType.welding:            BillingDept.steel_fabrication,
     StageType.finishing:          BillingDept.general_labor,
     StageType.qa_qc:              BillingDept.general_labor,
+    StageType.rework:             BillingDept.steel_fabrication,
     StageType.delivery:           BillingDept.general_labor,
 }
 
@@ -177,7 +179,7 @@ async def production_board(
         joinedload(Order.production_stages).joinedload(ProductionStage.work_sessions),
         joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
     ).filter(
-        Order.status.notin_([OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled])
+        Order.status.notin_([OrderStatus.delivered, OrderStatus.invoiced, OrderStatus.paid, OrderStatus.cancelled])
     ).all()
 
     # Get active work sessions for timer indicators
@@ -338,13 +340,25 @@ async def update_stage_status(
             ProductionStage.order_id == stage.order_id
         ).order_by(ProductionStage.id).all()
         found = False
+        advanced = False
         for s in order_stages:
             if found and s.status == StageStatus.pending:
                 s.status = StageStatus.in_progress
                 s.started_at = now
+                advanced = True
                 break
             if s.id == stage.id:
                 found = True
+        # Special case: completing a rework stage → re-advance the pending QA stage
+        if not advanced and stage.stage_type == StageType.rework:
+            qa_stage = db.query(ProductionStage).filter(
+                ProductionStage.order_id == stage.order_id,
+                ProductionStage.stage_type == StageType.qa_qc,
+                ProductionStage.status == StageStatus.pending,
+            ).first()
+            if qa_stage:
+                qa_stage.status = StageStatus.in_progress
+                qa_stage.started_at = now
 
         # Completing a delivery stage: stop the running timer + mark order delivered
         if stage.stage_type == StageType.delivery:
@@ -563,6 +577,7 @@ async def stop_session(
 # ── QA Complete (stop session + record result + complete stage) ───────────
 @router.post("/stages/{stage_id}/qa-complete")
 async def qa_complete(
+    request: Request,
     stage_id: int,
     result: str = Form(...),
     failure_reason: Optional[str] = Form(None),
@@ -573,7 +588,11 @@ async def qa_complete(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    stage = db.query(ProductionStage).filter(ProductionStage.id == stage_id).first()
+    from app.models.order import OrderLineItem
+    from app.models.inventory import InventoryItem as _InvItem
+    stage = db.query(ProductionStage).options(
+        joinedload(ProductionStage.order).joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item)
+    ).filter(ProductionStage.id == stage_id).first()
     if not stage:
         raise HTTPException(404, "Stage not found")
     if stage.stage_type != StageType.qa_qc:
@@ -657,12 +676,94 @@ async def qa_complete(
     order = db.query(Order).filter(Order.id == stage.order_id).first()
     if order:
         qa_result = QAResult(result)
-        if qa_result == QAResult.pass_result:
-            # Pass → ready for delivery
+        if qa_result in (QAResult.pass_result, QAResult.conditional):
+            # Pass or Conditional → ready for delivery
             order.status = OrderStatus.ready
+        elif qa_result == QAResult.rework:
+            # Rework → send back to production
+            order.status = OrderStatus.in_production
+            order.rework_count = (order.rework_count or 0) + 1
+            # Reset the QA stage so it can be redone after rework
+            stage.status       = StageStatus.pending
+            stage.started_at   = None
+            stage.completed_at = None
+            # Reset delivery stage back to pending so it leaves the work queue
+            for s in order_stages:
+                if s.stage_type == StageType.delivery and s.id != stage.id:
+                    s.status       = StageStatus.pending
+                    s.started_at   = None
+                    s.completed_at = None
+            # Insert a Rework stage assigned to the QA inspector so it shows in the queue
+            db.flush()
+            rework_stage = ProductionStage(
+                order_id      = stage.order_id,
+                stage_type    = StageType.rework,
+                status        = StageStatus.in_progress,
+                assigned_to_id= stage.assigned_to_id,
+                started_at    = now,
+            )
+            db.add(rework_stage)
         else:
-            # Fail / Rework / Conditional → send to QA review for foreman decision
+            # Fail → send to QA review for foreman decision
             order.status = OrderStatus.qa_review
+
+    # ── Process remnant records ───────────────────────────────────────────
+    from app.models.scrap import RemnantRecord, RemnantDisposition
+    from app.models.inventory import InventoryItem, InventoryAdjustment, AdjustmentReason
+    from app.models.order import OrderLineItem
+    form_data = await request.form()
+    if order:
+        for li in order.line_items:
+            qty_key  = f"remnant_qty_{li.id}"
+            disp_key = f"remnant_disp_{li.id}"
+            qty_val  = form_data.get(qty_key, "")
+            disp_val = form_data.get(disp_key, "")
+            if not qty_val or not disp_val:
+                continue
+            try:
+                qty_remaining = float(qty_val)
+            except ValueError:
+                continue
+            if qty_remaining <= 0:
+                continue
+            unit_cost = (li.unit_price or 0) * qty_remaining
+            remnant = RemnantRecord(
+                order_id          = order.id,
+                line_item_id      = li.id,
+                inventory_item_id = li.inventory_item_id,
+                description       = li.description,
+                qty_remaining     = qty_remaining,
+                unit              = li.inventory_item.unit if li.inventory_item else None,
+                unit_cost         = unit_cost,
+                disposition       = RemnantDisposition(disp_val),
+                logged_by_id      = user.id,
+            )
+            db.add(remnant)
+            if disp_val == RemnantDisposition.back_to_stock and li.inventory_item_id:
+                inv_item = db.query(InventoryItem).filter(InventoryItem.id == li.inventory_item_id).first()
+                if inv_item:
+                    inv_item.quantity_on_hand = (inv_item.quantity_on_hand or 0) + qty_remaining
+                    adj = InventoryAdjustment(
+                        item_id        = inv_item.id,
+                        recorded_by_id = user.id,
+                        reason         = AdjustmentReason.return_to_stock,
+                        delta          = qty_remaining,
+                        order_id       = order.id,
+                        notes          = f"Remnant from {order.order_number}",
+                    )
+                    db.add(adj)
+            elif disp_val == RemnantDisposition.retail:
+                from app.models.scrap import RetailScrapItem, DisplayStatus
+                from datetime import date as _date_type
+                retail_item = RetailScrapItem(
+                    description   = f"{li.description} — remnant ({qty_remaining} {li.inventory_item.unit if li.inventory_item else 'pcs'})",
+                    material_type = li.inventory_item.category.value if li.inventory_item else "Unknown",
+                    retail_price  = unit_cost,
+                    status        = DisplayStatus.available,
+                    date_added    = _date_type.today(),
+                    notes         = f"From order {order.order_number}",
+                )
+                db.add(retail_item)
 
     db.commit()
     return RedirectResponse("/production/queue", status_code=302)
@@ -800,120 +901,4 @@ async def employee_queue(
 
     # Determine whose queue to show
     if can_manage and emp_id:
-        view_employee = db.query(User).filter(User.id == emp_id).first()
-        if not view_employee:
-            raise HTTPException(404, "Employee not found")
-    else:
-        view_employee = user
-
-    # Active session for this employee
-    from app.models.order import OrderLineItem
-    from app.models.inventory import InventoryItem
-    my_session = db.query(WorkSession).filter(
-        WorkSession.employee_id == view_employee.id,
-        WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
-    ).options(
-        joinedload(WorkSession.stage),
-        joinedload(WorkSession.order).joinedload(Order.customer),
-        joinedload(WorkSession.order).joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
-        joinedload(WorkSession.order).joinedload(Order.packing_list),
-        joinedload(WorkSession.order).joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
-    ).first()
-
-    # All active orders assigned to this employee at any stage
-    from app.models.order import OrderLineItem
-    my_stages = db.query(ProductionStage).options(
-        joinedload(ProductionStage.order).joinedload(Order.customer),
-        joinedload(ProductionStage.order).joinedload(Order.line_items),
-        joinedload(ProductionStage.order).joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
-    ).filter(
-        ProductionStage.assigned_to_id == view_employee.id,
-        ProductionStage.status.notin_([StageStatus.complete]),
-    ).all()
-
-    # Build job cards, sorted by priority
-    jobs_by_order = {}
-    for stage in my_stages:
-        o = stage.order
-        if o.status in [OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled]:
-            continue
-        if o.id not in jobs_by_order:
-            jobs_by_order[o.id] = {"order": o, "stages": []}
-        jobs_by_order[o.id]["stages"].append(stage)
-
-    job_list = list(jobs_by_order.values())
-
-    def _sort_key(job):
-        o = job["order"]
-        is_overdue = o.promised_date and o.promised_date < today_date
-        days_overdue = (today_date - o.promised_date).days if is_overdue else 0
-        priority_rank = _PRIORITY_RANK.get(o.priority, 2)
-        due = o.promised_date or _date(9999, 12, 31)
-        return (0 if is_overdue else 1, -days_overdue, priority_rank, due)
-
-    job_list.sort(key=_sort_key)
-
-    # Build billing options for clock-in form
-    billing_options = [
-        (BillingDept.general_labor,       "General Labor ($80/hr)"),
-        (BillingDept.steel_fabrication,   "Steel Fabrication ($100/hr)"),
-        (BillingDept.aluminum_structural, "Aluminum Structural ($120/hr)"),
-    ]
-
-    # Management: also load all employee queues summary
-    all_employees_summary = []
-    if can_manage:
-        active_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
-        for emp in active_employees:
-            emp_session = db.query(WorkSession).filter(
-                WorkSession.employee_id == emp.id,
-                WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
-            ).first()
-            emp_stage_count = db.query(ProductionStage).filter(
-                ProductionStage.assigned_to_id == emp.id,
-                ProductionStage.status.notin_([StageStatus.complete]),
-            ).count()
-            all_employees_summary.append({
-                "employee":    emp,
-                "session":     emp_session,
-                "stage_count": emp_stage_count,
-            })
-
-    now_utc = datetime.utcnow()
-
-    # ── My Stats ─────────────────────────────────────────────────────────
-    stat_period = stat_period if stat_period in ("day", "week", "month") else "day"
-    today = today_date
-    if stat_period == "day":
-        period_start = today
-    elif stat_period == "week":
-        period_start = today - timedelta(days=today.weekday())  # Monday
-    else:  # month
-        period_start = today.replace(day=1)
-
-    completed_sessions = db.query(WorkSession).filter(
-        WorkSession.employee_id == view_employee.id,
-        WorkSession.status == SessionStatus.completed,
-    ).join(WorkSession.labor_entry).filter(
-        LaborEntry.work_date >= period_start,
-    ).options(joinedload(WorkSession.labor_entry)).all()
-
-    stat_hours  = round(sum((s.labor_entry.hours or 0) for s in completed_sessions if s.labor_entry), 1)
-    stat_orders = len(set(s.order_id for s in completed_sessions))
-
-    default_billing = _get_employee_billing_default(view_employee, my_stages[0]) if my_stages else None
-
-    # All active employees — for Checked By dropdown on delivery form
-    all_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
-
-    # Packing lists awaiting confirmation by this employee (checker role)
-    from app.models.packing_list import PackingList
-    pending_checks = db.query(PackingList).options(
-        joinedload(PackingList.order).joinedload(Order.customer),
-        joinedload(PackingList.created_by),
-    ).filter(
-        PackingList.checker_id == view_employee.id,
-        PackingList.check_confirmed == False,
-    ).all()
-
-    return templates.TemplateResponse("product
+        view

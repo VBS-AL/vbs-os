@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import date, timedelta
+from collections import defaultdict
 
 from app.database import get_db
 from app.auth import get_current_user, financials_visible
@@ -16,7 +17,7 @@ from app.models.packing_list import PackingList, ShippedVia, SHIPPED_VIA_LABELS
 from app.models.production import ProductionStage, StageType, StageStatus
 from sqlalchemy import or_, case
 from app.models.settings import AppSetting
-from app.models.user import UserRole
+from app.models.user import User as UserModel, UserRole
 from app.models.inventory import InventoryItem
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -434,5 +435,4 @@ def _build_margin_rows(orders):
             else:
                 has_partial_cost = True
 
-        labor_cost = sum(
-            (e.hours or 0) * (e.employee
+        lab

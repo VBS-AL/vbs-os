@@ -154,6 +154,7 @@ async def search_inventory(
             f' data-inv-unit="{item.unit}"'
             f' data-inv-cost="{item.cost_per_unit or ""}"'
             f' data-inv-price="{sell_price}"'
+            f' data-inv-qty="{qty}"'
             f' data-inv-category="{item.category.value}">'
             f'  <span><span class="font-mono text-xs text-gray-400 mr-2">{item.sku or ""}</span>{item.name}</span>'
             f'  <span class="text-xs text-right"><span class="{qty_color} block">{qty_str}</span><span class="text-gray-400">{price_str} cost</span></span>'
@@ -725,6 +726,4 @@ async def process_audit(
         notes_raw = str(row[7] or "").strip() if len(row) > 7 else ""
         audit_note = f"Physical count — system: {old_qty} {item.unit}, counted: {counted} {item.unit}."
         if notes_raw:
-            audit_note += f" Note: {notes_raw}"
-
-        item.quantity_on_hand = 
+            audit_note += f" Note: {notes_ra

@@ -102,17 +102,24 @@ async def generate_invoice(
     if order.invoice:
         return RedirectResponse(f"/invoices/{order.invoice.id}", status_code=302)
 
-    # Calculate actuals
-    material_total = sum((li.unit_price or 0) * li.quantity for li in order.line_items)
-    labor_total = sum(e.billed_value for e in order.labor_entries)
-    subtotal = material_total + labor_total
-    tax = round(subtotal * (tax_rate / 100), 2)
-    actual_total = round(subtotal + tax, 2)
+    # Labor rates (must match invoice template)
+    _LABOR_RATES = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120}
 
-    # Estimate is always the floor — if actuals come in under estimate, bill the estimate
-    estimate_floor = float(order.quote.total_estimated or 0) if order.quote and order.quote.total_estimated else 0.0
-    floor_applied = estimate_floor > 0 and actual_total < estimate_floor
-    total = estimate_floor if floor_applied else actual_total
+    # Materials and delivery
+    material_total  = sum((li.unit_price or 0) * li.quantity for li in order.line_items if not li.is_delivery_surcharge)
+    delivery_total  = sum((li.unit_price or 0) * li.quantity for li in order.line_items if li.is_delivery_surcharge)
+
+    # Labor: use whichever is higher — actual or estimated
+    estimated_labor = sum(
+        (li.estimated_labor_hours or 0) * _LABOR_RATES.get(li.estimated_labor_dept or '', 0)
+        for li in order.line_items if not li.is_delivery_surcharge
+    )
+    actual_labor    = sum(e.billed_value for e in order.labor_entries)
+    billed_labor    = max(estimated_labor, actual_labor)
+
+    subtotal = material_total + billed_labor + delivery_total
+    tax = round(subtotal * (tax_rate / 100), 2)
+    total = round(subtotal + tax, 2)
 
     today = date.today()
     inv = Invoice(
@@ -224,13 +231,4 @@ async def void_invoice(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    inv = db.query(Invoice).options(joinedload(Invoice.order)).filter(Invoice.id == invoice_id).first()
-    if not inv:
-        raise HTTPException(404)
-
-    inv.payment_status = PaymentStatus.void
-    if inv.order:
-        inv.order.status = OrderStatus.delivered  # revert order to delivered
-
-    db.commit()
-    return RedirectResponse(f"/invoices/{invoice_id}", status_code=302)
+    inv = db.query(Invoice).options(joinedload(Invoice.order)).filter(Invoice.id == invoice_id).first
