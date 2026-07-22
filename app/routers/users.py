@@ -32,9 +32,13 @@ async def user_list(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    users = db.query(User).order_by(User.last_name, User.first_name).all()
+    all_users = db.query(User).order_by(User.last_name, User.first_name).all()
+    active_users   = [u for u in all_users if u.is_active]
+    archived_users = [u for u in all_users if not u.is_active]
     return templates.TemplateResponse("users/list.html", {
-        "request": request, "user": user, "users": users, "roles": UserRole,
+        "request": request, "user": user,
+        "active_users": active_users, "archived_users": archived_users,
+        "roles": UserRole,
         "can_see_financials": financials_visible(user),
     })
 
@@ -176,9 +180,4 @@ async def update_user(
             return templates.TemplateResponse("users/edit.html", {
                 "request": request, "user": user, "target": target, "roles": UserRole,
                 "error": "New password must be at least 6 characters.",
-                "can_see_financials": financials_visible(user),
-            }, status_code=422)
-        target.hashed_password = hash_password(new_password)
-
-    db.commit()
-    return RedirectResponse("/users", status_code=302)
+                "can_see_financials": f

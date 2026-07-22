@@ -2,48 +2,43 @@
 {% block title %}Orders — Van Buren Steel{% endblock %}
 {% block content %}
 
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-4">
   <div>
     <h1 class="text-2xl font-bold text-steel-dark">Orders</h1>
-    <p class="text-sm text-gray-500 mt-0.5">{{ orders|length }} order{{ 's' if orders|length != 1 }}
-      {% if filters.status %}
-        {% set label_map = {
-          'active': 'Active (all)',
-          'wip': 'Active WIP — In Shop',
-          'confirmed': 'Confirmed',
-          'in_production': 'In Production',
-          'qa_review': 'QA / Inspection',
-          'ready': 'Ready to Deliver',
-          'on_hold': 'On Hold',
-          'delivered': 'Delivered',
-          'invoiced': 'Invoiced',
-          'paid': 'Paid',
-          'cancelled': 'Cancelled'
-        } %}
-        <span class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-steel-mid text-white">{{ label_map.get(filters.status, filters.status) }}</span>
-        <a href="/orders" class="ml-1 text-xs text-gray-400 hover:text-gray-600">✕ clear</a>
-      {% endif %}
-    </p>
+    <p class="text-sm text-gray-500 mt-0.5">{{ orders|length }} order{{ 's' if orders|length != 1 }}</p>
   </div>
   <a href="/orders/new" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">+ New Order</a>
 </div>
 
-<!-- Filters -->
+<!-- Status tabs -->
+<div class="flex gap-1.5 mb-4 flex-wrap">
+  {% set tabs = [
+    ('active',   'Active'),
+    ('invoiced', 'Invoiced'),
+    ('paid',     'Paid'),
+    ('all',      'All'),
+  ] %}
+  {% for tab_val, tab_label in tabs %}
+  <a href="/orders?status={{ tab_val }}{% if filters.job_type %}&job_type={{ filters.job_type }}{% endif %}{% if filters.priority %}&priority={{ filters.priority }}{% endif %}{% if filters.q %}&q={{ filters.q }}{% endif %}"
+     class="px-4 py-1.5 rounded-full text-sm font-medium border transition
+       {% if active_tab == tab_val %}
+         bg-steel-mid text-white border-steel-mid
+       {% else %}
+         bg-white text-gray-600 border-gray-300 hover:border-steel-mid hover:text-steel-dark
+       {% endif %}">
+    {{ tab_label }}
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Secondary filters -->
 <form method="GET" class="bg-white rounded-xl shadow p-4 mb-6 flex flex-wrap gap-3 items-end">
+  <input type="hidden" name="status" value="{{ active_tab or filters.status or 'active' }}"/>
   <div class="flex-1 min-w-[160px]">
     <label class="block text-xs text-gray-500 mb-1">Search</label>
     <input name="q" id="order-quick-filter" value="{{ filters.q or '' }}" placeholder="Order # or customer…"
       autocomplete="off"
       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
-  </div>
-  <div>
-    <label class="block text-xs text-gray-500 mb-1">Status</label>
-    <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-      <option value="">All</option>
-      {% for s in statuses %}
-      <option value="{{ s.value }}" {% if filters.status == s.value %}selected{% endif %}>{{ s.value.replace('_',' ').title() }}</option>
-      {% endfor %}
-    </select>
   </div>
   <div>
     <label class="block text-xs text-gray-500 mb-1">Type</label>
@@ -119,6 +114,7 @@
             {% elif s == 'qa_review' %}bg-purple-100 text-purple-800
             {% elif s == 'cancelled' %}bg-red-100 text-red-800
             {% elif s == 'paid' %}bg-gray-100 text-gray-600
+            {% elif s == 'invoiced' %}bg-teal-100 text-teal-700
             {% else %}bg-blue-100 text-blue-800{% endif %}">
             {{ s.replace('_',' ').title() }}
           </span>
@@ -142,10 +138,19 @@
         {% for le in o.labor_entries %}
           {% set ns.actual_labor = ns.actual_labor + (le.billed_value or 0) %}
         {% endfor %}
-        <td class="px-4 py-3 text-right font-medium">
-          {% if ns.actual_labor > 0 %}
+        <td class="px-4 py-3 text-right font-medium leading-tight">
+          {% if o.invoice and o.invoice.total %}
+            {# Invoiced/paid: show est vs locked invoice total side by side #}
+            <span class="text-indigo-400 text-xs">${{ '%.2f'|format(ns.mat + ns.est_labor) }}</span>
+            <span class="text-gray-300 text-xs mx-0.5">→</span>
+            <span class="text-green-600">${{ '%.2f'|format(o.invoice.total) }}</span>
+          {% elif ns.actual_labor > 0 %}
+            {# In-progress with logged labor: show est and running actual #}
+            <span class="text-indigo-400 text-xs">${{ '%.2f'|format(ns.mat + ns.est_labor) }}</span>
+            <span class="text-gray-300 text-xs mx-0.5">→</span>
             <span class="text-green-600">${{ '%.2f'|format(ns.mat + ns.actual_labor) }}</span>
           {% else %}
+            {# Estimate only #}
             <span class="text-indigo-500">${{ '%.2f'|format(ns.mat + ns.est_labor) }}</span>
           {% endif %}
         </td>
@@ -156,23 +161,5 @@
       <tr>
         <td colspan="7" class="px-4 py-12 text-center text-gray-400">
           No orders found.
-          <a href="/orders/new" class="text-steel-mid hover:underline ml-1">Create one.</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<script>
-(function() {
-  const input = document.getElementById('order-quick-filter');
-  if (!input) return;
-  input.addEventListener('input', function() {
-    const q = this.value.toLowerCase().trim();
-    document.querySelectorAll('tr.order-row').forEach(function(row) {
-      row.style.display = (!q || row.dataset.search.toLowerCase().includes(q)) ? '' : 'none';
-    });
-  });
-})();
-</script>
+          {% if active_tab == 'active' %}
+          <a href="/orders?statu

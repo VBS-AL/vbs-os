@@ -73,12 +73,27 @@ async def order_list(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Order).options(joinedload(Order.customer), joinedload(Order.line_items), joinedload(Order.labor_entries))
-    if status == "active":
-        query = query.filter(Order.status.notin_([OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled]))
+    query = db.query(Order).options(joinedload(Order.customer), joinedload(Order.line_items), joinedload(Order.labor_entries), joinedload(Order.invoice))
+    # Determine active tab (drives both the filter and the template highlight)
+    if not status or status == "active":
+        active_tab = "active"
+        query = query.filter(Order.status.notin_([
+            OrderStatus.invoiced, OrderStatus.paid, OrderStatus.cancelled
+        ]))
+    elif status == "invoiced":
+        active_tab = "invoiced"
+        query = query.filter(Order.status == OrderStatus.invoiced)
+    elif status == "paid":
+        active_tab = "paid"
+        query = query.filter(Order.status == OrderStatus.paid)
+    elif status == "all":
+        active_tab = "all"
+        # no status filter
     elif status == "wip":
+        active_tab = None
         query = query.filter(Order.status.in_([OrderStatus.in_production, OrderStatus.on_hold, OrderStatus.qa_review, OrderStatus.ready]))
-    elif status:
+    else:
+        active_tab = None
         query = query.filter(Order.status == status)
     if job_type:
         query = query.filter(Order.job_type == job_type)
@@ -110,6 +125,7 @@ async def order_list(
     return templates.TemplateResponse("orders/list.html", {
         "request": request, "user": user, "orders": orders,
         "filters": {"status": status, "job_type": job_type, "priority": priority, "q": q},
+        "active_tab": active_tab,
         "statuses": OrderStatus, "job_types": JobType, "priorities": Priority,
         "sort_by": sort_by, "sort_dir": sort_dir,
         "can_see_financials": financials_visible(user),
@@ -564,13 +580,4 @@ async def customer_search(
         return HTMLResponse("")
     results = db.query(Customer).filter(
         (Customer.name.ilike(f"%{q}%") | Customer.phone.ilike(f"%{q}%")),
-        Customer.is_active == True,
-    ).limit(8).all()
-    if not results:
-        return HTMLResponse('<div class="px-3 py-2 text-sm text-gray-400">No customers found</div>')
-    html = ""
-    for c in results:
-        company = f'  <span class="text-gray-400 text-xs">{c.company}</span>' if c.company else ""
-        phone = f'  <span class="text-gray-400 text-xs">{c.phone}</span>' if c.phone else ""
-        html += f'<div data-customer-id="{c.id}" data-customer-name="{c.name}" class="px-3 py-2 cursor-pointer hover:bg-steel-light text-sm">{c.name}{company}{phone}</div>'
-    return HTMLResponse(html)
+        Customer.is_active == T

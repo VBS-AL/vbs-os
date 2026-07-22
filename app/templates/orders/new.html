@@ -268,6 +268,10 @@ function addBeamRow() {
         <button type="button" onclick="this.closest('.beam-row').remove(); syncBeamNoMsg()"
           class="text-red-400 hover:text-red-600 text-lg leading-none">x</button>
       </div>
+    </div>
+    <div class="mt-1">
+      <label class="block text-xs text-amber-700 font-medium mb-1">Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
+      <textarea class="br-internal-notes w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none" rows="1" placeholder="Shop directions, production notes…"></textarea>
     </div>`;
   document.getElementById('beam-rows').appendChild(row);
   syncBeamNoMsg();
@@ -313,12 +317,4 @@ function addColumnRow() {
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">Size / Diameter</label>
-        <input type="text" class="cr-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="e.g. 4in Round"/>
-      </div>
-      <div>
-        <label class="block text-xs text-gray-500 mb-1">Ft</label>
-        <input type="number" class="cr-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0"/>
-      </div>
-      <div>
-        <label class="block text-xs text-gray-500 mb-1">In</label>
-        <input type="number" class="cr-in w-full border borde
+        <input type="text" class="cr-

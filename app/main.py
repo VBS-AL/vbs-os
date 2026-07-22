@@ -147,7 +147,7 @@ async def dashboard(
     active_orders = db.query(Order).options(
         jl(Order.line_items), jl(Order.labor_entries)
     ).filter(
-        Order.status.notin_([OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled])
+        Order.status.notin_([OrderStatus.invoiced, OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled])
     ).order_by(Order.created_at.desc()).all()
 
     # ── Fulfillment pipeline counts (live) ────────────────────────────────
@@ -212,21 +212,40 @@ async def dashboard(
     on_hold_value = 0.0
     ready_value = 0.0
     overdue_amount = 0.0
+    outstanding_count = 0
+    invoiced_count = 0
+    payments_count = 0
 
     if can_fin:
-        revenue_collected = db.query(func.sum(Payment.amount)).filter(
-            Payment.payment_date >= start_date,
-            Payment.payment_date <= end_date,
-        ).scalar() or 0.0
-
-        revenue_invoiced = db.query(func.sum(Invoice.total)).filter(
+        # Combined invoice period query — count + sum in one pass to stay consistent
+        _inv_row = db.query(
+            func.count(Invoice.id),
+            func.sum(Invoice.total),
+        ).filter(
             Invoice.invoice_date >= start_date,
             Invoice.invoice_date <= end_date,
-        ).scalar() or 0.0
+        ).first()
+        invoiced_count   = _inv_row[0] or 0
+        revenue_invoiced = _inv_row[1] or 0.0
+
+        # Combined payment period query
+        _pay_row = db.query(
+            func.count(Payment.id),
+            func.sum(Payment.amount),
+        ).filter(
+            Payment.payment_date >= start_date,
+            Payment.payment_date <= end_date,
+        ).first()
+        payments_count    = _pay_row[0] or 0
+        revenue_collected = _pay_row[1] or 0.0
 
         outstanding = db.query(func.sum(Invoice.balance_due)).filter(
             Invoice.payment_status.notin_([PaymentStatus.paid, PaymentStatus.void])
         ).scalar() or 0.0
+
+        outstanding_count = db.query(func.count(Invoice.id)).filter(
+            Invoice.payment_status.notin_([PaymentStatus.paid, PaymentStatus.void])
+        ).scalar() or 0
 
         def _order_mat_total(o):
             return sum((li.unit_price or 0) * li.quantity for li in o.line_items)
@@ -338,21 +357,4 @@ async def dashboard(
     ).scalar() or 0.0 if can_fin else 0.0
 
     return templates.TemplateResponse("dashboard/index.html", {
-        "request":          request,
-        "user":             user,
-        "can_see_financials": can_fin,
-        # period
-        "period":           period,
-        "period_label":     period_labels[period],
-        "period_labels":    period_labels,
-        "date_from":        date_from or "",
-        "date_to":          date_to or "",
-        # live
-        "active_orders":    active_orders,
-        "on_hold_count":    on_hold_count,
-        "ready_count":      ready_count,
-        "overdue_count":    overdue_count,
-        # period metrics
-        "revenue_collected":  revenue_collected,
-        "revenue_invoiced":   revenue_invoiced,
-        "outstanding":        outstan
+        "request":     

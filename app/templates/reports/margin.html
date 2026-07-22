@@ -2,8 +2,8 @@
 {% block title %}Margin & Estimating — Van Buren Steel{% endblock %}
 {% block content %}
 
-<!-- Header + period filter -->
-<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 gap-3">
   <div>
     <nav class="text-sm text-gray-400 mb-1">
       <a href="/reports" class="hover:text-steel-mid">Reports</a> / Margin &amp; Estimating
@@ -17,61 +17,59 @@
     <p class="text-gray-500 text-sm">{{ period_labels[period] }} — since {{ start_date.strftime('%B %d, %Y') }}</p>
     {% endif %}
   </div>
-  <div class="flex flex-wrap gap-2 items-center">
-    <!-- Period tabs -->
-    {% for key, label in period_labels.items() %}
-    {% if key != 'custom' %}
-    <a href="?period={{ key }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
-       class="px-3 py-1.5 rounded-md text-sm font-medium transition border
-         {% if period == key %}bg-steel-dark text-white border-steel-dark
-         {% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
-      {{ label }}
-    </a>
-    {% endif %}
-    {% endfor %}
-
-    <!-- Custom date range -->
-    <div class="relative">
-      <button type="button" onclick="document.getElementById('margin-custom-picker').classList.toggle('hidden')"
-              class="px-3 py-1.5 rounded-md text-sm font-medium transition border
-                {% if period == 'custom' %}bg-steel-dark text-white border-steel-dark
-                {% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
-        📅 {% if period == 'custom' %}{{ date_from }} – {{ date_to }}{% else %}Custom{% endif %}
-      </button>
-      <div id="margin-custom-picker" class="{% if period != 'custom' %}hidden{% endif %} absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-20 w-64">
-        <form method="get" class="flex flex-col gap-3">
-          <input type="hidden" name="sort_by" value="{{ sort_by }}">
-          <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">From</label>
-            <input type="date" name="date_from" value="{{ date_from }}"
-                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">To</label>
-            <input type="date" name="date_to" value="{{ date_to }}"
-                   class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
-          </div>
-          <button type="submit"
-                  class="bg-steel-dark text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-steel-mid transition">
-            Apply
-          </button>
-        </form>
-      </div>
-    </div>
-
-    <!-- CSV export -->
+  <!-- Action buttons -->
+  <div class="flex gap-2 items-center flex-shrink-0">
     <a href="/reports/margin/csv?period={{ period }}{% if date_from %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}"
        class="px-3 py-1.5 rounded-md text-sm font-medium transition border bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-       title="Download as CSV">
-      ⬇ CSV
-    </a>
-
-    <!-- Set cost rates -->
+       title="Download as CSV">⬇ CSV</a>
     <a href="/team"
        class="px-3 py-1.5 rounded-md text-sm font-medium transition border bg-white text-gray-500 border-gray-200 hover:bg-gray-50">
       ⚙ Cost Rates
     </a>
+  </div>
+</div>
+
+<!-- Period filter -->
+<div class="flex flex-wrap gap-2 items-center mb-6">
+  {% for key, label in period_labels.items() %}
+  {% if key != 'custom' %}
+  <a href="?period={{ key }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
+     class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+       {% if period == key %}bg-steel-dark text-white border-steel-dark
+       {% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+    {{ label }}
+  </a>
+  {% endif %}
+  {% endfor %}
+
+  <!-- Custom date range -->
+  <div class="relative">
+    <button type="button" onclick="document.getElementById('margin-custom-picker').classList.toggle('hidden')"
+            class="px-3 py-1.5 rounded-md text-sm font-medium transition border
+              {% if period == 'custom' %}bg-steel-dark text-white border-steel-dark
+              {% else %}bg-white text-steel-dark border-gray-200 hover:bg-steel-light{% endif %}">
+      📅 {% if period == 'custom' %}{{ date_from }} – {{ date_to }}{% else %}Custom{% endif %}
+    </button>
+    <div id="margin-custom-picker" class="{% if period != 'custom' %}hidden{% endif %} absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-20 w-64">
+      <form method="get" class="flex flex-col gap-3">
+        <input type="hidden" name="sort_by" value="{{ sort_by }}">
+        <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">From</label>
+          <input type="date" name="date_from" value="{{ date_from }}"
+                 class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">To</label>
+          <input type="date" name="date_to" value="{{ date_to }}"
+                 class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-steel-mid">
+        </div>
+        <button type="submit"
+                class="bg-steel-dark text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-steel-mid transition">
+          Apply
+        </button>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -197,4 +195,5 @@
           {{ sort_th('Order', 'order_number') }}
           {{ sort_th('Customer', 'customer') }}
           {{ sort_th('Date', 'invoice_date') }}
- 
+          {{ sort_th('Revenue', 'revenue', 'right') }}
+          {{ sort_
