@@ -359,4 +359,40 @@ ________________{% endif %}</div>
     <div class="footer-grid">
       <div class="footer-box">
         <div class="footer-label">Cartons</div>
-        <div class="footer-value">{{ pl.cartons if pl and pl.cartons is not none else '____' }}</div
+        <div class="footer-value">{{ pl.cartons if pl and pl.cartons is not none else '____' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Total Weight</div>
+        <div class="footer-value">{{ (pl.total_weight | round(1) | string + ' lbs') if pl and pl.total_weight else '____' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Order Complete</div>
+        <div class="footer-value check-val">{{ '☑' if pl and pl.order_complete else '☐' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Balance to Follow</div>
+        <div class="footer-value check-val">{{ '☑' if pl and pl.balance_to_follow else '☐' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Packed By</div>
+        <div class="footer-value">{{ pl.packed_by if pl and pl.packed_by else '____' }}</div>
+      </div>
+      <div class="footer-box">
+        <div class="footer-label">Checked By</div>
+        <div class="footer-value">{{ pl.checked_by if pl and pl.checked_by else '____' }}</div>
+      </div>
+    </div>
+
+    <!-- Notice -->
+    <div class="pl-notice">{% if order and order.preferred_delivery_method == 'customer_pickup' %}PLEASE NOTIFY US IMMEDIATELY IF ERROR IS FOUND IN ORDER{% else %}PLEASE NOTIFY US IMMEDIATELY IF ERROR IS FOUND IN SHIPMENT{% endif %}</div>
+
+  </div><!-- end pl-copy -->
+  </div><!-- end copy-wrap -->
+  {% if not loop.last %}
+  <div class="cut-line">- - - - - - - - - - - - - - - - - CUT HERE - - - - - - - - - - - - - - - - -</div>
+  {% endif %}
+  {% endfor %}
+
+</div><!-- end page-wrapper -->
+</body>
+</html>

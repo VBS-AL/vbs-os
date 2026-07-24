@@ -435,4 +435,513 @@ def _build_margin_rows(orders):
             else:
                 has_partial_cost = True
 
-        lab
+        labor_cost = sum(
+            (e.hours or 0) * (e.employee.hourly_cost_rate or 0)
+            for e in order.labor_entries
+            if e.employee
+        )
+
+        total_cost   = mat_cost + labor_cost
+        gross_profit = revenue - total_cost
+        margin_pct   = round(gross_profit / revenue * 100, 1) if revenue > 0 else None
+
+        estimate = variance = variance_pct = None
+        if order.quote and order.quote.total_estimated:
+            estimate    = order.quote.total_estimated
+            variance    = revenue - estimate
+            variance_pct = round(variance / estimate * 100, 1) if estimate > 0 else None
+
+        rows.append({
+            "order":         order,
+            "invoice_date":  inv.invoice_date,
+            "revenue":       revenue,
+            "mat_cost":      mat_cost,
+            "labor_cost":    labor_cost,
+            "total_cost":    total_cost,
+            "gross_profit":  gross_profit,
+            "margin_pct":    margin_pct,
+            "partial_cost":  has_partial_cost,
+            "estimate":      estimate,
+            "variance":      variance,
+            "variance_pct":  variance_pct,
+        })
+    return rows
+
+
+def _load_margin_orders(db: Session, start_date: date, end_date: date):
+    return (
+        db.query(Order)
+        .options(
+            joinedload(Order.customer),
+            joinedload(Order.invoice),
+            joinedload(Order.quote),
+            joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
+            joinedload(Order.labor_entries).joinedload(LaborEntry.employee),
+        )
+        .join(Invoice, Invoice.order_id == Order.id)
+        .filter(
+            Order.status.in_([OrderStatus.invoiced, OrderStatus.paid]),
+            Invoice.invoice_date >= start_date,
+            Invoice.invoice_date <= end_date,
+            Invoice.payment_status != PaymentStatus.void,
+        )
+        .all()
+    )
+
+
+def _margin_period_dates(period: str, date_from: str, date_to: str):
+    """Return (start_date, end_date, resolved_period, date_from_str, date_to_str)."""
+    today = date.today()
+    if date_from and date_to:
+        try:
+            return date.fromisoformat(date_from), date.fromisoformat(date_to), "custom", date_from, date_to
+        except ValueError:
+            pass
+    if period == "all":
+        return date(2000, 1, 1), today, "all", "", ""
+    if period not in MARGIN_PERIOD_LABELS:
+        period = "ytd"
+    return get_start_date(period), today, period, "", ""
+
+
+@router.get("/margin", response_class=HTMLResponse)
+async def margin_report(
+    request: Request,
+    period: str = "ytd",
+    date_from: str = None,
+    date_to: str = None,
+    sort_by: str = "margin_pct",
+    sort_dir: str = "desc",
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    if user.role != UserRole.owner:
+        return RedirectResponse("/reports", status_code=302)
+
+    start_date, end_date, period, date_from, date_to = _margin_period_dates(
+        period, date_from, date_to
+    )
+
+    period_labels = dict(MARGIN_PERIOD_LABELS)
+    if period == "custom":
+        period_labels["custom"] = f"{date_from} – {date_to}"
+
+    orders = _load_margin_orders(db, start_date, end_date)
+    rows   = _build_margin_rows(orders)
+
+    # ── Sort ──────────────────────────────────────────────────────────────
+    def _sort_key(r):
+        if sort_by == "revenue":       return r["revenue"] or 0
+        if sort_by == "gross_profit":  return r["gross_profit"] or 0
+        if sort_by == "mat_cost":      return r["mat_cost"] or 0
+        if sort_by == "labor_cost":    return r["labor_cost"] or 0
+        if sort_by == "total_cost":    return r["total_cost"] or 0
+        if sort_by == "estimate":      return r["estimate"] or 0
+        if sort_by == "variance_pct":  return r["variance_pct"] or 0
+        if sort_by == "invoice_date":  return r["invoice_date"] or date(2000, 1, 1)
+        if sort_by == "customer":      return (r["order"].customer.display_name if r["order"].customer else "")
+        if sort_by == "order_number":  return r["order"].order_number or ""
+        return r["margin_pct"] if r["margin_pct"] is not None else -999
+
+    rows.sort(key=_sort_key, reverse=(sort_dir == "desc"))
+
+    # ── Summary stats ─────────────────────────────────────────────────────
+    total_rev       = sum(r["revenue"]      for r in rows)
+    total_profit    = sum(r["gross_profit"] for r in rows)
+    total_cost      = sum(r["total_cost"]   for r in rows)
+    total_mat       = sum(r["mat_cost"]     for r in rows)
+    total_labor     = sum(r["labor_cost"]   for r in rows)
+    has_any_partial = any(r["partial_cost"] for r in rows)
+    avg_margin      = round(total_profit / total_rev * 100, 1) if total_rev > 0 else None
+
+    est_rows     = [r for r in rows if r["variance_pct"] is not None]
+    avg_variance = round(sum(r["variance_pct"] for r in est_rows) / len(est_rows), 1) if est_rows else None
+    over_count   = sum(1 for r in est_rows if (r["variance"] or 0) > 0)
+    under_count  = sum(1 for r in est_rows if (r["variance"] or 0) < 0)
+
+    # ── Job type breakdown ────────────────────────────────────────────────
+    from collections import defaultdict
+    jt_stats: dict = defaultdict(lambda: {"count": 0, "revenue": 0.0, "profit": 0.0, "margins": []})
+    for r in rows:
+        jt = r["order"].job_type.value if r["order"].job_type else "other"
+        jt_stats[jt]["count"]   += 1
+        jt_stats[jt]["revenue"] += r["revenue"]
+        jt_stats[jt]["profit"]  += r["gross_profit"]
+        if r["margin_pct"] is not None:
+            jt_stats[jt]["margins"].append(r["margin_pct"])
+
+    job_breakdown = []
+    for jt, stats in sorted(jt_stats.items()):
+        avg_m = round(stats["profit"] / stats["revenue"] * 100, 1) if stats["revenue"] > 0 else None
+        job_breakdown.append({
+            "job_type":  jt,
+            "label":     JOB_TYPE_LABELS.get(jt, jt.replace('_', ' ').title()),
+            "count":     stats["count"],
+            "revenue":   stats["revenue"],
+            "profit":    stats["profit"],
+            "avg_margin": avg_m,
+        })
+
+    from app.models.user import User as UserModel
+    rates_configured = db.query(UserModel).filter(
+        UserModel.hourly_cost_rate != None,
+        UserModel.hourly_cost_rate > 0,
+    ).count() > 0
+
+    return templates.TemplateResponse("reports/margin.html", {
+        "request":          request,
+        "user":             user,
+        "can_see_financials": True,
+        "rows":             rows,
+        "sort_by":          sort_by,
+        "sort_dir":         sort_dir,
+        "period":           period,
+        "period_labels":    period_labels,
+        "start_date":       start_date,
+        "end_date":         end_date,
+        "date_from":        date_from,
+        "date_to":          date_to,
+        "rates_configured": rates_configured,
+        "avg_margin":       avg_margin,
+        "total_rev":        total_rev,
+        "total_profit":     total_profit,
+        "total_cost":       total_cost,
+        "total_mat":        total_mat,
+        "total_labor":      total_labor,
+        "has_any_partial":  has_any_partial,
+        "avg_variance":     avg_variance,
+        "over_count":       over_count,
+        "under_count":      under_count,
+        "est_rows_count":   len(est_rows),
+        "job_breakdown":    job_breakdown,
+    })
+
+
+@router.get("/margin/csv")
+async def margin_report_csv(
+    request: Request,
+    period: str = "ytd",
+    date_from: str = None,
+    date_to: str = None,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import StreamingResponse
+    import csv, io
+
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    if user.role != UserRole.owner:
+        return RedirectResponse("/reports", status_code=302)
+
+    start_date, end_date, period, date_from, date_to = _margin_period_dates(
+        period, date_from, date_to
+    )
+    orders = _load_margin_orders(db, start_date, end_date)
+    rows   = _build_margin_rows(orders)
+    rows.sort(key=lambda r: r["margin_pct"] if r["margin_pct"] is not None else -999, reverse=True)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Order", "Customer", "Job Type", "Invoice Date",
+        "Revenue", "Mat Cost", "Labor Cost", "Total Cost",
+        "Gross Profit", "Margin %",
+        "Estimate", "Variance $", "Variance %",
+    ])
+    for r in rows:
+        o = r["order"]
+        writer.writerow([
+            o.order_number,
+            o.customer.display_name if o.customer else "",
+            o.job_type.value if o.job_type else "",
+            r["invoice_date"].isoformat() if r["invoice_date"] else "",
+            f"{r['revenue']:.2f}",
+            f"{r['mat_cost']:.2f}",
+            f"{r['labor_cost']:.2f}",
+            f"{r['total_cost']:.2f}",
+            f"{r['gross_profit']:.2f}",
+            f"{r['margin_pct']}" if r["margin_pct"] is not None else "",
+            f"{r['estimate']:.2f}" if r["estimate"] is not None else "",
+            f"{r['variance']:.2f}" if r["variance"] is not None else "",
+            f"{r['variance_pct']}" if r["variance_pct"] is not None else "",
+        ])
+
+    buf.seek(0)
+    filename = f"margin_{period}_{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Production Analytics Report ───────────────────────────────────────────
+
+PROD_PERIOD_LABELS = {
+    "all": "All Time",
+    "ytd": "Year to Date",
+    "qtd": "Quarter to Date",
+    "mtd": "Month to Date",
+    "90d": "Last 90 Days",
+    "30d": "Last 30 Days",
+}
+
+BILLING_RATE_MAP = {
+    BillingDept.general_labor:       80.0,
+    BillingDept.steel_fabrication:  100.0,
+    BillingDept.aluminum_structural: 120.0,
+}
+
+DEPT_LABEL_MAP = {
+    "general_labor":       "General Labor",
+    "steel_fabrication":   "Steel Fabrication",
+    "aluminum_structural": "Aluminum / Structural",
+}
+
+JOB_TYPE_LABEL_MAP = {
+    "fabrication": "Fabrication",
+    "structural":  "Structural",
+    "beam":        "Beam",
+    "retail":      "Retail",
+    "walk_in":     "Walk-In",
+}
+
+
+def _prod_period_dates(period: str, date_from: str, date_to: str):
+    today = date.today()
+    if date_from and date_to:
+        try:
+            return date.fromisoformat(date_from), date.fromisoformat(date_to), "custom", date_from, date_to
+        except ValueError:
+            pass
+    if period == "all":
+        return date(2000, 1, 1), today, "all", "", ""
+    if period not in PROD_PERIOD_LABELS:
+        period = "mtd"
+    return get_start_date(period), today, period, "", ""
+
+
+@router.get("/production", response_class=HTMLResponse)
+async def production_report(
+    request: Request,
+    period: str = "mtd",
+    date_from: str = None,
+    date_to: str = None,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    if user.role not in [UserRole.owner, UserRole.ops_manager, UserRole.shop_foreman]:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    start_date, end_date, period, date_from, date_to = _prod_period_dates(period, date_from, date_to)
+
+    period_labels = dict(PROD_PERIOD_LABELS)
+    if period == "custom":
+        period_labels["custom"] = f"{date_from} – {date_to}"
+
+    # ── Load completed orders in period (invoiced or paid) ────────────────
+    completed_orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.customer),
+            joinedload(Order.invoice),
+            joinedload(Order.line_items),
+            joinedload(Order.labor_entries).joinedload(LaborEntry.employee),
+            joinedload(Order.production_stages),
+        )
+        .join(Invoice, Invoice.order_id == Order.id)
+        .filter(
+            Order.status.in_([OrderStatus.invoiced, OrderStatus.paid]),
+            Invoice.invoice_date >= start_date,
+            Invoice.invoice_date <= end_date,
+            Invoice.payment_status != PaymentStatus.void,
+        )
+        .all()
+    )
+
+    # ── Labor variance per order ──────────────────────────────────────────
+    labor_rows = []
+    for order in completed_orders:
+        # Estimated from line items
+        est_hours = 0.0
+        est_cost  = 0.0
+        for li in order.line_items:
+            if li.estimated_labor_hours and li.estimated_labor_dept:
+                rate = BILLING_RATE_MAP.get(BillingDept(li.estimated_labor_dept), 0.0) \
+                       if li.estimated_labor_dept in [d.value for d in BillingDept] else 0.0
+                est_hours += li.estimated_labor_hours
+                est_cost  += li.estimated_labor_hours * rate
+
+        # Actual from labor entries
+        act_hours = sum(e.hours or 0.0 for e in order.labor_entries)
+        act_cost  = sum(e.billed_value or 0.0 for e in order.labor_entries)
+
+        var_hours = act_hours - est_hours
+        var_cost  = act_cost  - est_cost
+        var_pct   = round(var_cost / est_cost * 100, 1) if est_cost > 0 else None
+
+        labor_rows.append({
+            "order":      order,
+            "est_hours":  round(est_hours, 2),
+            "est_cost":   round(est_cost, 2),
+            "act_hours":  round(act_hours, 2),
+            "act_cost":   round(act_cost, 2),
+            "var_hours":  round(var_hours, 2),
+            "var_cost":   round(var_cost, 2),
+            "var_pct":    var_pct,
+            "rework_count": order.rework_count or 0,
+        })
+
+    # Sort by variance pct descending (biggest overruns first)
+    labor_rows.sort(key=lambda r: r["var_pct"] if r["var_pct"] is not None else 0, reverse=True)
+
+    # Aggregate labor stats
+    agg_est_hours  = sum(r["est_hours"] for r in labor_rows)
+    agg_est_cost   = sum(r["est_cost"]  for r in labor_rows)
+    agg_act_hours  = sum(r["act_hours"] for r in labor_rows)
+    agg_act_cost   = sum(r["act_cost"]  for r in labor_rows)
+    agg_var_hours  = agg_act_hours - agg_est_hours
+    agg_var_cost   = agg_act_cost  - agg_est_cost
+    agg_var_pct    = round(agg_var_cost / agg_est_cost * 100, 1) if agg_est_cost > 0 else None
+    over_budget    = sum(1 for r in labor_rows if (r["var_cost"] or 0) > 0)
+    under_budget   = sum(1 for r in labor_rows if (r["var_cost"] or 0) < 0)
+
+    # ── Rework stats ──────────────────────────────────────────────────────
+    total_completed  = len(completed_orders)
+    rework_orders    = [o for o in completed_orders if (o.rework_count or 0) > 0]
+    rework_count     = len(rework_orders)
+    rework_rate      = round(rework_count / total_completed * 100, 1) if total_completed > 0 else 0.0
+    total_rework_cycles = sum(o.rework_count or 0 for o in completed_orders)
+
+    # Rework by job type
+    jt_rework: dict = defaultdict(lambda: {"total": 0, "rework": 0})
+    for o in completed_orders:
+        jt = o.job_type.value if o.job_type else "other"
+        jt_rework[jt]["total"] += 1
+        if (o.rework_count or 0) > 0:
+            jt_rework[jt]["rework"] += 1
+    rework_by_job_type = [
+        {
+            "job_type": jt,
+            "label":    JOB_TYPE_LABEL_MAP.get(jt, jt.replace("_", " ").title()),
+            "total":    stats["total"],
+            "rework":   stats["rework"],
+            "rate":     round(stats["rework"] / stats["total"] * 100, 1) if stats["total"] else 0.0,
+        }
+        for jt, stats in sorted(jt_rework.items(), key=lambda x: x[1]["rework"], reverse=True)
+    ]
+
+    # Top customers by rework job count
+    cust_rework: dict = defaultdict(lambda: {"name": "", "total": 0, "rework": 0})
+    for o in completed_orders:
+        cname = o.customer.display_name if o.customer else "Unknown"
+        cust_rework[cname]["name"]  = cname
+        cust_rework[cname]["total"] += 1
+        if (o.rework_count or 0) > 0:
+            cust_rework[cname]["rework"] += 1
+    top_rework_customers = sorted(
+        [v for v in cust_rework.values() if v["rework"] > 0],
+        key=lambda x: x["rework"], reverse=True
+    )[:8]
+
+    # ── Employee productivity ─────────────────────────────────────────────
+    labor_entries_in_period = (
+        db.query(LaborEntry)
+        .options(joinedload(LaborEntry.employee))
+        .filter(
+            LaborEntry.work_date >= start_date,
+            LaborEntry.work_date <= end_date,
+        )
+        .all()
+    )
+
+    emp_stats: dict = defaultdict(lambda: {
+        "employee": None, "hours": 0.0, "billed_value": 0.0,
+        "orders": set(), "dept_hours": defaultdict(float),
+    })
+    for e in labor_entries_in_period:
+        key = e.employee_id or 0
+        emp_stats[key]["employee"]     = e.employee
+        emp_stats[key]["hours"]       += e.hours or 0.0
+        emp_stats[key]["billed_value"] += e.billed_value or 0.0
+        if e.order_id:
+            emp_stats[key]["orders"].add(e.order_id)
+        if e.billing_dept:
+            dept_val = e.billing_dept.value if hasattr(e.billing_dept, "value") else str(e.billing_dept)
+            emp_stats[key]["dept_hours"][dept_val] += e.hours or 0.0
+
+    employee_rows = sorted(
+        [
+            {
+                "employee":    v["employee"],
+                "hours":       round(v["hours"], 1),
+                "billed_value": round(v["billed_value"], 2),
+                "order_count": len(v["orders"]),
+                "dept_hours":  dict(v["dept_hours"]),
+            }
+            for v in emp_stats.values()
+            if v["employee"] is not None
+        ],
+        key=lambda x: x["hours"], reverse=True,
+    )
+
+    # Dept breakdown
+    dept_stats: dict = defaultdict(lambda: {"hours": 0.0, "billed_value": 0.0})
+    for e in labor_entries_in_period:
+        dept_val = e.billing_dept.value if hasattr(e.billing_dept, "value") else str(e.billing_dept)
+        dept_stats[dept_val]["hours"]       += e.hours or 0.0
+        dept_stats[dept_val]["billed_value"] += e.billed_value or 0.0
+    dept_rows = sorted(
+        [
+            {
+                "dept":        k,
+                "label":       DEPT_LABEL_MAP.get(k, k.replace("_", " ").title()),
+                "hours":       round(v["hours"], 1),
+                "billed_value": round(v["billed_value"], 2),
+            }
+            for k, v in dept_stats.items()
+        ],
+        key=lambda x: x["hours"], reverse=True,
+    )
+    total_prod_hours  = round(sum(r["hours"]        for r in dept_rows), 1)
+    total_billed_val  = round(sum(r["billed_value"] for r in dept_rows), 2)
+
+    return templates.TemplateResponse("reports/production.html", {
+        "request":        request,
+        "user":           user,
+        "period":         period,
+        "period_labels":  period_labels,
+        "start_date":     start_date,
+        "end_date":       end_date,
+        "date_from":      date_from,
+        "date_to":        date_to,
+        # labor variance
+        "labor_rows":         labor_rows,
+        "agg_est_hours":      round(agg_est_hours, 1),
+        "agg_est_cost":       round(agg_est_cost, 2),
+        "agg_act_hours":      round(agg_act_hours, 1),
+        "agg_act_cost":       round(agg_act_cost, 2),
+        "agg_var_hours":      round(agg_var_hours, 1),
+        "agg_var_cost":       round(agg_var_cost, 2),
+        "agg_var_pct":        agg_var_pct,
+        "over_budget":        over_budget,
+        "under_budget":       under_budget,
+        # rework
+        "total_completed":        total_completed,
+        "rework_count":           rework_count,
+        "rework_rate":            rework_rate,
+        "total_rework_cycles":    total_rework_cycles,
+        "rework_by_job_type":     rework_by_job_type,
+        "top_rework_customers":   top_rework_customers,
+        # employee productivity
+        "employee_rows":      employee_rows,
+        "dept_rows":          dept_rows,
+        "total_prod_hours":   total_prod_hours,
+        "total_billed_val":   total_billed_val,
+        "dept_label_map":     DEPT_LABEL_MAP,
+    })

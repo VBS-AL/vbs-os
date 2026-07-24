@@ -87,3 +87,7 @@ class OrderLineItem(Base):
     inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
     estimated_labor_hours = Column(Float, nullable=True)
     estimated_labor_dept  = Column(String, nullable=True)
+    is_delivery_surcharge = Column(Boolean, default=False)
+
+    order                 = relationship("Order", back_populates="line_items")
+    inventory_item        = relationship("InventoryItem")

@@ -726,4 +726,262 @@ async def process_audit(
         notes_raw = str(row[7] or "").strip() if len(row) > 7 else ""
         audit_note = f"Physical count — system: {old_qty} {item.unit}, counted: {counted} {item.unit}."
         if notes_raw:
-            audit_note += f" Note: {notes_ra
+            audit_note += f" Note: {notes_raw}"
+
+        item.quantity_on_hand = counted
+        db.add(InventoryAdjustment(
+            item_id=item.id,
+            delta=delta,
+            reason=AdjustmentReason.correction,
+            notes=audit_note,
+            recorded_by_id=user.id,
+        ))
+        adjusted.append({
+            "sku": sku, "name": item.name,
+            "old": old_qty, "new": counted,
+            "delta": delta, "unit": item.unit,
+        })
+
+    db.commit()
+    return templates.TemplateResponse("inventory/audit_result.html", {
+        "request": request, "user": user,
+        "can_see_financials": financials_visible(user),
+        "adjusted": adjusted, "no_change": no_change,
+        "not_found": not_found, "errors": errors,
+    })
+
+
+# ── Detail ────────────────────────────────────────────────────────────────
+@router.get("/{item_id}", response_class=HTMLResponse)
+async def item_detail(
+    request: Request,
+    item_id: int,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+
+    return templates.TemplateResponse("inventory/detail.html", {
+        "request":         request,
+        "user":            user,
+        "can_see_financials": financials_visible(user),
+        "item":            item,
+        "category_labels": CATEGORY_LABELS,
+        "reason_labels":   REASON_LABELS,
+        "reasons":         list(AdjustmentReason),
+    })
+
+
+# ── Adjust stock ──────────────────────────────────────────────────────────
+@router.post("/{item_id}/adjust")
+async def adjust_stock(
+    item_id: int,
+    action: str             = Form(...),
+    amount: float           = Form(...),
+    reason: str             = Form(...),
+    notes: Optional[str]    = Form(None),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+
+    delta = amount if action == "add" else -amount
+    item.quantity_on_hand = (item.quantity_on_hand or 0) + delta
+
+    db.add(InventoryAdjustment(
+        item_id=item.id,
+        delta=delta,
+        reason=AdjustmentReason(reason),
+        notes=notes,
+        recorded_by_id=user.id,
+    ))
+    db.commit()
+    return RedirectResponse(f"/inventory/{item_id}", status_code=302)
+
+
+# ── Edit ──────────────────────────────────────────────────────────────────
+@router.get("/{item_id}/edit", response_class=HTMLResponse)
+async def edit_item_form(
+    request: Request,
+    item_id: int,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+    return templates.TemplateResponse("inventory/edit.html", {
+        "request":         request,
+        "user":            user,
+        "can_see_financials": financials_visible(user),
+        "item":            item,
+        "categories":      list(InventoryCategory),
+        "category_labels": CATEGORY_LABELS,
+    })
+
+
+@router.post("/{item_id}/edit")
+async def save_item(
+    item_id: int,
+    name: str                          = Form(...),
+    category: str                      = Form(...),
+    description: Optional[str]         = Form(None),
+    unit: str                          = Form(...),
+    reorder_threshold: Optional[float] = Form(None),
+    cost_per_unit: Optional[float]     = Form(None),
+    weight_per_unit: Optional[float]   = Form(None),
+    retail_markup: Optional[float]     = Form(None),
+    location: Optional[str]            = Form(None),
+    supplier_name: Optional[str]       = Form(None),
+    supplier_contact: Optional[str]    = Form(None),
+    notes: Optional[str]               = Form(None),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+
+    item.name              = name
+    item.category          = InventoryCategory(category)
+    item.description       = description
+    item.unit              = unit
+    item.reorder_threshold = reorder_threshold
+    item.cost_per_unit     = cost_per_unit
+    item.weight_per_unit   = weight_per_unit
+    item.retail_markup     = retail_markup
+    item.location          = location
+    item.supplier_name     = supplier_name
+    item.supplier_contact  = supplier_contact
+    item.notes             = notes
+
+    db.commit()
+    return RedirectResponse(f"/inventory/{item_id}", status_code=302)
+
+
+# ── Detail ────────────────────────────────────────────────────────────────
+@router.get("/{item_id}", response_class=HTMLResponse)
+async def item_detail(
+    request: Request,
+    item_id: int,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+
+    return templates.TemplateResponse("inventory/detail.html", {
+        "request":         request,
+        "user":            user,
+        "can_see_financials": financials_visible(user),
+        "item":            item,
+        "category_labels": CATEGORY_LABELS,
+        "reason_labels":   REASON_LABELS,
+        "reasons":         list(AdjustmentReason),
+    })
+
+
+# ── Adjust stock ──────────────────────────────────────────────────────────
+@router.post("/{item_id}/adjust")
+async def adjust_stock(
+    item_id: int,
+    action: str             = Form(...),   # "add" or "remove"
+    amount: float           = Form(...),
+    reason: str             = Form(...),
+    notes: Optional[str]    = Form(None),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+
+    delta = amount if action == "add" else -amount
+    item.quantity_on_hand = (item.quantity_on_hand or 0) + delta
+
+    adj = InventoryAdjustment(
+        item_id=item.id,
+        delta=delta,
+        reason=AdjustmentReason(reason),
+        notes=notes,
+        recorded_by_id=user.id,
+    )
+    db.add(adj)
+    db.commit()
+    return RedirectResponse(f"/inventory/{item_id}", status_code=302)
+
+
+# ── Edit ──────────────────────────────────────────────────────────────────
+@router.get("/{item_id}/edit", response_class=HTMLResponse)
+async def edit_item_form(
+    request: Request,
+    item_id: int,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+    return templates.TemplateResponse("inventory/edit.html", {
+        "request":         request,
+        "user":            user,
+        "can_see_financials": financials_visible(user),
+        "item":            item,
+        "categories":      list(InventoryCategory),
+        "category_labels": CATEGORY_LABELS,
+    })
+
+
+@router.post("/{item_id}/edit")
+async def save_item(
+    item_id: int,
+    name: str                          = Form(...),
+    category: str                      = Form(...),
+    description: Optional[str]         = Form(None),
+    unit: str                          = Form(...),
+    reorder_threshold: Optional[float] = Form(None),
+    cost_per_unit: Optional[float]     = Form(None),
+    location: Optional[str]            = Form(None),
+    supplier_name: Optional[str]       = Form(None),
+    supplier_contact: Optional[str]    = Form(None),
+    notes: Optional[str]               = Form(None),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return RedirectResponse("/inventory", status_code=302)
+
+    item.name              = name
+    item.category          = InventoryCategory(category)
+    item.description       = description
+    item.unit              = unit
+    item.reorder_threshold = reorder_threshold
+    item.cost_per_unit     = cost_per_unit
+    item.location          = location
+    item.supplier_name     = supplier_name
+    item.supplier_contact  = supplier_contact
+    item.notes             = notes
+    db.commit()
+    return RedirectResponse(f"/inventory/{item_id}", status_code=302)

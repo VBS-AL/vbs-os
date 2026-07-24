@@ -283,4 +283,161 @@
   <table class="w-full text-sm">
     <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
       <tr>
-        <
+        <th class="px-5 py-3 text-left">Department</th>
+        <th class="px-5 py-3 text-right">Hours</th>
+        <th class="px-5 py-3 text-right">Billed Value</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in labor_rows %}
+      <tr class="hover:bg-steel-light">
+        <td class="px-5 py-3 font-medium text-gray-700">{{ dept_labels.get(row.billing_dept.value, row.billing_dept.value.title()) }}</td>
+        <td class="px-5 py-3 text-right text-gray-600">{{ "%.1f"|format(row.total_hours) }} hrs</td>
+        <td class="px-5 py-3 text-right font-medium">${{ "{:,.2f}".format(row.total_value or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Fulfillment Performance -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2 mt-8">Fulfillment Performance</p>
+<div class="grid grid-cols-3 gap-4 mb-6">
+
+  <!-- On-time rate -->
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 {% if on_time_rate is not none and on_time_rate >= 90 %}border-green-500{% elif on_time_rate is not none and on_time_rate >= 70 %}border-amber-400{% elif on_time_rate is not none %}border-red-400{% else %}border-gray-200{% endif %}">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">On-Time Fulfillment Rate</p>
+    {% if on_time_rate is not none %}
+    <p class="text-3xl font-bold mt-1 {% if on_time_rate >= 90 %}text-green-700{% elif on_time_rate >= 70 %}text-amber-600{% else %}text-red-600{% endif %}">{{ on_time_rate }}%</p>
+    <p class="text-xs text-gray-400 mt-1">{{ on_time_count }} of {{ total_with_promise_count }} orders shipped by due date</p>
+    {% else %}
+    <p class="text-3xl font-bold text-gray-300 mt-1">—</p>
+    <p class="text-xs text-gray-400 mt-1">No fulfilled orders with a promised date</p>
+    {% endif %}
+  </div>
+
+  <!-- Avg cycle time -->
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Avg Fulfillment Cycle</p>
+    {% if avg_cycle_days is not none %}
+    <p class="text-3xl font-bold text-steel-dark mt-1">{{ avg_cycle_days }}<span class="text-lg font-normal text-gray-400 ml-1">days</span></p>
+    <p class="text-xs text-gray-400 mt-1">Order created → shipped · Min {{ min_cycle_days }}d / Max {{ max_cycle_days }}d</p>
+    {% else %}
+    <p class="text-3xl font-bold text-gray-300 mt-1">—</p>
+    <p class="text-xs text-gray-400 mt-1">No fulfilled orders in this period</p>
+    {% endif %}
+  </div>
+
+  <!-- Total fulfilled -->
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-400">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Orders Fulfilled</p>
+    <p class="text-3xl font-bold text-emerald-700 mt-1">{{ total_fulfilled }}</p>
+    <p class="text-xs text-gray-400 mt-1">Shipped in this period</p>
+  </div>
+
+</div>
+
+{% if method_rows %}
+<div class="grid grid-cols-2 gap-6 mb-8">
+  <div>
+    <p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Fulfillment Method Breakdown</p>
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-steel-light text-steel-dark text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Method</th>
+            <th class="px-5 py-3 text-right">Orders</th>
+            <th class="px-5 py-3 text-right">Share</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in method_rows %}
+          <tr class="hover:bg-steel-light">
+            <td class="px-5 py-3 font-medium text-gray-700">
+              {% if row.via == 'customer_pickup' %}🏭
+              {% elif row.via == 'vbs_delivery' %}🚚
+              {% elif row.via == 'third_party_freight' %}📦
+              {% elif row.via == 'courier' %}📬
+              {% else %}📋{% endif %}
+              {{ row.label }}
+            </td>
+            <td class="px-5 py-3 text-right font-semibold text-steel-dark">{{ row.count }}</td>
+            <td class="px-5 py-3 text-right text-gray-500">
+              {% if total_fulfilled > 0 %}{{ "%.0f"|format(row.count / total_fulfilled * 100) }}%{% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Inventory Snapshot -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2 mt-8">Inventory Snapshot</p>
+<div class="grid grid-cols-3 gap-4 mb-8">
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-steel-mid">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Stock Value on Hand</p>
+    <p class="text-2xl font-bold text-steel-dark mt-1">${{ "{:,.2f}".format(inventory_value) }}</p>
+    <p class="text-xs text-gray-400 mt-1">
+      {{ inventory_costed_count }} of {{ inventory_total_count }} item{{ 's' if inventory_total_count != 1 }} have cost data
+    </p>
+  </div>
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-blue-300">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Active SKUs</p>
+    <p class="text-2xl font-bold text-steel-dark mt-1">{{ inventory_total_count }}</p>
+    <p class="text-xs text-gray-400 mt-1">Total inventory items</p>
+  </div>
+  <a href="/inventory?filter=low_stock" class="bg-white rounded-xl shadow p-5 border-l-4 {% if inventory_low_stock > 0 %}border-amber-400 hover:bg-amber-50{% else %}border-gray-200{% endif %} transition block">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Low Stock Items</p>
+    <p class="text-2xl font-bold {% if inventory_low_stock > 0 %}text-amber-600{% else %}text-gray-400{% endif %} mt-1">{{ inventory_low_stock }}</p>
+    <p class="text-xs text-gray-400 mt-1">At or below reorder threshold</p>
+  </a>
+</div>
+
+<!-- Retail vs Fabrication Revenue -->
+<p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2 mt-8">Revenue by Job Type</p>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-blue-500">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Fabrication / Shop Jobs</p>
+    <p class="text-3xl font-bold text-blue-700 mt-1">${{ "{:,.2f}".format(fab_revenue) }}</p>
+    <p class="text-xs text-gray-400 mt-1">
+      {{ fab_order_count }} order{{ 's' if fab_order_count != 1 }}
+      {% if fab_pct is not none %} · {{ fab_pct }}% of invoiced revenue{% endif %}
+    </p>
+  </div>
+
+  <div class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-500">
+    <p class="text-xs text-gray-500 uppercase tracking-wide">Retail / Counter Sales</p>
+    <p class="text-3xl font-bold text-emerald-700 mt-1">${{ "{:,.2f}".format(retail_revenue) }}</p>
+    <p class="text-xs text-gray-400 mt-1">
+      {{ retail_order_count }} order{{ 's' if retail_order_count != 1 }}
+      {% if retail_pct is not none %} · {{ retail_pct }}% of invoiced revenue{% endif %}
+    </p>
+  </div>
+
+</div>
+{% if revenue_invoiced > 0 %}
+<div class="bg-white rounded-xl shadow p-5 mb-6">
+  <p class="text-xs text-gray-500 uppercase tracking-wide mb-3">Revenue Mix</p>
+  <div class="flex items-center gap-2">
+    {% set fab_w = fab_pct or 0 %}
+    {% set ret_w = retail_pct or 0 %}
+    {% if fab_w > 0 %}
+    <div class="h-5 rounded-l-full bg-blue-400" style="width: {{ fab_w }}%; min-width: 2px;"></div>
+    {% endif %}
+    {% if ret_w > 0 %}
+    <div class="h-5 rounded-r-full bg-emerald-400" style="width: {{ ret_w }}%; min-width: 2px;"></div>
+    {% endif %}
+  </div>
+  <div class="flex gap-6 mt-2 text-xs text-gray-500">
+    <span><span class="inline-block w-3 h-3 rounded-sm bg-blue-400 mr-1"></span>Fabrication {{ fab_pct or 0 }}%</span>
+    <span><span class="inline-block w-3 h-3 rounded-sm bg-emerald-400 mr-1"></span>Retail {{ retail_pct or 0 }}%</span>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

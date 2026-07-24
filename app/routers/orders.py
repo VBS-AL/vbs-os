@@ -580,4 +580,13 @@ async def customer_search(
         return HTMLResponse("")
     results = db.query(Customer).filter(
         (Customer.name.ilike(f"%{q}%") | Customer.phone.ilike(f"%{q}%")),
-        Customer.is_active == T
+        Customer.is_active == True,
+    ).limit(8).all()
+    if not results:
+        return HTMLResponse('<div class="px-3 py-2 text-sm text-gray-400">No customers found</div>')
+    html = ""
+    for c in results:
+        company = f'  <span class="text-gray-400 text-xs">{c.company}</span>' if c.company else ""
+        phone = f'  <span class="text-gray-400 text-xs">{c.phone}</span>' if c.phone else ""
+        html += f'<div data-customer-id="{c.id}" data-customer-name="{c.name}" class="px-3 py-2 cursor-pointer hover:bg-steel-light text-sm">{c.name}{company}{phone}</div>'
+    return HTMLResponse(html)

@@ -656,4 +656,6 @@ async def customer_search(
     for c in results:
         label = c.display_name  # company if set, otherwise name
         sub = f'  <span class="text-gray-400 text-xs">{c.name}</span>' if c.company else ""
-        phone = f' 
+        phone = f'  <span class="text-gray-400 text-xs">{c.phone}</span>' if c.phone else ""
+        html += f'<div data-customer-id="{c.id}" data-customer-name="{label}" class="px-3 py-2 cursor-pointer hover:bg-steel-light text-sm">{label}{sub}{phone}</div>'
+    return HTMLResponse(html)

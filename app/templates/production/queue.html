@@ -861,4 +861,93 @@ document.addEventListener('submit', function(e) {
     }
   }).catch(function() {
     if (errEl) {
-      errEl.textContent = 'Something went wron
+      errEl.textContent = 'Something went wrong';
+      errEl.classList.remove('hidden');
+    }
+  });
+});
+</script>
+
+<!-- Delivery form interactivity -->
+<script>
+(function() {
+  const sel = document.getElementById('shipped-via-select');
+  const wrap = document.getElementById('shipped-via-other-wrap');
+  if (sel && wrap) {
+    sel.addEventListener('change', function() {
+      wrap.classList.toggle('hidden', sel.value !== 'other');
+    });
+  }
+})();
+</script>
+
+<!-- QA form interactivity -->
+<script>
+(function() {
+  // Radio button visual highlighting
+  const resultColors = {
+    pass:        ['border-green-500',  'bg-green-50',  'text-green-700'],
+    conditional: ['border-yellow-500', 'bg-yellow-50', 'text-yellow-700'],
+    rework:      ['border-orange-500', 'bg-orange-50', 'text-orange-700'],
+    fail:        ['border-red-500',    'bg-red-50',    'text-red-700'],
+  };
+  document.querySelectorAll('.qa-result-btn input[type=radio]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      // Reset all
+      document.querySelectorAll('.qa-result-btn span').forEach(function(span) {
+        span.className = 'block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold cursor-pointer transition';
+      });
+      // Highlight selected
+      const span = radio.closest('label').querySelector('span');
+      const colors = resultColors[radio.value] || [];
+      span.classList.add(...colors, 'border-2');
+
+      // Show/hide failure fields
+      const failureFields = document.getElementById('qa-failure-fields');
+      if (failureFields) {
+        failureFields.classList.toggle('hidden', !['fail', 'rework', 'conditional'].includes(radio.value));
+      }
+    });
+  });
+
+  // Certified weld ref field toggle
+  const certChk = document.getElementById('cert-weld-chk');
+  const certRef  = document.getElementById('cert-ref-input');
+  if (certChk && certRef) {
+    certChk.addEventListener('change', function() {
+      certRef.classList.toggle('hidden', !certChk.checked);
+    });
+  }
+})();
+</script>
+
+<!-- Live timer updater -->
+<script>
+(function() {
+  const el = document.getElementById('elapsed-display');
+  if (!el) return;
+
+  const status = el.dataset.status;
+  if (status !== 'active') return;  // don't tick if paused
+
+  const rawStarted = el.dataset.started;
+  // SQLite returns naive UTC datetimes (no tz suffix) — append Z so JS parses as UTC
+  const startedAt = new Date(rawStarted.includes('+') || rawStarted.endsWith('Z') ? rawStarted : rawStarted + 'Z');
+  const pausedMin = parseFloat(el.dataset.pausedMin) || 0;
+
+  function tick() {
+    const now = new Date();
+    const totalSec = (now - startedAt) / 1000;
+    const netSec   = Math.max(0, totalSec - (pausedMin * 60));
+    const h = Math.floor(netSec / 3600);
+    const m = Math.floor((netSec % 3600) / 60);
+    const s = Math.floor(netSec % 60);
+    el.textContent = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+{% endblock %}

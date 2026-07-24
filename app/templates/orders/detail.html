@@ -885,4 +885,71 @@
             <span class="font-medium">${{ '%.2f'|format(mat_sum.v) }}</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-indi
+            <span class="text-indigo-600">Est. Labor</span>
+            <span class="font-medium text-indigo-600">${{ '%.2f'|format(est_labor_sum.v) }}</span>
+          </div>
+          {% if total_labor %}
+          <div class="flex justify-between text-green-700">
+            <span>Actual Labor ({{ total_hours }}h)</span>
+            <span class="font-medium">${{ '%.2f'|format(total_labor) }}</span>
+          </div>
+          {% endif %}
+          <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-semibold text-steel-dark">
+            <span>Est. Total</span>
+            <span>${{ '%.2f'|format(mat_sum.v + est_labor_sum.v) }}</span>
+          </div>
+          {% if total_labor %}
+          <div class="flex justify-between border-t border-steel-mid/20 pt-1 mt-1 font-bold text-steel-dark">
+            <span>Actual Total</span>
+            <span>${{ '%.2f'|format(mat_sum.v + (total_labor or 0)) }}</span>
+          </div>
+          {% set overall_variance = (mat_sum.v + (total_labor or 0)) - (mat_sum.v + est_labor_sum.v) %}
+          <div class="flex justify-between text-xs font-semibold {% if overall_variance > 0 %}text-red-600{% elif overall_variance < 0 %}text-green-600{% else %}text-gray-400{% endif %}">
+            <span>vs. Estimate</span>
+            <span>{% if overall_variance > 0 %}+{% endif %}${{ '%.2f'|format(overall_variance) }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /right column -->
+  </div><!-- /grid -->
+</div>
+
+<script>
+function toggleDrawingUpload() {
+  const f = document.getElementById('drawing-upload-form');
+  if (f) f.classList.toggle('hidden');
+}
+function toggleLaborForm() {
+  const f = document.getElementById('labor-form');
+  if (!f) return;
+  f.classList.toggle('hidden');
+  if (!f.classList.contains('hidden')) {
+    const dp = document.getElementById('labor-date-picker');
+    if (dp && !dp.value) dp.value = '{{ today }}';
+  }
+}
+function toggleQAForm() {
+  const f = document.getElementById('qa-form');
+  if (!f) return;
+  f.classList.toggle('hidden');
+}
+function handleQAResultChange(val) {
+  const fr = document.getElementById('failure-reason');
+  const rn = document.getElementById('rework-notes');
+  if (!fr || !rn) return;
+  if (val === 'fail') {
+    fr.required = true; rn.required = true;
+    fr.style.borderColor = '#ef4444'; rn.style.borderColor = '#ef4444';
+  } else if (val === 'conditional') {
+    fr.required = true; rn.required = false;
+    fr.style.borderColor = '#f59e0b'; rn.style.borderColor = '';
+  } else {
+    fr.required = false; rn.required = false;
+    fr.style.borderColor = ''; rn.style.borderColor = '';
+  }
+}
+</script>
+{% endblock %}

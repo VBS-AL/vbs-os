@@ -72,4 +72,18 @@ def main():
 
     # Remove uploaded drawings for orders and quotes (files on disk)
     drawings_dir = os.path.join("app", "static", "drawings")
-    removed_dirs = 
+    removed_dirs = 0
+    if os.path.isdir(drawings_dir):
+        for name in os.listdir(drawings_dir):
+            full = os.path.join(drawings_dir, name)
+            if os.path.isdir(full) and (name.startswith("VBS-O-") or name.startswith("VBS-Q-")):
+                shutil.rmtree(full)
+                removed_dirs += 1
+    print(f"  cleared drawings/             ({removed_dirs} order/quote folders)")
+
+    print("\nDone. Inventory, customers, and team are untouched.")
+    print("Restart the server and you're ready for a clean run.")
+
+
+if __name__ == "__main__":
+    main()

@@ -9,4 +9,4 @@ from .inventory import InventoryItem, InventoryAdjustment, InventoryCategory, Ad
 from .invoice import Invoice, Payment
 from .scrap import ScrapRecord, RetailScrapItem, RemnantRecord, RemnantDisposition
 from .settings import AppSetting
-from .packing_list import PackingLi
+from .packing_list import PackingList, ShippedVia, SHIPPED_VIA_LABELS

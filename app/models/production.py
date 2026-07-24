@@ -84,4 +84,4 @@ class DrawingRecord(Base):
     stage_context  = Column(String, nullable=True)
 
     order          = relationship("Order", back_populates="drawing_records")
-    uploaded_by    = relationship("Use
+    uploaded_by    = relationship("User", foreign_keys=[uploaded_by_id])

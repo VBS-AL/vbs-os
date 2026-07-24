@@ -75,4 +75,5 @@ class QuoteRevision(Base):
     change_note     = Column(String, nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
-    quote           =
+    quote           = relationship("Quote", back_populates="revisions")
+    edited_by       = relationship("User", foreign_keys=[edited_by_id])

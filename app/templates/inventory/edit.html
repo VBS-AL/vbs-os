@@ -122,4 +122,28 @@
       <div class="col-span-2">
         <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
         <textarea name="notes" rows="2"
-                  class="w-full border border-gray-200 rou
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">{{ item.notes or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-3">
+    <button type="submit" class="bg-steel-dark text-white px-6 py-2 rounded-lg hover:bg-steel-mid transition text-sm font-medium">
+      Save Changes
+    </button>
+    <a href="/inventory/{{ item.id }}" class="px-6 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</a>
+  </div>
+</form>
+
+<script>
+function buildLocation() {
+  const area = document.getElementById('loc-area').value;
+  const rack = document.getElementById('loc-rack').value;
+  const row  = document.getElementById('loc-row').value;
+  const parts = [area, rack, row].filter(Boolean);
+  const val = parts.join(' / ');
+  document.getElementById('location-value').value = val;
+  document.getElementById('location-preview').textContent = val ? '📍 ' + val : '';
+}
+</script>
+{% endblock %}

@@ -288,4 +288,395 @@ function addColumnRow() {
         <input type="number" class="cr-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1"/>
       </div>
       <div>
-        <label class="block text-xs text-gray-500 mb
+        <label class="block text-xs text-gray-500 mb-1">Size / Diameter</label>
+        <input type="text" class="cr-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder='e.g. 4" Round'/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Ft</label>
+        <input type="number" class="cr-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">In</label>
+        <input type="number" class="cr-in w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" max="11" placeholder="0"/>
+      </div>
+      <div class="flex items-end pb-1.5 justify-center">
+        <label class="flex items-center gap-1 text-sm cursor-pointer">
+          <input type="checkbox" class="cr-adj rounded border-gray-300"/>
+          <span class="text-xs text-gray-600">Adj.</span>
+        </label>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
+        <input type="number" class="cr-price w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" min="0" step="0.01" placeholder="0.00"/>
+      </div>
+      <div class="flex justify-end pt-4">
+        <button type="button" onclick="this.closest('.col-row').remove(); syncColNoMsg()"
+          class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+      </div>
+    </div>
+    <div class="mt-1">
+      <label class="block text-xs text-amber-700 font-medium mb-1">🔒 Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
+      <textarea class="cr-internal-notes w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none" rows="1" placeholder="Shop directions, production notes…"></textarea>
+    </div>`;
+  document.getElementById('column-rows').appendChild(row);
+  syncColNoMsg();
+  htmx.process(row);
+  row.querySelector('.cr-size').focus();
+}
+
+function clearColInv(cidx) {
+  document.getElementById('li-inv-id-' + cidx).value = '';
+  document.getElementById('inv-search-' + cidx).value = '';
+  document.getElementById('inv-badge-' + cidx).classList.add('hidden');
+}
+
+function syncColNoMsg() {
+  document.getElementById('no-columns').style.display =
+    document.querySelectorAll('.col-row').length ? 'none' : 'block';
+}
+
+// ── Generic line items ────────────────────────────────────────────────────────
+let lineCount = 0;
+const paintOptions = {{ paint_options | tojson }};
+
+function addLine() {
+  const idx = lineCount++;
+  const opts = paintOptions.map(p => `<option value="${p}">${p}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'line-item bg-gray-50 rounded-lg p-3 space-y-2';
+  row.innerHTML = `
+    <div class="relative">
+      <label class="block text-xs text-gray-500 mb-1">Search Inventory <span class="text-gray-400">(optional)</span></label>
+      <input type="text" id="inv-search-${idx}" name="q" placeholder="Type to search inventory…" autocomplete="off"
+        hx-get="/inventory/search" hx-trigger="keyup changed delay:250ms" hx-target="#inv-results-${idx}"
+        hx-include="this"
+        class="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
+      <input type="hidden" name="li_inv_id_${idx}" id="li-inv-id-${idx}"/>
+      <div id="inv-results-${idx}" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 divide-y divide-gray-100 hidden max-h-48 overflow-y-auto"></div>
+      <span id="inv-badge-${idx}" class="hidden mt-1 inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5">
+        <span id="inv-badge-text-${idx}"></span>
+        <button type="button" onclick="clearInv(${idx})" class="text-blue-400 hover:text-blue-600 ml-1">×</button>
+      </span>
+    </div>
+    <div class="grid grid-cols-12 gap-2 items-start">
+      <div class="col-span-3">
+        <label class="block text-xs text-gray-500 mb-1">Description <span class="text-red-400">*</span></label>
+        <input type="text" name="li_desc_${idx}" id="li-desc-${idx}" required placeholder="Item description…"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+      </div>
+      <div class="col-span-1">
+        <label class="block text-xs text-gray-500 mb-1">Qty</label>
+        <input type="number" name="li_qty_${idx}" min="0.01" step="0.01" value="1" required
+          oninput="updatePrice(${idx})"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+        <p id="li-stock-warn-${idx}" class="hidden text-xs text-amber-600 font-medium mt-0.5 whitespace-nowrap"></p>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
+        <input type="number" name="li_price_${idx}" id="li-price-${idx}" step="0.01" min="0" placeholder="0.00"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs text-gray-500 mb-1">Paint Spec</label>
+        <select name="li_paint_${idx}" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+          <option value="Same as Job">Same as Job</option>
+          ${opts}
+        </select>
+      </div>
+      <div class="col-span-1">
+        <label class="block text-xs text-gray-500 mb-1">Labor hrs <span class="text-red-400">*</span></label>
+        <input type="number" name="li_labor_${idx}" id="li-labor-${idx}" step="0.05" min="0.05" placeholder="0"
+          oninput="updateLaborCost(${idx})"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs text-gray-500 mb-1">Labor Dept <span class="text-red-400">*</span></label>
+        <select name="li_labor_dept_${idx}" id="li-labor-dept-${idx}" onchange="updateLaborCost(${idx})"
+          class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+          <option value="">— Select Dept —</option>
+          <option value="general_labor">General Labor ($80/hr)</option>
+          <option value="steel_fabrication">Steel Fab ($100/hr)</option>
+          <option value="aluminum_structural">Aluminum ($120/hr)</option>
+        </select>
+        <p id="labor-cost-${idx}" class="text-xs font-semibold text-indigo-600 mt-1 h-4"></p>
+      </div>
+      <div class="col-span-1 flex justify-end pt-5">
+        <button type="button" onclick="this.closest('.line-item').remove(); updateNoLines()"
+          class="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+      </div>
+    </div>
+    <div class="mt-1">
+      <label class="block text-xs text-amber-700 font-medium mb-1">🔒 Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
+      <textarea name="li_internal_notes_${idx}" rows="1" placeholder="Shop directions, production notes…"
+        class="w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"></textarea>
+    </div>`;
+  document.getElementById('lines-container').appendChild(row);
+  updateNoLines();
+  htmx.process(row);
+}
+
+function updateNoLines() {
+  document.getElementById('no-lines').style.display =
+    document.querySelectorAll('.line-item').length ? 'none' : 'block';
+}
+
+const LABOR_RATES = { general_labor: 80, steel_fabrication: 100, aluminum_structural: 120 };
+function updateLaborCost(idx) {
+  const hrs  = parseFloat(document.getElementById(`li-labor-${idx}`)?.value || 0);
+  const dept = document.getElementById(`li-labor-dept-${idx}`)?.value;
+  const el   = document.getElementById(`labor-cost-${idx}`);
+  if (!el) return;
+  el.textContent = (hrs > 0 && dept && LABOR_RATES[dept])
+    ? `Est. labor: $${(hrs * LABOR_RATES[dept]).toFixed(2)}`
+    : '';
+}
+
+function updatePrice(idx) {
+  const priceEl = document.getElementById(`li-price-${idx}`);
+  const qtyEl   = document.querySelector(`[name="li_qty_${idx}"]`);
+  if (!priceEl || !qtyEl || !priceEl.dataset.unitPrice) return;
+  const unitPrice = parseFloat(priceEl.dataset.unitPrice);
+  const qty       = parseFloat(qtyEl.value) || 1;
+  priceEl.value   = (unitPrice * qty).toFixed(2);
+  checkStock(idx);
+}
+
+function checkStock(idx) {
+  const priceEl = document.getElementById(`li-price-${idx}`);
+  const qtyEl   = document.querySelector(`[name="li_qty_${idx}"]`);
+  const warnEl  = document.getElementById(`li-stock-warn-${idx}`);
+  if (!priceEl || !qtyEl || !warnEl) return;
+  const onHand = parseFloat(priceEl.dataset.onHand);
+  if (isNaN(onHand)) return;
+  const qty = parseFloat(qtyEl.value) || 0;
+  if (qty > onHand) {
+    warnEl.textContent = `⚠ Only ${onHand} on hand`;
+    warnEl.classList.remove('hidden');
+  } else {
+    warnEl.classList.add('hidden');
+  }
+}
+
+function clearInv(idx) {
+  document.getElementById(`li-inv-id-${idx}`).value = '';
+  document.getElementById(`inv-search-${idx}`).value = '';
+  document.getElementById(`inv-badge-${idx}`).classList.add('hidden');
+}
+
+// ── Job type toggle ───────────────────────────────────────────────────────────
+function onJobTypeChange(val) {
+  const isBeam = (val === 'beam');
+  document.getElementById('beam-items-section').classList.toggle('hidden', !isBeam);
+  document.getElementById('generic-line-items').classList.toggle('hidden', isBeam);
+  document.getElementById('paint-select-wrap').classList.toggle('hidden', isBeam);
+  document.getElementById('paint-beam-wrap').classList.toggle('hidden', !isBeam);
+  // Clear the non-active paint selection to avoid double submission
+  if (isBeam) {
+    document.getElementById('paint-spec-select').value = '';
+  } else {
+    document.querySelectorAll('input[name="paint_spec"]').forEach(r => r.checked = false);
+    highlightPaint();
+  }
+}
+
+// ── Build beam/column hidden inputs before submit ─────────────────────────────
+function buildBeamLineItems() {
+  // Remove any previously injected hidden inputs
+  document.querySelectorAll('.beam-hidden-li').forEach(el => el.remove());
+
+  const form = document.getElementById('quote-form');
+  let idx = 0;
+
+  // Beam rows
+  document.querySelectorAll('.beam-row').forEach(row => {
+    const qty           = row.querySelector('.br-qty').value  || '1';
+    const size          = row.querySelector('.br-size').value.trim();
+    const ft            = row.querySelector('.br-ft').value   || '0';
+    const inch          = row.querySelector('.br-in').value   || '0';
+    const price         = row.querySelector('.br-price').value;
+    const invId         = row.querySelector('.br-inv-id')?.value;
+    const internalNotes = row.querySelector('.br-internal-notes')?.value.trim() || '';
+    if (!size) return;
+    const lenParts = [];
+    if (parseInt(ft) > 0)   lenParts.push(`${ft}'`);
+    if (parseInt(inch) > 0) lenParts.push(`${inch}"`);
+    const lenStr = lenParts.length ? ' x ' + lenParts.join('-') : '';
+    const desc = `WF ${size}#${lenStr}`;
+    _addHidden(form, `li_desc_${idx}`,  desc);
+    _addHidden(form, `li_qty_${idx}`,   qty);
+    _addHidden(form, `li_unit_${idx}`,  'ea');
+    if (price)         _addHidden(form, `li_price_${idx}`, price);
+    if (invId)         _addHidden(form, `li_inv_id_${idx}`, invId);
+    if (internalNotes) _addHidden(form, `li_internal_notes_${idx}`, internalNotes);
+    idx++;
+  });
+
+  // Column rows
+  document.querySelectorAll('.col-row').forEach(row => {
+    const qty           = row.querySelector('.cr-qty').value   || '1';
+    const size          = row.querySelector('.cr-size').value.trim();
+    const ft            = row.querySelector('.cr-ft').value    || '0';
+    const inch          = row.querySelector('.cr-in').value    || '0';
+    const adj           = row.querySelector('.cr-adj').checked;
+    const price         = row.querySelector('.cr-price').value;
+    const invId         = row.querySelector('.cr-inv-id')?.value;
+    const internalNotes = row.querySelector('.cr-internal-notes')?.value.trim() || '';
+    if (!size) return;
+    const lenParts = [];
+    if (parseInt(ft) > 0)   lenParts.push(`${ft}'`);
+    if (parseInt(inch) > 0) lenParts.push(`${inch}"`);
+    const lenStr = lenParts.length ? ' x ' + lenParts.join('-') : '';
+    const adjStr = adj ? ' (Adjustable)' : '';
+    const desc   = `Column ${size}${lenStr}${adjStr}`;
+    _addHidden(form, `li_desc_${idx}`,  desc);
+    _addHidden(form, `li_qty_${idx}`,   qty);
+    _addHidden(form, `li_unit_${idx}`,  'ea');
+    if (price)         _addHidden(form, `li_price_${idx}`, price);
+    if (invId)         _addHidden(form, `li_inv_id_${idx}`, invId);
+    if (internalNotes) _addHidden(form, `li_internal_notes_${idx}`, internalNotes);
+    idx++;
+  });
+
+  return idx; // total beam+column line items built
+}
+
+function _addHidden(form, name, value) {
+  const inp = document.createElement('input');
+  inp.type  = 'hidden';
+  inp.name  = name;
+  inp.value = value;
+  inp.className = 'beam-hidden-li';
+  form.appendChild(inp);
+}
+
+// ── Form submit validation ────────────────────────────────────────────────────
+document.getElementById('quote-form').addEventListener('submit', function(e) {
+  if (!document.getElementById('customer-id').value) {
+    e.preventDefault();
+    alert('Please select a customer from the search dropdown.');
+    document.getElementById('customer-search').focus();
+    return;
+  }
+
+  const isBeam = document.getElementById('job-type-select')?.value === 'beam';
+
+  if (isBeam) {
+    // Build hidden line items from beam/column rows
+    const total = buildBeamLineItems();
+    if (total === 0) {
+      e.preventDefault();
+      alert('Add at least one beam or column before saving.');
+      return;
+    }
+    // Require paint selection
+    const paintSelected = document.querySelector('input[name="paint_spec"]:checked');
+    if (!paintSelected) {
+      e.preventDefault();
+      alert('Please select a paint spec.');
+      return;
+    }
+  } else {
+    const lines = document.querySelectorAll('.line-item');
+    if (lines.length === 0) {
+      e.preventDefault();
+      alert('Add at least one line item before saving.');
+      return;
+    }
+    for (let i = 0; i < lines.length; i++) {
+      const hrsInput   = lines[i].querySelector('input[name^="li_labor_"]');
+      const deptSelect = lines[i].querySelector('select[name^="li_labor_dept_"]');
+      const hrs = parseFloat(hrsInput?.value);
+      if (!hrsInput || !(hrs > 0)) {
+        e.preventDefault();
+        hrsInput.classList.add('border-red-500');
+        hrsInput.focus();
+        alert(`Line item ${i + 1}: Labor hours are required.`);
+        return;
+      }
+      if (!deptSelect || !deptSelect.value) {
+        e.preventDefault();
+        deptSelect.classList.add('border-red-500');
+        deptSelect.focus();
+        alert(`Line item ${i + 1}: Labor department is required.`);
+        return;
+      }
+    }
+  }
+
+  // Convert total price → unit price before submit (price field shows qty×unit_price)
+  document.querySelectorAll('[name^="li_price_"]').forEach(priceInput => {
+    const idx = priceInput.name.replace('li_price_', '');
+    const qtyInput = document.querySelector(`[name="li_qty_${idx}"]`);
+    if (!qtyInput) return;
+    const qty   = parseFloat(qtyInput.value) || 1;
+    const total = parseFloat(priceInput.value) || 0;
+    if (total > 0) priceInput.value = (total / qty).toFixed(4);
+  });
+});
+
+// ── Inventory search handlers ─────────────────────────────────────────────────
+document.addEventListener('click', function(e) {
+  const item = e.target.closest('[data-inv-id]');
+  if (item) {
+    const resultsDiv = item.closest('[id^="inv-results-"]');
+    if (!resultsDiv) return;
+    const idx = resultsDiv.id.replace('inv-results-', '');
+    const idEl = document.getElementById(`li-inv-id-${idx}`);
+    if (idEl) idEl.value = item.dataset.invId;
+    // Generic line item fields
+    const descEl  = document.getElementById(`li-desc-${idx}`);
+    const priceEl = document.getElementById(`li-price-${idx}`);
+    if (descEl) descEl.value = item.dataset.invName;
+    if (priceEl && item.dataset.invPrice) {
+      priceEl.dataset.unitPrice = item.dataset.invPrice;
+      if (item.dataset.invQty !== undefined) priceEl.dataset.onHand = item.dataset.invQty;
+      updatePrice(idx);
+    }
+    // Beam row fields (size auto-populated from inventory name)
+    const beamRow = resultsDiv.closest('.beam-row');
+    if (beamRow) {
+      beamRow.querySelector('.br-inv-id').value = item.dataset.invId;
+      beamRow.querySelector('.br-size').value   = item.dataset.invName;
+      if (item.dataset.invPrice) beamRow.querySelector('.br-price').value = parseFloat(item.dataset.invPrice).toFixed(2);
+    }
+    // Column row fields
+    const colRow = resultsDiv.closest('.col-row');
+    if (colRow) {
+      colRow.querySelector('.cr-inv-id').value = item.dataset.invId;
+      colRow.querySelector('.cr-size').value   = item.dataset.invName;
+      if (item.dataset.invPrice) colRow.querySelector('.cr-price').value = parseFloat(item.dataset.invPrice).toFixed(2);
+    }
+    document.getElementById(`inv-badge-text-${idx}`).textContent =
+      (item.dataset.invSku ? item.dataset.invSku + ' · ' : '') + item.dataset.invName;
+    document.getElementById(`inv-badge-${idx}`).classList.remove('hidden');
+    document.getElementById(`inv-search-${idx}`).value = '';
+    resultsDiv.innerHTML = '';
+    resultsDiv.classList.add('hidden');
+    return;
+  }
+  document.querySelectorAll('[id^="inv-results-"]').forEach(el => {
+    if (!el.contains(e.target)) el.classList.add('hidden');
+  });
+});
+
+document.addEventListener('htmx:afterSwap', function(e) {
+  if (e.target.id === 'customer-results') e.target.classList.remove('hidden');
+  if (e.target.id && e.target.id.startsWith('inv-results-')) {
+    if (e.target.innerHTML.trim()) e.target.classList.remove('hidden');
+    else e.target.classList.add('hidden');
+  }
+});
+
+document.getElementById('customer-results').addEventListener('click', function(e) {
+  const el = e.target.closest('[data-customer-id]');
+  if (!el) return;
+  document.getElementById('customer-id').value = el.dataset.customerId;
+  document.getElementById('customer-search').value = el.dataset.customerName;
+  const sel = document.getElementById('customer-selected');
+  sel.textContent = '✓ ' + el.dataset.customerName;
+  sel.classList.remove('hidden');
+  this.innerHTML = '';
+  this.classList.add('hidden');
+});
+</script>
+{% endblock %}

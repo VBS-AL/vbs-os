@@ -162,4 +162,27 @@
         <td colspan="7" class="px-4 py-12 text-center text-gray-400">
           No orders found.
           {% if active_tab == 'active' %}
-          <a href="/orders?statu
+          <a href="/orders?status=all" class="text-steel-mid hover:underline ml-1">View all orders.</a>
+          {% else %}
+          <a href="/orders/new" class="text-steel-mid hover:underline ml-1">Create one.</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+(function() {
+  const input = document.getElementById('order-quick-filter');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    const q = this.value.toLowerCase().trim();
+    document.querySelectorAll('tr.order-row').forEach(function(row) {
+      row.style.display = (!q || row.dataset.search.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

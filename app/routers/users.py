@@ -180,4 +180,44 @@ async def update_user(
             return templates.TemplateResponse("users/edit.html", {
                 "request": request, "user": user, "target": target, "roles": UserRole,
                 "error": "New password must be at least 6 characters.",
-                "can_see_financials": f
+                "can_see_financials": financials_visible(user),
+            }, status_code=422)
+        target.hashed_password = hash_password(new_password)
+
+    db.commit()
+    return RedirectResponse("/users", status_code=302)
+
+# ── Archive / Restore ─────────────────────────────────────────────────────
+@router.post("/{user_id}/archive")
+async def archive_user(
+    user_id: int,
+    user: User = Depends(require_management),
+    db: Session = Depends(get_db),
+):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(404, "User not found")
+    if user_id == user.id:
+        raise HTTPException(400, "You cannot archive your own account.")
+    if target.role == UserRole.owner:
+        active_owners = db.query(User).filter(
+            User.role == UserRole.owner, User.is_active == True, User.id != user_id
+        ).count()
+        if active_owners == 0:
+            raise HTTPException(400, "Cannot archive the last active owner.")
+    target.is_active = False
+    db.commit()
+    return RedirectResponse("/users", status_code=302)
+
+@router.post("/{user_id}/restore")
+async def restore_user(
+    user_id: int,
+    user: User = Depends(require_management),
+    db: Session = Depends(get_db),
+):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(404, "User not found")
+    target.is_active = True
+    db.commit()
+    return RedirectResponse("/users", status_code=302)

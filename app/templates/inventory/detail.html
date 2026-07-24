@@ -187,4 +187,21 @@
         </div>
         {% if item.supplier_contact %}
         <div>
-      
+          <dt class="text-xs text-gray-400 uppercase tracking-wide">Contact</dt>
+          <dd class="text-gray-700 mt-0.5">{{ item.supplier_contact }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+    {% endif %}
+
+    {% if item.notes %}
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-steel-dark mb-2 text-sm">Notes</h3>
+      <p class="text-sm text-gray-600">{{ item.notes }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

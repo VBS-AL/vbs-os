@@ -901,4 +901,140 @@ async def employee_queue(
 
     # Determine whose queue to show
     if can_manage and emp_id:
-        view
+        view_employee = db.query(User).filter(User.id == emp_id).first()
+        if not view_employee:
+            raise HTTPException(404, "Employee not found")
+    else:
+        view_employee = user
+
+    # Active session for this employee
+    from app.models.order import OrderLineItem
+    from app.models.inventory import InventoryItem
+    my_session = db.query(WorkSession).filter(
+        WorkSession.employee_id == view_employee.id,
+        WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+    ).options(
+        joinedload(WorkSession.stage),
+        joinedload(WorkSession.order).joinedload(Order.customer),
+        joinedload(WorkSession.order).joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
+        joinedload(WorkSession.order).joinedload(Order.packing_list),
+        joinedload(WorkSession.order).joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
+    ).first()
+
+    # All active orders assigned to this employee at any stage
+    from app.models.order import OrderLineItem
+    my_stages = db.query(ProductionStage).options(
+        joinedload(ProductionStage.order).joinedload(Order.customer),
+        joinedload(ProductionStage.order).joinedload(Order.line_items),
+        joinedload(ProductionStage.order).joinedload(Order.drawing_records).joinedload(DrawingRecord.uploaded_by),
+    ).filter(
+        ProductionStage.assigned_to_id == view_employee.id,
+        ProductionStage.status.notin_([StageStatus.complete]),
+    ).all()
+
+    # Build job cards, sorted by priority
+    jobs_by_order = {}
+    for stage in my_stages:
+        o = stage.order
+        if o.status in [OrderStatus.delivered, OrderStatus.paid, OrderStatus.cancelled]:
+            continue
+        if o.id not in jobs_by_order:
+            jobs_by_order[o.id] = {"order": o, "stages": []}
+        jobs_by_order[o.id]["stages"].append(stage)
+
+    job_list = list(jobs_by_order.values())
+
+    def _sort_key(job):
+        o = job["order"]
+        is_overdue = o.promised_date and o.promised_date < today_date
+        days_overdue = (today_date - o.promised_date).days if is_overdue else 0
+        priority_rank = _PRIORITY_RANK.get(o.priority, 2)
+        due = o.promised_date or _date(9999, 12, 31)
+        return (0 if is_overdue else 1, -days_overdue, priority_rank, due)
+
+    job_list.sort(key=_sort_key)
+
+    # Build billing options for clock-in form
+    billing_options = [
+        (BillingDept.general_labor,       "General Labor ($80/hr)"),
+        (BillingDept.steel_fabrication,   "Steel Fabrication ($100/hr)"),
+        (BillingDept.aluminum_structural, "Aluminum Structural ($120/hr)"),
+    ]
+
+    # Management: also load all employee queues summary
+    all_employees_summary = []
+    if can_manage:
+        active_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
+        for emp in active_employees:
+            emp_session = db.query(WorkSession).filter(
+                WorkSession.employee_id == emp.id,
+                WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+            ).first()
+            emp_stage_count = db.query(ProductionStage).filter(
+                ProductionStage.assigned_to_id == emp.id,
+                ProductionStage.status.notin_([StageStatus.complete]),
+            ).count()
+            all_employees_summary.append({
+                "employee":    emp,
+                "session":     emp_session,
+                "stage_count": emp_stage_count,
+            })
+
+    now_utc = datetime.utcnow()
+
+    # ── My Stats ─────────────────────────────────────────────────────────
+    stat_period = stat_period if stat_period in ("day", "week", "month") else "day"
+    today = today_date
+    if stat_period == "day":
+        period_start = today
+    elif stat_period == "week":
+        period_start = today - timedelta(days=today.weekday())  # Monday
+    else:  # month
+        period_start = today.replace(day=1)
+
+    completed_sessions = db.query(WorkSession).filter(
+        WorkSession.employee_id == view_employee.id,
+        WorkSession.status == SessionStatus.completed,
+    ).join(WorkSession.labor_entry).filter(
+        LaborEntry.work_date >= period_start,
+    ).options(joinedload(WorkSession.labor_entry)).all()
+
+    stat_hours  = round(sum((s.labor_entry.hours or 0) for s in completed_sessions if s.labor_entry), 1)
+    stat_orders = len(set(s.order_id for s in completed_sessions))
+
+    default_billing = _get_employee_billing_default(view_employee, my_stages[0]) if my_stages else None
+
+    # All active employees — for Checked By dropdown on delivery form
+    all_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
+
+    # Packing lists awaiting confirmation by this employee (checker role)
+    from app.models.packing_list import PackingList
+    pending_checks = db.query(PackingList).options(
+        joinedload(PackingList.order).joinedload(Order.customer),
+        joinedload(PackingList.created_by),
+    ).filter(
+        PackingList.checker_id == view_employee.id,
+        PackingList.check_confirmed == False,
+    ).all()
+
+    return templates.TemplateResponse("production/queue.html", {
+        "request":               request,
+        "user":                  user,
+        "view_employee":         view_employee,
+        "my_session":            my_session,
+        "job_list":              job_list,
+        "today":                 today_date,
+        "now_utc":               now_utc,
+        "billing_options":       billing_options,
+        "default_billing":       default_billing,
+        "pause_reasons":         PAUSE_REASON_LABELS,
+        "stage_labels":          STAGE_LABELS,
+        "can_manage":            can_manage,
+        "all_employees_summary": all_employees_summary,
+        "all_employees":         all_employees,
+        "pending_checks":        pending_checks,
+        "stat_hours":            stat_hours,
+        "stat_orders":           stat_orders,
+        "stat_period":           stat_period,
+        "emp_id":                emp_id,
+    })

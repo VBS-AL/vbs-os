@@ -45,4 +45,6 @@ class Contact(Base):
     phone: Mapped[str | None] = mapped_column(String(30))
     email: Mapped[str |None] = mapped_column(String(200))
     notes: Mapped[str | None] = mapped_column(String(500))
-    cre
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
+
+    customer = relationship("Customer", back_populates="contacts")

@@ -144,4 +144,15 @@ async def confirm_delivery(
                     employee_id  = open_session.employee_id,
                     billing_dept = dept,
                     hours        = round(duration / 60.0, 4),
- 
+                    billing_rate = open_session.billing_rate,
+                    billed_value = 0.0,
+                    work_date    = work_date,
+                    notes        = open_session.notes,
+                    is_rework    = 0,
+                )
+                db.add(entry)
+                db.flush()
+                open_session.labor_entry_id = entry.id
+
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}/packing-list", status_code=302)
