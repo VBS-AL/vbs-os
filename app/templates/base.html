@@ -50,8 +50,9 @@
       {{ nav_link('/customers',  'Customers') }}
       {% endif %}
       {% if user.role.value in ["owner","ops_manager"] %}
-      {{ nav_link('/users',    'Team') }}
-      {{ nav_link('/reports',  'Reports') }}
+      {{ nav_link('/users',       'Team') }}
+      {{ nav_link('/reports',     'Reports') }}
+      {{ nav_link('/maintenance', 'PM') }}
       {% endif %}
     </div>
 
@@ -105,8 +106,9 @@
       {{ mobile_link('/customers',  'Customers') }}
       {% endif %}
       {% if user.role.value in ["owner","ops_manager"] %}
-      {{ mobile_link('/users',    'Team') }}
-      {{ mobile_link('/reports',  'Reports') }}
+      {{ mobile_link('/users',       'Team') }}
+      {{ mobile_link('/reports',     'Reports') }}
+      {{ mobile_link('/maintenance', 'PM') }}
       {% endif %}
       <!-- User info + logout at bottom of mobile menu -->
       <div class="pt-2 flex items-center justify-between">

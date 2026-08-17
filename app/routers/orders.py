@@ -29,7 +29,8 @@ async def save_drawing(form_data, field_name: str = "drawing_file") -> Optional[
 from app.database import get_db
 from app.auth import require_user, require_foreman_up, require_management, financials_visible
 from app.models.user import User, UserRole
-from app.models.order import Order, OrderLineItem, OrderStatus, JobType, Priority
+from app.models.order import Order, OrderLineItem, OrderStatus, JobType, Priority, StagingLocation
+from app.models.labor import BILLING_RATES, BillingDept
 from app.models.customer import Customer
 from app.models.inventory import InventoryItem
 from app.models.production import ProductionStage, StageType, StageStatus, QARecord, QAResult, DrawingRecord
@@ -193,6 +194,13 @@ async def create_order(
                 if inv_item and inv_item.cost_per_unit:
                     markup = inv_item.retail_markup if inv_item.retail_markup else 3.0
                     form_price = round(inv_item.cost_per_unit * markup, 2)
+            # Freeze labor rate at time of creation
+            rate_snapshot = None
+            if labor_dept:
+                try:
+                    rate_snapshot = BILLING_RATES.get(BillingDept(labor_dept))
+                except Exception:
+                    pass
             db.add(OrderLineItem(
                 order_id=order.id, line_number=idx + 1, description=desc,
                 quantity=float(form.get(f"li_qty_{idx}", 1) or 1),
@@ -204,6 +212,7 @@ async def create_order(
                 inventory_item_id=inv_id,
                 estimated_labor_hours=labor_hrs,
                 estimated_labor_dept=labor_dept,
+                labor_rate_snapshot=rate_snapshot,
             ))
         idx += 1
 
@@ -339,6 +348,51 @@ async def set_promised_date(
     order.promised_date = date.fromisoformat(promised_date) if promised_date else None
     db.commit()
     return RedirectResponse(f"/orders/{order_id}", status_code=302)
+
+@router.post("/{order_id}/third-party")
+async def add_third_party_line(
+    order_id: int,
+    description: str  = Form(...),
+    vendor_name: str  = Form(""),
+    vendor_cost: float = Form(...),
+    markup_pct: float = Form(0.30),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Add a 3rd party outsourced service line item to an order."""
+    order = db.get(Order, order_id)
+    if not order:
+        return RedirectResponse(f"/orders/{order_id}", status_code=302)
+    billable = round(vendor_cost * (1 + markup_pct), 2)
+    desc = f"{description}{' — ' + vendor_name if vendor_name else ''}"
+    max_line = max((li.line_number for li in order.line_items), default=0)
+    db.add(OrderLineItem(
+        order_id=order_id,
+        line_number=max_line + 1,
+        description=desc,
+        quantity=1,
+        unit_price=billable,
+        third_party_cost=vendor_cost,
+        third_party_markup=markup_pct,
+    ))
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}", status_code=302)
+
+
+@router.post("/{order_id}/staging")
+async def update_staging(
+    order_id: int,
+    staging_location: str = Form(""),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    from app.models.order import StagingLocation
+    order = db.get(Order, order_id)
+    if order:
+        order.staging_location = StagingLocation(staging_location) if staging_location else None
+        db.commit()
+    return RedirectResponse(f"/orders/{order_id}", status_code=302)
+
 
 @router.post("/{order_id}/status")
 async def update_status(

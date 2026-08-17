@@ -80,26 +80,23 @@
         <label class="block text-xs font-medium text-gray-600 mb-1">Shop Location</label>
         <input type="hidden" name="location" id="location-value" value="{{ item.location or '' }}">
         <div class="grid grid-cols-3 gap-2">
-          {% set loc_parts = (item.location or '').split(' / ') %}
-          <select id="loc-area" onchange="buildLocation()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
-            <option value="">Area</option>
-            {% for a in ['Structural Steel','Plate','Beam','Retail'] %}
+          <select id="loc-area" onchange="onAreaChange()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+            <option value="">— Area —</option>
+            {% for a in ['Structural Steel','Plate','Beam','Retail','Outdoor A','Outdoor B','Paint & Primer','Randoms'] %}
+            {% set loc_parts = (item.location or '').split(' / ') %}
             <option value="{{ a }}" {% if loc_parts[0] == a %}selected{% endif %}>{{ a }}</option>
             {% endfor %}
           </select>
-          <select id="loc-rack" onchange="buildLocation()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
-            <option value="">Rack</option>
-            {% for r in ['Rack A','Rack B','Rack C','Rack D','Rack E','Rack F','Rack TBD'] %}
-            <option value="{{ r }}" {% if loc_parts|length > 1 and loc_parts[1] == r %}selected{% endif %}>{{ r }}</option>
-            {% endfor %}
-          </select>
-          <select id="loc-row" onchange="buildLocation()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
-            <option value="">Row</option>
-            {% for n in range(1, 21) %}
-            <option value="Row {{ n }}" {% if loc_parts|length > 2 and loc_parts[2] == 'Row ' ~ n %}selected{% endif %}>Row {{ n }}</option>
-            {% endfor %}
-            <option value="Row TBD" {% if loc_parts|length > 2 and loc_parts[2] == 'Row TBD' %}selected{% endif %}>Row TBD</option>
-          </select>
+          <div id="loc-rack-wrap">
+            <select id="loc-rack" onchange="buildLocation()" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+              <option value="">— Rack / Slot —</option>
+            </select>
+          </div>
+          <div id="loc-row-wrap">
+            <select id="loc-row" onchange="buildLocation()" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+              <option value="">— Row —</option>
+            </select>
+          </div>
         </div>
         <p id="location-preview" class="text-xs text-gray-400 mt-1">{% if item.location %}📍 {{ item.location }}{% endif %}</p>
       </div>
@@ -136,6 +133,57 @@
 </form>
 
 <script>
+const LOC_CONFIG = {
+  'Structural Steel': { racks: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', rows: 20, cols: true },
+  'Plate':            { racks: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', rows: 20, cols: true },
+  'Beam':             { racks: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', rows: 20, cols: true },
+  'Retail':           { racks: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', rows: 20, cols: false },
+  'Outdoor A':        { racks: 'ABCDEFGHIJKLMN',             rows: 3,  cols: false },
+  'Outdoor B':        { racks: 'ABCD',                       rows: 5,  cols: false },
+  'Paint & Primer':   { racks: null, rows: null, cols: false },
+  'Randoms':          { racks: null, rows: null, cols: false },
+};
+
+function populateRackRow(area, savedRack, savedRow) {
+  const cfg = LOC_CONFIG[area] || {};
+  const rackSel  = document.getElementById('loc-rack');
+  const rowSel   = document.getElementById('loc-row');
+  const rackWrap = document.getElementById('loc-rack-wrap');
+  const rowWrap  = document.getElementById('loc-row-wrap');
+
+  rackSel.innerHTML = '<option value="">— Rack / Slot —</option>';
+  rowSel.innerHTML  = '<option value="">— Row —</option>';
+
+  if (!cfg.racks) {
+    rackWrap.style.visibility = 'hidden';
+    rowWrap.style.visibility  = 'hidden';
+    return;
+  }
+  rackWrap.style.visibility = '';
+  rowWrap.style.visibility  = '';
+
+  for (const letter of cfg.racks) {
+    const v = 'Rack ' + letter;
+    rackSel.add(new Option(v, v, false, savedRack === v));
+  }
+  if (cfg.cols) {
+    for (let i = 1; i <= 20; i++) {
+      const v = 'Column ' + i;
+      rackSel.add(new Option(v, v, false, savedRack === v));
+    }
+  }
+  for (let i = 1; i <= cfg.rows; i++) {
+    const v = 'Row ' + i;
+    rowSel.add(new Option(v, v, false, savedRow === v));
+  }
+  rowSel.add(new Option('Row TBD', 'Row TBD', false, savedRow === 'Row TBD'));
+}
+
+function onAreaChange() {
+  populateRackRow(document.getElementById('loc-area').value, '', '');
+  buildLocation();
+}
+
 function buildLocation() {
   const area = document.getElementById('loc-area').value;
   const rack = document.getElementById('loc-rack').value;
@@ -145,5 +193,17 @@ function buildLocation() {
   document.getElementById('location-value').value = val;
   document.getElementById('location-preview').textContent = val ? '📍 ' + val : '';
 }
+
+// On page load: pre-populate rack/row from saved location
+(function initLocation() {
+  const saved = document.getElementById('location-value').value;
+  if (!saved) return;
+  const parts = saved.split(' / ');
+  const area = parts[0] || '';
+  const rack = parts[1] || '';
+  const row  = parts[2] || '';
+  document.getElementById('loc-area').value = area;
+  populateRackRow(area, rack, row);
+})();
 </script>
 {% endblock %}

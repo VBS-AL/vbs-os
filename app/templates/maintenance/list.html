@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Preventative Maintenance — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-steel-dark">Preventative Maintenance</h1>
+    <p class="text-sm text-gray-500 mt-0.5">{{ tasks|length }} active task{{ 's' if tasks|length != 1 }}</p>
+  </div>
+  <a href="/maintenance/new" class="bg-steel-dark hover:bg-steel-mid text-white text-sm font-medium px-5 py-2 rounded-lg transition">+ Add Task</a>
+</div>
+
+{% if overdue %}
+<div class="bg-red-50 border border-red-200 rounded-xl mb-4 overflow-hidden">
+  <div class="px-5 py-3 bg-red-100 border-b border-red-200 flex items-center justify-between">
+    <span class="text-red-700 font-semibold text-sm">⚠ {{ overdue|length }} task{{ 's' if overdue|length != 1 }} overdue</span>
+  </div>
+  {% for t in overdue %}
+  {% include "maintenance/_task_row.html" %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if due_today %}
+<div class="bg-amber-50 border border-amber-200 rounded-xl mb-4 overflow-hidden">
+  <div class="px-5 py-3 bg-amber-100 border-b border-amber-200">
+    <span class="text-amber-700 font-semibold text-sm">📅 Due Today ({{ due_today|length }})</span>
+  </div>
+  {% for t in due_today %}
+  {% include "maintenance/_task_row.html" %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if due_soon %}
+<div class="bg-yellow-50 border border-yellow-200 rounded-xl mb-4 overflow-hidden">
+  <div class="px-5 py-3 bg-yellow-100 border-b border-yellow-200">
+    <span class="text-yellow-700 font-semibold text-sm">⏰ Due Soon ({{ due_soon|length }})</span>
+  </div>
+  {% for t in due_soon %}
+  {% include "maintenance/_task_row.html" %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if ok %}
+<div class="bg-white rounded-xl shadow overflow-hidden mb-4">
+  <div class="px-5 py-3 bg-green-50 border-b border-green-100">
+    <span class="text-green-700 font-semibold text-sm">✓ Up to Date ({{ ok|length }})</span>
+  </div>
+  {% for t in ok %}
+  {% include "maintenance/_task_row.html" %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if not tasks %}
+<div class="bg-white rounded-xl shadow p-12 text-center text-gray-400">
+  No maintenance tasks set up yet.
+  <a href="/maintenance/new" class="text-steel-mid hover:underline ml-1">Add your first task.</a>
+</div>
+{% endif %}
+
+{% endblock %}

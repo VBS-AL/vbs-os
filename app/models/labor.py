@@ -8,11 +8,15 @@ class BillingDept(str, enum.Enum):
     general_labor       = "general_labor"        # $80/hr
     steel_fabrication   = "steel_fabrication"    # $100/hr
     aluminum_structural = "aluminum_structural"  # $120/hr
+    hot_walk_in         = "hot_walk_in"          # $150/hr — walk-in rush
+    welding_truck       = "welding_truck"        # $120/hr — portable welding truck on-site
 
 BILLING_RATES = {
     BillingDept.general_labor:       80.0,
     BillingDept.steel_fabrication:   100.0,
     BillingDept.aluminum_structural: 120.0,
+    BillingDept.hot_walk_in:         150.0,
+    BillingDept.welding_truck:       120.0,
 }
 
 class LaborEntry(Base):

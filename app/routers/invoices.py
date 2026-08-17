@@ -103,7 +103,7 @@ async def generate_invoice(
         return RedirectResponse(f"/invoices/{order.invoice.id}", status_code=302)
 
     # Labor rates (must match invoice template)
-    _LABOR_RATES = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120}
+    _LABOR_RATES = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120}
 
     # Materials and delivery
     material_total  = sum((li.unit_price or 0) * li.quantity for li in order.line_items if not li.is_delivery_surcharge)

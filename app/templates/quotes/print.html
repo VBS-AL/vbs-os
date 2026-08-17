@@ -64,7 +64,7 @@
       </thead>
       <tbody>
         {% set ns = namespace(total=0, delivery=0) %}
-        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120} %}
         {% for li in quote.line_items | sort(attribute='line_number') %}
         {% if li.is_delivery_surcharge %}
           {% set ns.delivery = ns.delivery + (li.unit_price or 0) * li.quantity %}

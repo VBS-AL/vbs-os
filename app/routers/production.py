@@ -959,6 +959,8 @@ async def employee_queue(
         (BillingDept.general_labor,       "General Labor ($80/hr)"),
         (BillingDept.steel_fabrication,   "Steel Fabrication ($100/hr)"),
         (BillingDept.aluminum_structural, "Aluminum Structural ($120/hr)"),
+        (BillingDept.hot_walk_in,         "HOT Walk-In ($150/hr)"),
+        (BillingDept.welding_truck,       "Welding Truck ($120/hr)"),
     ]
 
     # Management: also load all employee queues summary

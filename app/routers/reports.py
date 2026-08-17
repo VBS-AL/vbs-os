@@ -693,6 +693,8 @@ BILLING_RATE_MAP = {
     BillingDept.general_labor:       80.0,
     BillingDept.steel_fabrication:  100.0,
     BillingDept.aluminum_structural: 120.0,
+    BillingDept.hot_walk_in:        150.0,
+    BillingDept.welding_truck:      120.0,
 }
 
 DEPT_LABEL_MAP = {

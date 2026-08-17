@@ -121,13 +121,14 @@
         </td>
         <td class="px-4 py-3">
           {% set p = o.priority.value %}
-          {% if p == 'urgent' %}<span class="font-bold text-red-600">⚡ Urgent</span>
+          {% if p == 'hot_walk_in' %}<span class="font-bold text-orange-600">🔥 HOT Walk-In</span>
+          {% elif p == 'urgent' %}<span class="font-bold text-red-600">⚡ Urgent</span>
           {% elif p == 'priority' %}<span class="font-medium text-yellow-600">↑ Priority</span>
           {% else %}<span class="text-gray-400">Standard</span>{% endif %}
         </td>
         <td class="px-4 py-3 text-gray-500">{{ o.promised_date or '—' }}</td>
         {% if can_see_financials %}
-        {% set lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% set lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120} %}
         {% set ns = namespace(mat=0, est_labor=0, actual_labor=0) %}
         {% for li in o.line_items %}
           {% set ns.mat = ns.mat + (li.unit_price or 0) * li.quantity %}

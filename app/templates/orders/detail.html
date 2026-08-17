@@ -29,8 +29,13 @@
         {{ order.status.value.replace('_',' ').title() }}
       </span>
       {% if order.priority.value != 'standard' %}
-      <div class="mt-1 text-sm {% if order.priority.value == 'urgent' %}text-red-600 font-bold{% else %}text-yellow-600{% endif %}">
-        {% if order.priority.value == 'urgent' %}&#x26A1; URGENT{% else %}&#x2191; Priority{% endif %}
+      <div class="mt-1 text-sm
+        {% if order.priority.value == 'hot_walk_in' %}text-orange-600 font-bold
+        {% elif order.priority.value == 'urgent' %}text-red-600 font-bold
+        {% else %}text-yellow-600{% endif %}">
+        {% if order.priority.value == 'hot_walk_in' %}🔥 HOT — Walk-In
+        {% elif order.priority.value == 'urgent' %}&#x26A1; URGENT
+        {% else %}&#x2191; Priority{% endif %}
       </div>
       {% endif %}
     </div>
@@ -126,6 +131,20 @@
           <span class="font-semibold text-yellow-800">Hold: </span>
           <span class="text-yellow-700">{{ order.hold_reason }}</span>
           {% if order.hold_owner %}<span class="text-yellow-500 ml-1">({{ order.hold_owner }})</span>{% endif %}
+        </div>
+        {% endif %}
+        {% if order.status.value in ['ready','delivered','invoiced','paid'] %}
+        <div class="mt-3 pt-3 border-t border-gray-100">
+          <form method="POST" action="/orders/{{ order.id }}/staging" class="flex items-center gap-2">
+            <span class="text-xs text-gray-500 font-medium">📦 Staging:</span>
+            <select name="staging_location" onchange="this.form.submit()"
+                    class="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              <option value="">— Not Set —</option>
+              <option value="shop" {% if order.staging_location and order.staging_location.value == 'shop' %}selected{% endif %}>Shop</option>
+              <option value="outgoing_area" {% if order.staging_location and order.staging_location.value == 'outgoing_area' %}selected{% endif %}>Outgoing Area</option>
+              <option value="stock_room" {% if order.staging_location and order.staging_location.value == 'stock_room' %}selected{% endif %}>Stock Room</option>
+            </select>
+          </form>
         </div>
         {% endif %}
       </div>
@@ -233,7 +252,7 @@
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Line Items</h2>
         {% if order.line_items %}
-        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120} %}
         <table class="w-full text-sm">
           <thead class="text-xs text-gray-500 border-b border-gray-100">
             <tr>
@@ -251,32 +270,44 @@
             {% if li.is_delivery_surcharge %}
               {% set ns.surcharge = ns.surcharge + (li.unit_price or 0) * li.quantity %}
             {% else %}
+            {# Compute mat_line and labor_line for all non-delivery items #}
             {% set mat_line = (li.unit_price or 0) * li.quantity %}
             {% set ns.mat_total = ns.mat_total + mat_line %}
-            {% if li.estimated_labor_hours and li.estimated_labor_dept and li.estimated_labor_dept in labor_rates %}
-              {% set labor_line = li.estimated_labor_hours * labor_rates[li.estimated_labor_dept] %}
-              {% set ns.labor_total = ns.labor_total + labor_line %}
-            {% else %}
+            {% if li.third_party_cost or not li.estimated_labor_hours or not li.estimated_labor_dept %}
               {% set labor_line = 0 %}
+            {% else %}
+              {# Use frozen rate snapshot if set, otherwise fall back to current rate dict #}
+              {% set eff_rate = li.labor_rate_snapshot if li.labor_rate_snapshot else (labor_rates.get(li.estimated_labor_dept) or 0) %}
+              {% set labor_line = li.estimated_labor_hours * eff_rate %}
+              {% set ns.labor_total = ns.labor_total + labor_line %}
             {% endif %}
             <tr>
               <td class="py-2">
                 {{ li.description }}
+                {% if li.third_party_cost %}<span class="ml-1 text-xs bg-purple-50 text-purple-600 border border-purple-200 rounded px-1.5 py-0.5">3rd Party</span>{% endif %}
                 {% if li.inventory_item %}<span class="ml-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 font-mono">{{ li.inventory_item.sku }}</span>{% endif %}
                 {% if li.paint_override %}<span class="text-xs text-gray-400 ml-1">(paint: {{ li.paint_override }})</span>{% endif %}
+                {% if li.third_party_cost and can_see_financials %}
+                <span class="text-xs text-gray-400 ml-1">(cost: ${{ '%.2f'|format(li.third_party_cost) }} + {{ ((li.third_party_markup or 0.30) * 100)|int }}%)</span>
+                {% endif %}
               </td>
               <td class="text-right pr-2 py-2">{{ li.quantity }}</td>
               {% if can_see_financials %}
               <td class="text-right pr-2 py-2">${{ '%.2f'|format(li.unit_price or 0) }}</td>
               <td class="text-right pr-2 py-2 font-medium">${{ '%.2f'|format(mat_line) }}</td>
               <td class="text-left pl-2 py-2 text-xs text-gray-500">
-                {% if li.estimated_labor_hours %}
+                {% if li.third_party_cost %}
+                  <span class="text-purple-600">outsourced</span>
+                {% elif li.estimated_labor_hours %}
                   {{ li.estimated_labor_hours }}h
                   {% if li.estimated_labor_dept %}
                     &middot; {% if li.estimated_labor_dept == 'general_labor' %}Gen Labor
                     {% elif li.estimated_labor_dept == 'steel_fabrication' %}Steel Fab
                     {% elif li.estimated_labor_dept == 'aluminum_structural' %}Aluminum
+                    {% elif li.estimated_labor_dept == 'hot_walk_in' %}HOT Walk-In
+                    {% elif li.estimated_labor_dept == 'welding_truck' %}Welding Truck
                     {% endif %}
+                    {% if li.labor_rate_snapshot %}<span class="text-gray-300 text-xs">(frozen)</span>{% endif %}
                   {% endif %}
                 {% else %}&mdash;{% endif %}
               </td>
@@ -324,6 +355,73 @@
         {% endif %}
       </div>
 
+      <!-- 3rd Party Services -->
+      {% if user.role.value in ['owner','ops_manager'] and order.status.value not in ['paid','cancelled'] %}
+      <div class="bg-white rounded-xl shadow p-5" id="third-party">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">3rd Party Services</h2>
+          <button onclick="document.getElementById('third-party-form').classList.toggle('hidden')"
+            class="text-xs text-steel-mid hover:underline">+ Add Service</button>
+        </div>
+        <div id="third-party-form" class="hidden bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <form method="POST" action="/orders/{{ order.id }}/third-party">
+            <div class="grid grid-cols-2 gap-3">
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">Description <span class="text-red-500">*</span></label>
+                <input type="text" name="description" required placeholder="e.g. Laser cutting — 1/4&quot; plate"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Vendor (optional)</label>
+                <input type="text" name="vendor_name" placeholder="e.g. ABC Laser"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Vendor Cost ($) <span class="text-red-500">*</span></label>
+                <input type="number" name="vendor_cost" step="0.01" min="0.01" required placeholder="0.00"
+                  id="tp-cost"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                  oninput="updateTpPreview()"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Markup %</label>
+                <input type="number" name="markup_pct" step="1" min="0" max="500" value="30"
+                  id="tp-markup"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                  oninput="updateTpPreview()"/>
+              </div>
+              <div class="flex items-end">
+                <div class="text-sm font-medium text-purple-700 w-full">
+                  Billable: <span id="tp-preview" class="font-bold">$0.00</span>
+                </div>
+              </div>
+              <div class="col-span-2 flex justify-end">
+                <button type="submit" class="bg-purple-700 text-white text-sm py-1.5 px-4 rounded-md hover:bg-purple-800 transition">
+                  Add to Order
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+        {% set tp_lines = order.line_items | selectattr('third_party_cost') | list %}
+        {% if tp_lines %}
+        <div class="mt-3 space-y-2">
+          {% for li in tp_lines %}
+          <div class="flex items-center justify-between text-sm py-1 border-b border-gray-50 last:border-0">
+            <span class="text-gray-700 flex-1">{{ li.description }}</span>
+            {% if can_see_financials %}
+            <span class="text-gray-400 text-xs mr-3">cost ${{ '%.2f'|format(li.third_party_cost) }} + {{ ((li.third_party_markup or 0.30)*100)|int }}%</span>
+            <span class="font-semibold text-purple-700">${{ '%.2f'|format(li.unit_price or 0) }}</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">No 3rd party services.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <!-- Labor -->
       <div class="bg-white rounded-xl shadow p-5" id="labor">
         <div class="flex items-center justify-between mb-3">
@@ -333,13 +431,14 @@
           {% endif %}
         </div>
 
-        {% set lr2 = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% set lr2 = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120} %}
         {% set est_hrs = namespace(v=0) %}
         {% set est_cost = namespace(v=0) %}
         {% for li in order.line_items %}
           {% if li.estimated_labor_hours and li.estimated_labor_dept and li.estimated_labor_dept in lr2 %}
+            {% set eff_r = li.labor_rate_snapshot if li.labor_rate_snapshot else (lr2.get(li.estimated_labor_dept) or 0) %}
             {% set est_hrs.v = est_hrs.v + li.estimated_labor_hours %}
-            {% set est_cost.v = est_cost.v + li.estimated_labor_hours * lr2[li.estimated_labor_dept] %}
+            {% set est_cost.v = est_cost.v + li.estimated_labor_hours * eff_r %}
           {% endif %}
         {% endfor %}
         {% if est_hrs.v > 0 %}
@@ -349,17 +448,23 @@
             <tbody class="divide-y divide-indigo-100">
               {% for li in order.line_items %}
               {% if li.estimated_labor_hours and li.estimated_labor_dept %}
+              {% set eff_r2 = li.labor_rate_snapshot if li.labor_rate_snapshot else (lr2.get(li.estimated_labor_dept) or 0) %}
               <tr>
                 <td class="py-1 text-gray-600">{{ li.description }}</td>
                 <td class="py-1 text-indigo-600 text-center">
                   {% if li.estimated_labor_dept == 'general_labor' %}Gen Labor
                   {% elif li.estimated_labor_dept == 'steel_fabrication' %}Steel Fab
                   {% elif li.estimated_labor_dept == 'aluminum_structural' %}Aluminum
+                  {% elif li.estimated_labor_dept == 'hot_walk_in' %}HOT Walk-In
+                  {% elif li.estimated_labor_dept == 'welding_truck' %}Welding Truck
+                  {% endif %}
+                  {% if li.labor_rate_snapshot and li.labor_rate_snapshot != lr2.get(li.estimated_labor_dept) %}
+                  <span class="text-gray-400 ml-1">(frozen @ ${{ li.labor_rate_snapshot|int }}/hr)</span>
                   {% endif %}
                 </td>
                 <td class="py-1 text-right text-gray-600">{{ li.estimated_labor_hours }}h</td>
                 {% if can_see_financials %}
-                <td class="py-1 text-right font-medium text-indigo-600">${{ '%.2f'|format(li.estimated_labor_hours * lr2[li.estimated_labor_dept]) }}</td>
+                <td class="py-1 text-right font-medium text-indigo-600">${{ '%.2f'|format(li.estimated_labor_hours * eff_r2) }}</td>
                 {% endif %}
               </tr>
               {% endif %}
@@ -400,6 +505,8 @@
                   <option value="general_labor">General Labor ($80/hr)</option>
                   <option value="steel_fabrication">Steel Fabrication ($100/hr)</option>
                   <option value="aluminum_structural">Aluminum &amp; Structural ($120/hr)</option>
+                  <option value="hot_walk_in">HOT Walk-In ($150/hr)</option>
+                  <option value="welding_truck">Welding Truck ($120/hr)</option>
                 </select>
               </div>
               <div>
@@ -873,7 +980,7 @@
         <div class="space-y-1 text-gray-600">
           {% set mat_sum = namespace(v=0) %}
           {% set est_labor_sum = namespace(v=0) %}
-          {% set lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+          {% set lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120} %}
           {% for li in order.line_items %}
             {% set mat_sum.v = mat_sum.v + ((li.unit_price or 0) * li.quantity) %}
             {% if li.estimated_labor_hours and li.estimated_labor_dept and li.estimated_labor_dept in lr %}
@@ -918,6 +1025,13 @@
 </div>
 
 <script>
+function updateTpPreview() {
+  const cost = parseFloat(document.getElementById('tp-cost')?.value) || 0;
+  const markup = parseFloat(document.getElementById('tp-markup')?.value) || 30;
+  const billable = cost * (1 + markup / 100);
+  const el = document.getElementById('tp-preview');
+  if (el) el.textContent = '$' + billable.toFixed(2);
+}
 function toggleDrawingUpload() {
   const f = document.getElementById('drawing-upload-form');
   if (f) f.classList.toggle('hidden');

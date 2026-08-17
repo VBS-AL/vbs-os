@@ -24,9 +24,15 @@ class OrderStatus(str, enum.Enum):
     cancelled     = "cancelled"
 
 class Priority(str, enum.Enum):
-    standard = "standard"
-    priority = "priority"
-    urgent   = "urgent"
+    standard     = "standard"
+    priority     = "priority"
+    urgent       = "urgent"
+    hot_walk_in  = "hot_walk_in"  # walk-in rush — billed at $150/hr
+
+class StagingLocation(str, enum.Enum):
+    shop          = "shop"
+    outgoing_area = "outgoing_area"
+    stock_room    = "stock_room"
 
 class Order(Base):
     __tablename__ = "orders"
@@ -49,6 +55,7 @@ class Order(Base):
     hold_reason         = Column(Text, nullable=True)
     hold_owner          = Column(String, nullable=True)
     previous_status     = Column(SAEnum(OrderStatus), nullable=True)
+    staging_location    = Column(SAEnum(StagingLocation), nullable=True)
     rework_count        = Column(Integer, default=0)
     notification_sent   = Column(Boolean, default=False)
     notification_method = Column(String, nullable=True)
@@ -87,7 +94,11 @@ class OrderLineItem(Base):
     inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
     estimated_labor_hours = Column(Float, nullable=True)
     estimated_labor_dept  = Column(String, nullable=True)
+    labor_rate_snapshot   = Column(Float, nullable=True)   # $/hr rate FROZEN at time of creation
     is_delivery_surcharge = Column(Boolean, default=False)
+    # 3rd party outsourced services (laser cuts, galvanizing, etc.)
+    third_party_cost      = Column(Float, nullable=True)   # what we paid the vendor
+    third_party_markup    = Column(Float, nullable=True)   # decimal, e.g. 0.30 = 30%
 
     order                 = relationship("Order", back_populates="line_items")
     inventory_item        = relationship("InventoryItem")

@@ -184,7 +184,7 @@ const existingLines = [
   {% endfor %}
 ];
 
-const LABOR_RATES = { general_labor: 80, steel_fabrication: 100, aluminum_structural: 120 };
+const LABOR_RATES = { general_labor: 80, steel_fabrication: 100, aluminum_structural: 120, hot_walk_in: 150, welding_truck: 120 };
 
 function updateLaborCost(idx) {
   const hrs  = parseFloat(document.getElementById(`li-labor-${idx}`)?.value || 0);
@@ -212,6 +212,8 @@ function addLine(desc='', qty=1, price='', paint='Same as Job', notes='', intern
     ['general_labor', 'General Labor ($80/hr)'],
     ['steel_fabrication', 'Steel Fab ($100/hr)'],
     ['aluminum_structural', 'Aluminum ($120/hr)'],
+    ['hot_walk_in', 'HOT Walk-In ($150/hr)'],
+    ['welding_truck', 'Welding Truck ($120/hr)'],
   ].map(([v, l]) => `<option value="${v}" ${v === laborDept ? 'selected' : ''}>${l}</option>`).join('');
   const row = document.createElement('div');
   row.className = 'line-item bg-gray-50 rounded-lg p-3 space-y-2';

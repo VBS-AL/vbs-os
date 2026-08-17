@@ -20,6 +20,7 @@ from app.routers import production as production_router
 from app.routers import packing as packing_router
 from app.routers import drawings as drawings_router
 from app.routers import fulfillment as fulfillment_router
+from app.routers import maintenance as maintenance_router
 
 # ── Number sequencing helpers ─────────────────────────────────────────────
 import re
@@ -78,6 +79,7 @@ app.include_router(production_router.router)
 app.include_router(packing_router.router)
 app.include_router(drawings_router.router)
 app.include_router(fulfillment_router.router)
+app.include_router(maintenance_router.router)
 
 # ── Root redirect ─────────────────────────────────────────────────────────
 @app.get("/")
@@ -192,7 +194,7 @@ async def dashboard(
     quotes_sent       = 0
     quotes_converted  = 0
 
-    _LABOR_RATES = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120}
+    _LABOR_RATES = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120}
 
     def _order_est_total(o):
         """Use actual labor if logged, otherwise fall back to estimated labor."""
@@ -325,7 +327,7 @@ async def dashboard(
     ).filter(Quote.status == QuoteStatus.sent).order_by(Quote.created_at.desc()).all()
 
     def _quote_total(q):
-        lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120}
+        lr = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120}
         total = 0.0
         for li in q.line_items:
             total += (li.unit_price or 0) * li.quantity

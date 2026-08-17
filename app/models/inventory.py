@@ -99,9 +99,27 @@ class InventoryItem(Base):
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
     updated_at        = Column(DateTime(timezone=True), onupdate=func.now())
 
-    adjustments  = relationship("InventoryAdjustment", back_populates="item",
-                                order_by="InventoryAdjustment.created_at.desc()")
+    adjustments   = relationship("InventoryAdjustment", back_populates="item",
+                                 order_by="InventoryAdjustment.created_at.desc()")
+    price_history = relationship("InventoryPriceHistory", back_populates="item",
+                                 order_by="InventoryPriceHistory.changed_at.desc()")
     po_line_items = relationship("POLineItem", back_populates="item")
+
+
+class InventoryPriceHistory(Base):
+    """Logs every change to cost_per_unit so historic margin reports are accurate."""
+    __tablename__ = "inventory_price_history"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    item_id        = Column(Integer, ForeignKey("inventory_items.id"), nullable=False)
+    old_cost       = Column(Float, nullable=True)
+    new_cost       = Column(Float, nullable=False)
+    changed_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    changed_at     = Column(DateTime(timezone=True), server_default=func.now())
+    notes          = Column(Text, nullable=True)  # e.g. "Supplier price increase Q3 2026"
+
+    item       = relationship("InventoryItem", back_populates="price_history")
+    changed_by = relationship("User", foreign_keys=[changed_by_id])
 
 
 class InventoryAdjustment(Base):

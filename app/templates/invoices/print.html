@@ -101,7 +101,7 @@
       </thead>
       <tbody>
         {% set ns = namespace(delivery=0, subtotal=0) %}
-        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120} %}
+        {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120} %}
         {# Determine whether to use actual or estimated labor #}
         {% set tel = namespace(v=0) %}
         {% for li in inv.order.line_items %}

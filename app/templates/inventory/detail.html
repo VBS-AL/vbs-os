@@ -201,6 +201,31 @@
       <p class="text-sm text-gray-600">{{ item.notes }}</p>
     </div>
     {% endif %}
+
+    {% if can_see_financials and item.price_history %}
+    <div class="bg-white rounded-xl shadow p-5">
+      <h3 class="font-semibold text-steel-dark mb-3 text-sm">Cost History</h3>
+      <div class="space-y-2">
+        {% for ph in item.price_history %}
+        <div class="text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+          <div class="flex items-center justify-between">
+            <span class="text-gray-500">{{ ph.changed_at.strftime('%b %d, %Y') if ph.changed_at else '—' }}</span>
+            <span class="font-medium text-steel-dark">
+              {% if ph.old_cost is not none %}${{ '%.2f'|format(ph.old_cost) }} → {% endif %}
+              ${{ '%.2f'|format(ph.new_cost) }}
+            </span>
+          </div>
+          {% if ph.changed_by %}
+          <div class="text-gray-400 mt-0.5">by {{ ph.changed_by.first_name }} {{ ph.changed_by.last_name }}</div>
+          {% endif %}
+          {% if ph.notes %}
+          <div class="text-gray-400 italic mt-0.5">{{ ph.notes }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 
 </div>

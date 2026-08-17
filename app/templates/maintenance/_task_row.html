@@ -1,0 +1,59 @@
+<div class="px-5 py-4 border-b border-gray-100 last:border-0 flex items-center justify-between gap-4 hover:bg-gray-50 transition">
+  <div class="flex items-center gap-3 flex-1 min-w-0">
+    <!-- Status dot -->
+    <span class="w-2.5 h-2.5 rounded-full flex-shrink-0
+      {% if t._status == 'overdue' %}bg-red-500
+      {% elif t._status == 'due_today' %}bg-amber-400
+      {% elif t._status == 'due_soon' %}bg-yellow-400
+      {% else %}bg-green-400{% endif %}">
+    </span>
+    <div class="min-w-0">
+      <p class="font-medium text-gray-800 text-sm truncate">{{ t.name }}</p>
+      <p class="text-xs text-gray-400">
+        {{ equipment_labels.get(t.equipment_type, t.equipment_type.value) }}
+        {% if t.equipment_label %} &mdash; {{ t.equipment_label }}{% endif %}
+        &middot; {{ freq_labels.get(t.frequency, t.frequency.value) }}
+      </p>
+    </div>
+  </div>
+
+  <!-- Due info -->
+  <div class="text-right text-xs text-gray-500 flex-shrink-0 w-36">
+    {% if t.frequency.value == 'mileage' %}
+      <p class="font-medium {% if t._status == 'overdue' %}text-red-600{% endif %}">
+        {{ t._miles_since|int }} / {{ t.mileage_interval|int }} mi
+      </p>
+      <p class="text-gray-400">Current: {{ t.current_mileage|int }} mi</p>
+    {% elif t.next_due_date %}
+      <p class="font-medium {% if t._status == 'overdue' %}text-red-600{% elif t._status == 'due_today' %}text-amber-600{% endif %}">
+        {% if t._status == 'overdue' %}Overdue
+        {% elif t._status == 'due_today' %}Today
+        {% else %}{{ t.next_due_date.strftime('%b %d') }}{% endif %}
+      </p>
+      <p class="text-gray-400">{{ t.next_due_date }}</p>
+    {% else %}
+      <p class="text-gray-400">No date set</p>
+    {% endif %}
+  </div>
+
+  <!-- Actions -->
+  <div class="flex items-center gap-2 flex-shrink-0">
+    {% if t.frequency.value == 'mileage' %}
+    <form method="post" action="/maintenance/{{ t.id }}/mileage" class="flex items-center gap-1">
+      <input type="number" name="mileage" placeholder="Miles" step="1" min="0"
+             value="{{ t.current_mileage|int }}"
+             class="w-24 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-steel-mid">
+      <button type="submit" class="bg-steel-mid text-white text-xs px-2 py-1 rounded hover:bg-steel-dark transition">Log</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/maintenance/{{ t.id }}/complete">
+      <button type="submit"
+              class="text-xs px-3 py-1 rounded font-medium transition
+                {% if t._status in ['overdue','due_today'] %}bg-green-600 hover:bg-green-700 text-white
+                {% else %}bg-gray-100 hover:bg-gray-200 text-gray-700{% endif %}">
+        ✓ Done
+      </button>
+    </form>
+    <a href="/maintenance/{{ t.id }}/edit" class="text-xs text-steel-mid hover:underline">Edit</a>
+  </div>
+</div>

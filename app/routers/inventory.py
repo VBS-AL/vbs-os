@@ -12,7 +12,7 @@ from openpyxl.utils import get_column_letter
 from app.database import get_db
 from app.auth import get_current_user, financials_visible
 from app.models.inventory import (
-    InventoryItem, InventoryAdjustment,
+    InventoryItem, InventoryAdjustment, InventoryPriceHistory,
     InventoryCategory, AdjustmentReason,
 )
 from app.models.settings import AppSetting
@@ -854,6 +854,16 @@ async def save_item(
     if not item:
         return RedirectResponse("/inventory", status_code=302)
 
+    # Log price history if cost changed
+    old_cost = item.cost_per_unit
+    if cost_per_unit != old_cost:
+        db.add(InventoryPriceHistory(
+            item_id=item.id,
+            old_cost=old_cost,
+            new_cost=cost_per_unit,
+            changed_by_id=user.id if user else None,
+        ))
+
     item.name              = name
     item.category          = InventoryCategory(category)
     item.description       = description
@@ -972,6 +982,16 @@ async def save_item(
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
     if not item:
         return RedirectResponse("/inventory", status_code=302)
+
+    # Log price history if cost changed
+    old_cost2 = item.cost_per_unit
+    if cost_per_unit != old_cost2:
+        db.add(InventoryPriceHistory(
+            item_id=item.id,
+            old_cost=old_cost2,
+            new_cost=cost_per_unit,
+            changed_by_id=user.id if user else None,
+        ))
 
     item.name              = name
     item.category          = InventoryCategory(category)

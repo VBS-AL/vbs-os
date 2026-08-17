@@ -245,6 +245,12 @@ async def create_quote(
             inv_id = int(inv_id_raw) if inv_id_raw else None
             labor_hrs = float(form.get(f"li_labor_{idx}") or 0)
             labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
+            rate_snapshot = None
+            if labor_dept:
+                try:
+                    rate_snapshot = BILLING_RATES.get(BillingDept(labor_dept))
+                except Exception:
+                    pass
             li = QuoteLineItem(
                 quote_id=quote.id,
                 line_number=idx + 1,
@@ -259,15 +265,12 @@ async def create_quote(
                 inventory_item_id=inv_id,
                 estimated_labor_hours=labor_hrs or None,
                 estimated_labor_dept=labor_dept,
+                labor_rate_snapshot=rate_snapshot,
             )
             db.add(li)
             total += qty * price
-            if labor_hrs and labor_dept:
-                try:
-                    rate = BILLING_RATES.get(BillingDept(labor_dept), 0)
-                    total += labor_hrs * rate
-                except Exception:
-                    pass
+            if labor_hrs and labor_dept and rate_snapshot:
+                total += labor_hrs * rate_snapshot
         idx += 1
 
     # Delivery surcharge
@@ -595,6 +598,12 @@ async def edit_quote(
             inv_id = int(inv_id_raw) if inv_id_raw else None
             labor_hrs = float(form.get(f"li_labor_{idx}") or 0)
             labor_dept = form.get(f"li_labor_dept_{idx}", "").strip() or None
+            rate_snapshot2 = None
+            if labor_dept:
+                try:
+                    rate_snapshot2 = BILLING_RATES.get(BillingDept(labor_dept))
+                except Exception:
+                    pass
             db.add(QuoteLineItem(
                 quote_id=quote.id,
                 line_number=idx + 1,
@@ -609,14 +618,11 @@ async def edit_quote(
                 inventory_item_id=inv_id,
                 estimated_labor_hours=labor_hrs or None,
                 estimated_labor_dept=labor_dept,
+                labor_rate_snapshot=rate_snapshot2,
             ))
             total += qty * price
-            if labor_hrs and labor_dept:
-                try:
-                    rate = BILLING_RATES.get(BillingDept(labor_dept), 0)
-                    total += labor_hrs * rate
-                except Exception:
-                    pass
+            if labor_hrs and labor_dept and rate_snapshot2:
+                total += labor_hrs * rate_snapshot2
         idx += 1
     # Delivery charge
     surcharge_raw = form.get("delivery_surcharge", "").strip()

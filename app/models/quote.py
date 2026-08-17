@@ -59,6 +59,7 @@ class QuoteLineItem(Base):
     inventory_item_id     = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
     estimated_labor_hours = Column(Float, nullable=True)
     estimated_labor_dept  = Column(String, nullable=True)  # BillingDept value
+    labor_rate_snapshot   = Column(Float, nullable=True)   # $/hr frozen at time of line creation
     is_delivery_surcharge = Column(Boolean, default=False)
 
     quote           = relationship("Quote", back_populates="line_items")
