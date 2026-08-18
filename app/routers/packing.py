@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, Request, HTTPException, Form
+from fastapi import APIRouter, Depends, Request, HTTPException, Form, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from typing import Optional as _Opt
+import os, uuid
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 
@@ -83,6 +85,7 @@ async def confirm_packing_check(
 async def confirm_delivery(
     order_id: int,
     override: bool = Form(False),
+    photo: _Opt[UploadFile] = File(None),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -153,6 +156,19 @@ async def confirm_delivery(
                 db.add(entry)
                 db.flush()
                 open_session.labor_entry_id = entry.id
+
+    # Save delivery proof photo if provided
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[-1].lower() or ".jpg"
+        fname = f"{order_id}_{uuid.uuid4().hex[:8]}{ext}"
+        upload_dir = "app/static/uploads/delivery"
+        os.makedirs(upload_dir, exist_ok=True)
+        content = await photo.read()
+        with open(f"{upload_dir}/{fname}", "wb") as f:
+            f.write(content)
+        pl = order.packing_list
+        if pl:
+            pl.delivery_photo_path = f"uploads/delivery/{fname}"
 
     db.commit()
     return RedirectResponse(f"/orders/{order_id}/packing-list", status_code=302)

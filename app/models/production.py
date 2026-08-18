@@ -4,6 +4,11 @@ from sqlalchemy.sql import func
 import enum
 from app.database import Base
 
+
+class WeldCheckType(str, enum.Enum):
+    pre_weld = "pre_weld"   # one per job, foreman sign-off before welding begins
+    mid_job  = "mid_job"    # every 10 pieces / steps / cuts
+
 class StageType(str, enum.Enum):
     material_receiving  = "material_receiving"
     drawings            = "drawings"
@@ -45,9 +50,12 @@ class ProductionStage(Base):
     notes          = Column(Text, nullable=True)
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
 
+    pieces_completed = Column(Integer, default=0, nullable=True)
+
     order          = relationship("Order", back_populates="production_stages")
     assigned_to    = relationship("User", foreign_keys=[assigned_to_id], back_populates="assigned_stages")
     work_sessions  = relationship("WorkSession", back_populates="stage")
+    weld_checks    = relationship("WeldCheck", back_populates="stage", order_by="WeldCheck.checked_at")
 
 class QARecord(Base):
     __tablename__ = "qa_records"
@@ -85,3 +93,21 @@ class DrawingRecord(Base):
 
     order          = relationship("Order", back_populates="drawing_records")
     uploaded_by    = relationship("User", foreign_keys=[uploaded_by_id])
+
+
+class WeldCheck(Base):
+    __tablename__ = "weld_checks"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    order_id      = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    stage_id      = Column(Integer, ForeignKey("production_stages.id"), nullable=False)
+    check_type    = Column(SAEnum(WeldCheckType), nullable=False)
+    piece_number  = Column(Integer, nullable=True)   # cumulative pieces at time of mid-job check
+    passed        = Column(Boolean, default=True)
+    notes         = Column(Text, nullable=True)
+    checked_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    checked_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    order      = relationship("Order")
+    stage      = relationship("ProductionStage", back_populates="weld_checks")
+    checked_by = relationship("User", foreign_keys=[checked_by_id])

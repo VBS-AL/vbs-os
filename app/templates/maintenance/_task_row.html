@@ -14,6 +14,25 @@
         {% if t.equipment_label %} &mdash; {{ t.equipment_label }}{% endif %}
         &middot; {{ freq_labels.get(t.frequency, t.frequency.value) }}
       </p>
+      <!-- Last done -->
+      {% if t._last_log %}
+      <p class="text-xs text-gray-400 mt-0.5">
+        Last done {{ t._last_log.completed_at.strftime('%b %d') if t._last_log.completed_at else '—' }}
+        {% if t._last_log.completed_by %}by {{ t._last_log.completed_by.first_name }}{% endif %}
+      </p>
+      {% endif %}
+      <!-- Assignees -->
+      {% if t.assigned_user_ids and user_map %}
+      <div class="flex flex-wrap gap-1 mt-1">
+        {% for uid in t.assigned_user_ids %}
+        {% if uid in user_map %}
+        <span class="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
+          {{ user_map[uid].first_name }}
+        </span>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -48,12 +67,15 @@
     {% endif %}
     <form method="post" action="/maintenance/{{ t.id }}/complete">
       <button type="submit"
-              class="text-xs px-3 py-1 rounded font-medium transition
-                {% if t._status in ['overdue','due_today'] %}bg-green-600 hover:bg-green-700 text-white
-                {% else %}bg-gray-100 hover:bg-gray-200 text-gray-700{% endif %}">
+              class="text-xs px-3 py-1.5 rounded-lg font-medium border transition
+                {% if t._status in ['overdue','due_today'] %}bg-green-600 hover:bg-green-700 text-white border-green-600
+                {% elif t._status == 'due_soon' %}bg-green-100 hover:bg-green-200 text-green-800 border-green-300
+                {% else %}bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200{% endif %}">
         ✓ Done
       </button>
     </form>
+    {% if user.role.value in ['owner','ops_manager'] %}
     <a href="/maintenance/{{ t.id }}/edit" class="text-xs text-steel-mid hover:underline">Edit</a>
+    {% endif %}
   </div>
 </div>

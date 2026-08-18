@@ -11,7 +11,7 @@ from app.database import get_db
 from app.auth import require_user, financials_visible
 from app.models.user import User, UserRole
 from app.models.order import Order, OrderStatus, Priority
-from app.models.production import ProductionStage, StageStatus, StageType, QARecord, QAResult, DrawingRecord
+from app.models.production import ProductionStage, StageStatus, StageType, QARecord, QAResult, DrawingRecord, WeldCheck, WeldCheckType
 from app.models.packing_list import PackingList, ShippedVia
 from app.models.work_session import WorkSession, SessionStatus, PauseReason, PAUSE_REASON_LABELS
 from app.models.labor import LaborEntry, BillingDept, BILLING_RATES
@@ -320,6 +320,15 @@ async def update_stage_status(
         if not has_time:
             raise HTTPException(400, "Log time on this stage before marking it complete")
 
+    # Gate: welding stage requires a pre-weld check sign-off before completion
+    if new_status == StageStatus.complete and stage.stage_type == StageType.welding:
+        has_pre_weld = db.query(WeldCheck).filter(
+            WeldCheck.stage_id == stage_id,
+            WeldCheck.check_type == WeldCheckType.pre_weld,
+        ).first()
+        if not has_pre_weld:
+            raise HTTPException(400, "A pre-weld check sign-off is required before this stage can be completed")
+
     if new_status == StageStatus.in_progress and not stage.started_at:
         stage.started_at = now
     elif new_status == StageStatus.complete:
@@ -570,6 +579,54 @@ async def stop_session(
         db.flush()
         session.labor_entry_id = entry.id
 
+    db.commit()
+    return RedirectResponse("/production/queue", status_code=302)
+
+
+# ── Weld Check (pre-weld sign-off or mid-job check) ──────────────────────
+@router.post("/stages/{stage_id}/weld-check")
+async def log_weld_check(
+    stage_id: int,
+    check_type: str = Form(...),
+    passed: bool    = Form(True),
+    notes: Optional[str] = Form(None),
+    piece_number: Optional[int] = Form(None),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    stage = db.query(ProductionStage).filter(ProductionStage.id == stage_id).first()
+    if not stage:
+        raise HTTPException(404, "Stage not found")
+
+    # Pre-weld checks restricted to foreman/management
+    if check_type == WeldCheckType.pre_weld and user.role not in MANAGEMENT_ROLES:
+        raise HTTPException(403, "Only shop foreman or management can sign off on pre-weld checks")
+
+    db.add(WeldCheck(
+        order_id      = stage.order_id,
+        stage_id      = stage_id,
+        check_type    = WeldCheckType(check_type),
+        passed        = passed,
+        notes         = notes.strip() if notes else None,
+        piece_number  = piece_number,
+        checked_by_id = user.id,
+    ))
+    db.commit()
+    return RedirectResponse("/production/queue", status_code=302)
+
+
+# ── Update Piece Count on a stage ────────────────────────────────────────
+@router.post("/stages/{stage_id}/update-pieces")
+async def update_pieces(
+    stage_id: int,
+    pieces_completed: int = Form(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    stage = db.query(ProductionStage).filter(ProductionStage.id == stage_id).first()
+    if not stage:
+        raise HTTPException(404, "Stage not found")
+    stage.pieces_completed = max(0, pieces_completed)
     db.commit()
     return RedirectResponse("/production/queue", status_code=302)
 
@@ -1009,6 +1066,14 @@ async def employee_queue(
     # All active employees — for Checked By dropdown on delivery form
     all_employees = db.query(User).filter(User.is_active == True).order_by(User.first_name).all()
 
+    # Weld checks for the active welding session (if any)
+    weld_checks = []
+    if my_session and my_session.stage and my_session.stage.stage_type == StageType.welding:
+        from sqlalchemy.orm import joinedload as _jl
+        weld_checks = db.query(WeldCheck).filter(
+            WeldCheck.stage_id == my_session.stage_id
+        ).options(_jl(WeldCheck.checked_by)).order_by(WeldCheck.checked_at).all()
+
     # Packing lists awaiting confirmation by this employee (checker role)
     from app.models.packing_list import PackingList
     pending_checks = db.query(PackingList).options(
@@ -1035,6 +1100,7 @@ async def employee_queue(
         "all_employees_summary": all_employees_summary,
         "all_employees":         all_employees,
         "pending_checks":        pending_checks,
+        "weld_checks":           weld_checks,
         "stat_hours":            stat_hours,
         "stat_orders":           stat_orders,
         "stat_period":           stat_period,

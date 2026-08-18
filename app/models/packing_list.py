@@ -53,6 +53,9 @@ class PackingList(Base):
     check_confirmed_at = Column(DateTime(timezone=True), nullable=True)
     notes             = Column(Text, nullable=True)
 
+    # Proof of delivery photo (Amazon/FedEx-style drop-off confirmation)
+    delivery_photo_path = Column(String, nullable=True)  # relative path under app/static/
+
     # Meta
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
     created_by_id     = Column(Integer, ForeignKey("users.id"), nullable=True)

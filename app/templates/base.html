@@ -49,10 +49,10 @@
       {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
       {{ nav_link('/customers',  'Customers') }}
       {% endif %}
+      {{ nav_link('/maintenance', 'PM') }}
       {% if user.role.value in ["owner","ops_manager"] %}
       {{ nav_link('/users',       'Team') }}
       {{ nav_link('/reports',     'Reports') }}
-      {{ nav_link('/maintenance', 'PM') }}
       {% endif %}
     </div>
 
@@ -105,10 +105,10 @@
       {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
       {{ mobile_link('/customers',  'Customers') }}
       {% endif %}
+      {{ mobile_link('/maintenance', 'PM') }}
       {% if user.role.value in ["owner","ops_manager"] %}
       {{ mobile_link('/users',       'Team') }}
       {{ mobile_link('/reports',     'Reports') }}
-      {{ mobile_link('/maintenance', 'PM') }}
       {% endif %}
       <!-- User info + logout at bottom of mobile menu -->
       <div class="pt-2 flex items-center justify-between">
@@ -131,7 +131,7 @@
   <script>
     (function() {
       var path = window.location.pathname;
-      var topLevel = ['/', '/dashboard', '/quotes', '/orders', '/invoices', '/customers', '/inventory', '/production', '/production/queue', '/reports', '/users'];
+      var topLevel = ['/', '/dashboard', '/quotes', '/orders', '/invoices', '/customers', '/inventory', '/production', '/production/queue', '/reports', '/users', '/maintenance'];
     if (history.length > 1 && topLevel.indexOf(path) === -1) {
         document.getElementById('back-btn-wrap').classList.remove('hidden');
       }

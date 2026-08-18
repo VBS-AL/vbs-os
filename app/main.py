@@ -338,6 +338,17 @@ async def dashboard(
     draft_value = sum(_quote_total(q) for q in pipeline_quotes_draft) if can_fin else 0
     sent_value  = sum(_quote_total(q) for q in pipeline_quotes_sent)  if can_fin else 0
 
+    # ── Active work session for this user ────────────────────────────────
+    from app.models.work_session import WorkSession, SessionStatus
+    from sqlalchemy.orm import joinedload as jl3
+    my_active_session = db.query(WorkSession).filter(
+        WorkSession.employee_id == user.id,
+        WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
+    ).options(
+        jl3(WorkSession.order).joinedload(Order.customer),
+        jl3(WorkSession.stage),
+    ).first()
+
     # ── Low stock alert ───────────────────────────────────────────────────
     low_stock_count = db.query(InventoryItem).filter(
         InventoryItem.is_active == True,
@@ -407,4 +418,5 @@ async def dashboard(
         "low_stock_count":          low_stock_count,
         "ar_aging_30_count":        ar_aging_30_count,
         "ar_aging_30_amount":       ar_aging_30_amount,
+        "my_active_session":        my_active_session,
     })

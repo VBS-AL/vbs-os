@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, Enum as SAEnum, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, Enum as SAEnum, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -61,6 +61,8 @@ class MaintenanceTask(Base):
     last_mileage     = Column(Float, nullable=True, default=0) # mileage at last completion
     # Next due tracking
     next_due_date   = Column(Date, nullable=True)
+    # Assignees: list of user IDs (JSON, stored as TEXT in SQLite)
+    assigned_user_ids = Column(JSON, nullable=True, default=list)
     # Flags
     is_active       = Column(Boolean, default=True)
     notes           = Column(Text, nullable=True)
@@ -86,6 +88,34 @@ class MaintenanceLog(Base):
     task         = relationship("MaintenanceTask", back_populates="logs")
     completed_by = relationship("User", foreign_keys=[completed_by_id])
     overridden_by = relationship("User", foreign_keys=[overridden_by_id])
+
+
+class PMRequestStatus(str, enum.Enum):
+    pending  = "pending"
+    approved = "approved"
+    dismissed = "dismissed"
+
+
+class MaintenanceRequest(Base):
+    """A PM task request submitted by any team member for management review."""
+    __tablename__ = "maintenance_requests"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    requested_by_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
+    equipment_type   = Column(SAEnum(EquipmentType), nullable=True)
+    equipment_label  = Column(String, nullable=True)   # "Truck 1", "Hi-Lo 2", etc.
+    description      = Column(Text, nullable=False)    # what needs doing
+    notes            = Column(Text, nullable=True)
+    status           = Column(SAEnum(PMRequestStatus), default=PMRequestStatus.pending)
+    reviewed_by_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at      = Column(DateTime(timezone=True), nullable=True)
+    review_note      = Column(Text, nullable=True)     # reason if dismissed
+    task_id          = Column(Integer, ForeignKey("maintenance_tasks.id"), nullable=True)  # set on approval
+    requested_at     = Column(DateTime(timezone=True), server_default=func.now())
+
+    requested_by = relationship("User", foreign_keys=[requested_by_id])
+    reviewed_by  = relationship("User", foreign_keys=[reviewed_by_id])
+    task         = relationship("MaintenanceTask", foreign_keys=[task_id])
 
 
 class MileageLog(Base):

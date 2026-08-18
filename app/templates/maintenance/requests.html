@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}PM Requests — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-steel-dark">PM Requests</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Review and approve maintenance requests from the team.</p>
+  </div>
+  <a href="/maintenance" class="text-sm text-steel-mid hover:underline">← Back to PM</a>
+</div>
+
+{% if pending %}
+<div class="bg-white rounded-xl shadow overflow-hidden mb-6">
+  <div class="px-5 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+    <span class="text-amber-600 font-semibold text-sm">⏳ Pending ({{ pending|length }})</span>
+  </div>
+  {% for req in pending %}
+  <div class="px-5 py-5 border-b border-gray-100 last:border-0">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex-1 min-w-0">
+        <p class="font-medium text-gray-800 text-sm">{{ req.description }}</p>
+        {% if req.equipment_type %}
+        <p class="text-xs text-gray-500 mt-0.5">
+          {{ equipment_labels.get(req.equipment_type, req.equipment_type.value) }}
+          {% if req.equipment_label %}&mdash; {{ req.equipment_label }}{% endif %}
+        </p>
+        {% endif %}
+        {% if req.notes %}
+        <p class="text-xs text-gray-400 mt-1 italic">{{ req.notes }}</p>
+        {% endif %}
+        <p class="text-xs text-gray-400 mt-1">
+          Submitted by {{ req.requested_by.first_name }} {{ req.requested_by.last_name }}
+          {% if req.requested_at %}&middot; {{ req.requested_at.strftime('%b %d, %Y %I:%M %p') }}{% endif %}
+        </p>
+      </div>
+
+      <!-- Approve / Dismiss actions -->
+      <div class="flex-shrink-0 flex flex-col gap-2 min-w-[220px]">
+        <!-- Approve: inline frequency picker -->
+        <details class="group">
+          <summary class="cursor-pointer list-none">
+            <span class="inline-block bg-green-600 hover:bg-green-700 text-white text-xs font-medium px-4 py-1.5 rounded-lg transition w-full text-center">
+              ✓ Approve & Create Task
+            </span>
+          </summary>
+          <form method="post" action="/maintenance/requests/{{ req.id }}/approve" class="mt-2 bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Frequency <span class="text-red-400">*</span></label>
+              <select name="frequency" required class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs">
+                {% for f in freq_types %}
+                <option value="{{ f.value }}">{{ freq_labels.get(f, f.value) }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">First Due Date</label>
+              <input type="date" name="next_due_date" class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs">
+            </div>
+            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-medium py-1.5 rounded transition">
+              Create Task
+            </button>
+          </form>
+        </details>
+
+        <!-- Dismiss -->
+        <details class="group">
+          <summary class="cursor-pointer list-none">
+            <span class="inline-block border border-gray-300 text-gray-600 hover:bg-gray-50 text-xs font-medium px-4 py-1.5 rounded-lg transition w-full text-center">
+              Dismiss
+            </span>
+          </summary>
+          <form method="post" action="/maintenance/requests/{{ req.id }}/dismiss" class="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Reason (optional)</label>
+              <input type="text" name="review_note" placeholder="e.g. Already scheduled, not needed"
+                     class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs">
+            </div>
+            <button type="submit" class="w-full bg-gray-500 hover:bg-gray-600 text-white text-xs font-medium py-1.5 rounded transition">
+              Dismiss Request
+            </button>
+          </form>
+        </details>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="bg-white rounded-xl shadow p-10 text-center text-gray-400 mb-6">
+  No pending requests. The team is all caught up.
+</div>
+{% endif %}
+
+{% if reviewed %}
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <div class="px-5 py-3 bg-gray-50 border-b border-gray-100">
+    <span class="text-gray-500 font-semibold text-sm">Recent History</span>
+  </div>
+  {% for req in reviewed %}
+  <div class="px-5 py-3 border-b border-gray-50 last:border-0 flex items-start gap-3 text-sm">
+    <span class="mt-0.5 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0
+      {% if req.status.value == 'approved' %}bg-green-100 text-green-700
+      {% else %}bg-gray-100 text-gray-500{% endif %}">
+      {{ req.status.value.title() }}
+    </span>
+    <div class="flex-1 min-w-0">
+      <p class="text-gray-700 truncate">{{ req.description }}</p>
+      <p class="text-xs text-gray-400 mt-0.5">
+        From {{ req.requested_by.first_name }} {{ req.requested_by.last_name }}
+        {% if req.reviewed_by %}&middot; reviewed by {{ req.reviewed_by.first_name }}{% endif %}
+        {% if req.review_note %}&middot; <span class="italic">{{ req.review_note }}</span>{% endif %}
+      </p>
+    </div>
+    {% if req.task_id %}
+    <a href="/maintenance/{{ req.task_id }}/edit" class="text-xs text-steel-mid hover:underline flex-shrink-0">View Task</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

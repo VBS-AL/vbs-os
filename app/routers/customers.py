@@ -13,6 +13,15 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 templates = Jinja2Templates(directory="app/templates")
 
 
+def _next_customer_number(db: Session) -> str:
+    """Generate next sequential VBS-C-XXXXX number."""
+    last = db.query(Customer.customer_number).filter(
+        Customer.customer_number.like("VBS-C-%")
+    ).order_by(Customer.customer_number.desc()).first()
+    n = (int(last[0].split("-")[-1]) + 1) if (last and last[0]) else 1
+    return f"VBS-C-{n:05d}"
+
+
 @router.get("", response_class=HTMLResponse)
 def list_customers(
     request: Request,
@@ -34,6 +43,8 @@ def list_customers(
             | Customer.company.ilike(like)
             | Customer.phone.ilike(like)
             | Customer.email.ilike(like)
+            | Customer.customer_number.ilike(like)
+            | Customer.ar_contact_name.ilike(like)
         )
     if city:
         query = query.filter(Customer.city.ilike(f"%{city}%"))
@@ -94,6 +105,10 @@ def create_customer(
     zip_code: str = Form(""),
     payment_terms: int = Form(0),
     notes: str = Form(""),
+    ar_contact_name: str = Form(""),
+    ar_contact_title: str = Form(""),
+    ar_contact_phone: str = Form(""),
+    ar_contact_email: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
@@ -117,6 +132,7 @@ def create_customer(
         )
     name = name.strip()
     c = Customer(
+        customer_number=_next_customer_number(db),
         name=name,
         company=company.strip() or None,
         phone=phone.strip() or None,
@@ -127,6 +143,10 @@ def create_customer(
         zip_code=zip_code.strip() or None,
         notes=notes.strip() or None,
         payment_terms=payment_terms,
+        ar_contact_name=ar_contact_name.strip() or None,
+        ar_contact_title=ar_contact_title.strip() or None,
+        ar_contact_phone=ar_contact_phone.strip() or None,
+        ar_contact_email=ar_contact_email.strip() or None,
     )
     db.add(c)
     db.commit()
@@ -182,12 +202,19 @@ def edit_customer(
     zip_code: str = Form(""),
     payment_terms: int = Form(0),
     notes: str = Form(""),
+    ar_contact_name: str = Form(""),
+    ar_contact_title: str = Form(""),
+    ar_contact_phone: str = Form(""),
+    ar_contact_email: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
     c = db.query(Customer).filter(Customer.id == customer_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
+    # Auto-assign customer number if somehow still missing (backfill)
+    if not c.customer_number:
+        c.customer_number = _next_customer_number(db)
     c.name = name.strip()
     c.company = company.strip() or None
     c.phone = phone.strip() or None
@@ -198,5 +225,9 @@ def edit_customer(
     c.zip_code = zip_code.strip() or None
     c.notes = notes.strip() or None
     c.payment_terms = payment_terms
+    c.ar_contact_name  = ar_contact_name.strip() or None
+    c.ar_contact_title = ar_contact_title.strip() or None
+    c.ar_contact_phone = ar_contact_phone.strip() or None
+    c.ar_contact_email = ar_contact_email.strip() or None
     db.commit()
     return RedirectResponse(f"/customers/{customer_id}", status_code=303)

@@ -7,11 +7,13 @@ from datetime import date, timedelta
 from typing import Optional
 
 from app.database import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, financials_visible
 from app.models.maintenance import (
     MaintenanceTask, MaintenanceLog, MileageLog,
+    MaintenanceRequest, PMRequestStatus,
     EquipmentType, FrequencyType, EQUIPMENT_LABELS, FREQ_LABELS
 )
+from app.models.user import User as UserModel
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 templates = Jinja2Templates(directory="app/templates")
@@ -46,6 +48,8 @@ def _compute_next_due(task: MaintenanceTask, from_date: date) -> Optional[date]:
 @router.get("", response_class=HTMLResponse)
 async def maintenance_list(
     request: Request,
+    flash: Optional[str] = None,
+    mine: Optional[str]  = None,   # "1" = show only my assigned tasks
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -57,8 +61,17 @@ async def maintenance_list(
         MaintenanceTask.is_active == True
     ).order_by(MaintenanceTask.equipment_type, MaintenanceTask.name).all()
 
+    # Load last completion log per task
+    last_log_map = {}
+    for t in tasks:
+        last = db.query(MaintenanceLog).filter(
+            MaintenanceLog.task_id == t.id
+        ).order_by(MaintenanceLog.completed_at.desc()).first()
+        last_log_map[t.id] = last
+
     # Tag each task: overdue / due_today / due_soon / ok
     for t in tasks:
+        t._last_log = last_log_map.get(t.id)
         if t.frequency == FrequencyType.mileage:
             miles_since = (t.current_mileage or 0) - (t.last_mileage or 0)
             t._status = "overdue" if miles_since >= (t.mileage_interval or 9999) else "ok"
@@ -75,18 +88,34 @@ async def maintenance_list(
             else:
                 t._status = "ok"
 
-    overdue  = [t for t in tasks if t._status == "overdue"]
+    # Filter to "mine" if requested
+    if mine == "1":
+        tasks = [t for t in tasks if t.assigned_user_ids and user.id in (t.assigned_user_ids or [])]
+
+    overdue   = [t for t in tasks if t._status == "overdue"]
     due_today = [t for t in tasks if t._status == "due_today"]
-    due_soon = [t for t in tasks if t._status == "due_soon"]
-    ok       = [t for t in tasks if t._status == "ok"]
+    due_soon  = [t for t in tasks if t._status == "due_soon"]
+    ok        = [t for t in tasks if t._status == "ok"]
+
+    # Build user map for displaying assignee names
+    all_users = db.query(UserModel).filter(UserModel.is_active == True).order_by(UserModel.first_name).all()
+    user_map  = {u.id: u for u in all_users}
+
+    pending_requests = db.query(MaintenanceRequest).filter(
+        MaintenanceRequest.status == PMRequestStatus.pending
+    ).count()
 
     return templates.TemplateResponse("maintenance/list.html", {
         "request": request, "user": user,
-        "can_see_financials": False,
+        "can_see_financials": financials_visible(user),
         "tasks": tasks,
         "overdue": overdue, "due_today": due_today,
         "due_soon": due_soon, "ok": ok,
         "today": today,
+        "flash": flash,
+        "mine": mine,
+        "user_map": user_map,
+        "pending_requests": pending_requests,
         "equipment_labels": EQUIPMENT_LABELS,
         "freq_labels": FREQ_LABELS,
         "equipment_types": EquipmentType,
@@ -103,13 +132,15 @@ async def new_task_form(
 ):
     if not user:
         return RedirectResponse("/auth/login", status_code=302)
+    all_users = db.query(UserModel).filter(UserModel.is_active == True).order_by(UserModel.first_name).all()
     return templates.TemplateResponse("maintenance/new.html", {
         "request": request, "user": user,
-        "can_see_financials": False,
+        "can_see_financials": financials_visible(user),
         "equipment_types": EquipmentType,
         "freq_types": FrequencyType,
         "equipment_labels": EQUIPMENT_LABELS,
         "freq_labels": FREQ_LABELS,
+        "all_users": all_users,
     })
 
 
@@ -128,6 +159,8 @@ async def create_task(
 ):
     if not user:
         return RedirectResponse("/auth/login", status_code=302)
+    form_data = await request.form()
+    assignee_ids = [int(v) for v in form_data.getlist("assignee_ids") if v]
     due = date.fromisoformat(next_due_date) if next_due_date else None
     task = MaintenanceTask(
         name=name,
@@ -137,6 +170,7 @@ async def create_task(
         mileage_interval=mileage_interval,
         next_due_date=due,
         notes=notes or None,
+        assigned_user_ids=assignee_ids or None,
     )
     db.add(task)
     db.commit()
@@ -171,11 +205,18 @@ async def complete_task(
     if task.frequency == FrequencyType.mileage and mileage_at_log:
         task.last_mileage = mileage_at_log
         task.current_mileage = mileage_at_log
+        flash_msg = f"{task.name} logged at {int(mileage_at_log)} mi"
     else:
-        task.next_due_date = _compute_next_due(task, today)
+        next_due = _compute_next_due(task, today)
+        task.next_due_date = next_due
+        if next_due:
+            flash_msg = f"{task.name} — done ✓  Next due {next_due.strftime('%b %d')}"
+        else:
+            flash_msg = f"{task.name} marked complete"
 
     db.commit()
-    return RedirectResponse("/maintenance", status_code=302)
+    from urllib.parse import quote as url_quote
+    return RedirectResponse(f"/maintenance?flash={url_quote(flash_msg)}", status_code=302)
 
 
 # ── Log mileage (trucks — weekly check-in) ────────────────────────────────────
@@ -227,20 +268,23 @@ async def edit_task_form(
         MileageLog.task_id == task_id
     ).order_by(MileageLog.log_date.desc()).limit(10).all()
 
+    all_users = db.query(UserModel).filter(UserModel.is_active == True).order_by(UserModel.first_name).all()
     return templates.TemplateResponse("maintenance/detail.html", {
         "request": request, "user": user,
-        "can_see_financials": False,
+        "can_see_financials": financials_visible(user),
         "task": task, "logs": logs, "mileage_logs": mileage_logs,
         "equipment_labels": EQUIPMENT_LABELS,
         "freq_labels": FREQ_LABELS,
         "equipment_types": EquipmentType,
         "freq_types": FrequencyType,
         "today": date.today(),
+        "all_users": all_users,
     })
 
 
 @router.post("/{task_id}/edit")
 async def update_task(
+    request: Request,
     task_id: int,
     name: str              = Form(...),
     equipment_type: str    = Form(...),
@@ -257,6 +301,8 @@ async def update_task(
     task = db.get(MaintenanceTask, task_id)
     if not task:
         return RedirectResponse("/maintenance", status_code=302)
+    form_data = await request.form()
+    assignee_ids = [int(v) for v in form_data.getlist("assignee_ids") if v]
     task.name = name
     task.equipment_type = EquipmentType(equipment_type)
     task.equipment_label = equipment_label or None
@@ -264,6 +310,7 @@ async def update_task(
     task.mileage_interval = mileage_interval
     task.next_due_date = date.fromisoformat(next_due_date) if next_due_date else None
     task.notes = notes or None
+    task.assigned_user_ids = assignee_ids or None
     db.commit()
     return RedirectResponse("/maintenance", status_code=302)
 
@@ -281,3 +328,131 @@ async def deactivate_task(
         task.is_active = False
         db.commit()
     return RedirectResponse("/maintenance", status_code=302)
+
+
+# ── PM Requests ───────────────────────────────────────────────────────────────
+
+@router.get("/requests/new", response_class=HTMLResponse)
+async def new_request_form(
+    request: Request,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    return templates.TemplateResponse("maintenance/request_new.html", {
+        "request": request, "user": user,
+        "can_see_financials": financials_visible(user),
+        "equipment_types": EquipmentType,
+        "equipment_labels": EQUIPMENT_LABELS,
+    })
+
+
+@router.post("/requests/new")
+async def submit_request(
+    description: str        = Form(...),
+    equipment_type: str     = Form(""),
+    equipment_label: str    = Form(""),
+    notes: str              = Form(""),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    eq = EquipmentType(equipment_type) if equipment_type else None
+    db.add(MaintenanceRequest(
+        requested_by_id=user.id,
+        equipment_type=eq,
+        equipment_label=equipment_label or None,
+        description=description,
+        notes=notes or None,
+    ))
+    db.commit()
+    from urllib.parse import quote as url_quote
+    return RedirectResponse(f"/maintenance?flash={url_quote('PM request submitted — management will review it.')}", status_code=302)
+
+
+@router.get("/requests", response_class=HTMLResponse)
+async def requests_list(
+    request: Request,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/auth/login", status_code=302)
+    if user.role.value not in ["owner", "ops_manager"]:
+        return RedirectResponse("/maintenance", status_code=302)
+    pending = db.query(MaintenanceRequest).filter(
+        MaintenanceRequest.status == PMRequestStatus.pending
+    ).order_by(MaintenanceRequest.requested_at.desc()).all()
+    reviewed = db.query(MaintenanceRequest).filter(
+        MaintenanceRequest.status != PMRequestStatus.pending
+    ).order_by(MaintenanceRequest.requested_at.desc()).limit(20).all()
+    return templates.TemplateResponse("maintenance/requests.html", {
+        "request": request, "user": user,
+        "can_see_financials": financials_visible(user),
+        "pending": pending,
+        "reviewed": reviewed,
+        "equipment_labels": EQUIPMENT_LABELS,
+        "freq_labels": FREQ_LABELS,
+        "equipment_types": EquipmentType,
+        "freq_types": FrequencyType,
+    })
+
+
+@router.post("/requests/{req_id}/approve")
+async def approve_request(
+    request: Request,
+    req_id: int,
+    frequency: str              = Form(...),
+    next_due_date: Optional[str] = Form(None),
+    mileage_interval: Optional[float] = Form(None),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user or user.role.value not in ["owner", "ops_manager"]:
+        return RedirectResponse("/maintenance", status_code=302)
+    req = db.get(MaintenanceRequest, req_id)
+    if not req:
+        return RedirectResponse("/maintenance/requests", status_code=302)
+
+    from datetime import datetime, timezone
+    due = date.fromisoformat(next_due_date) if next_due_date else None
+    task = MaintenanceTask(
+        name=req.description,
+        equipment_type=req.equipment_type or EquipmentType.other,
+        equipment_label=req.equipment_label,
+        frequency=FrequencyType(frequency),
+        mileage_interval=mileage_interval,
+        next_due_date=due,
+        notes=req.notes,
+    )
+    db.add(task)
+    db.flush()
+
+    req.status = PMRequestStatus.approved
+    req.reviewed_by_id = user.id
+    req.reviewed_at = datetime.now(timezone.utc)
+    req.task_id = task.id
+    db.commit()
+    return RedirectResponse("/maintenance/requests", status_code=302)
+
+
+@router.post("/requests/{req_id}/dismiss")
+async def dismiss_request(
+    req_id: int,
+    review_note: str = Form(""),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user or user.role.value not in ["owner", "ops_manager"]:
+        return RedirectResponse("/maintenance", status_code=302)
+    req = db.get(MaintenanceRequest, req_id)
+    if req:
+        from datetime import datetime, timezone
+        req.status = PMRequestStatus.dismissed
+        req.reviewed_by_id = user.id
+        req.reviewed_at = datetime.now(timezone.utc)
+        req.review_note = review_note or None
+        db.commit()
+    return RedirectResponse("/maintenance/requests", status_code=302)

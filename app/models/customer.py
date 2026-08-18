@@ -8,6 +8,7 @@ class Customer(Base):
     __tablename__ = "customers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    customer_number: Mapped[str | None] = mapped_column(String(30), unique=True, nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     company: Mapped[str | None] = mapped_column(String(200))
     phone: Mapped[str | None] = mapped_column(String(30))
@@ -19,6 +20,12 @@ class Customer(Base):
     notes: Mapped[str | None] = mapped_column(String(2000))
     payment_terms: Mapped[int | None] = mapped_column(Integer, nullable=True)  # days: 0=due on receipt
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Accounting / AR contact — the person to call about invoices and payment
+    ar_contact_name: Mapped[str | None] = mapped_column(String(200))
+    ar_contact_title: Mapped[str | None] = mapped_column(String(100))
+    ar_contact_phone: Mapped[str | None] = mapped_column(String(30))
+    ar_contact_email: Mapped[str | None] = mapped_column(String(200))
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, server_default=func.now()

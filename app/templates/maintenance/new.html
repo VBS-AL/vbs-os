@@ -57,6 +57,21 @@
     </div>
 
     <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Assigned To</label>
+      <div class="flex flex-wrap gap-2 mt-1">
+        {% for u in all_users %}
+        <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="checkbox" name="assignee_ids" value="{{ u.id }}"
+                 class="rounded border-gray-300 text-steel-mid">
+          {{ u.first_name }} {{ u.last_name }}
+          <span class="text-xs text-gray-400">({{ u.role.value.replace('_',' ').title() }})</span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="text-xs text-gray-400 mt-1">Assigned users see this task in their "My Tasks" filter.</p>
+    </div>
+
+    <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Notes</label>
       <textarea name="notes" rows="2" placeholder="Any special instructions…"
                 class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid"></textarea>

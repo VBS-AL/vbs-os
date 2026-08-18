@@ -3,11 +3,11 @@ from .user import User
 from .customer import Customer, Contact
 from .quote import Quote, QuoteLineItem
 from .order import Order, OrderLineItem
-from .production import ProductionStage, QARecord, DrawingRecord
+from .production import ProductionStage, QARecord, DrawingRecord, WeldCheck, WeldCheckType
 from .work_session import WorkSession, SessionStatus, PauseReason, PAUSE_REASON_LABELS
 from .inventory import InventoryItem, InventoryAdjustment, InventoryPriceHistory, InventoryCategory, AdjustmentReason, PurchaseOrder, POLineItem, OutsideService
 from .invoice import Invoice, Payment
 from .scrap import ScrapRecord, RetailScrapItem, RemnantRecord, RemnantDisposition
 from .settings import AppSetting
 from .packing_list import PackingList, ShippedVia, SHIPPED_VIA_LABELS
-from .maintenance import MaintenanceTask, MaintenanceLog, MileageLog, EquipmentType, FrequencyType
+from .maintenance import MaintenanceTask, MaintenanceLog, MileageLog, MaintenanceRequest, PMRequestStatus, EquipmentType, FrequencyType

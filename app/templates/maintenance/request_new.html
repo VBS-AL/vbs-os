@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Request PM Task — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-steel-dark">Request a PM Task</h1>
+  <p class="text-sm text-gray-500 mt-1">Submit a maintenance request and management will review it.</p>
+</div>
+
+<form method="post" action="/maintenance/requests/new" class="max-w-xl space-y-5">
+  <div class="bg-white rounded-xl shadow p-6 space-y-4">
+
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">What needs to be done? <span class="text-red-400">*</span></label>
+      <textarea name="description" required rows="3"
+                placeholder="e.g. Oil change on Truck 1 is overdue, been leaking since last week"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid"></textarea>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Equipment (optional)</label>
+        <select name="equipment_type"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+          <option value="">— Not sure / General —</option>
+          {% for e in equipment_types %}
+          <option value="{{ e.value }}">{{ equipment_labels.get(e, e.value) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Specific Unit (optional)</label>
+        <input type="text" name="equipment_label" placeholder="e.g. Truck 1, Hi-Lo 2"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid">
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Additional Notes (optional)</label>
+      <textarea name="notes" rows="2" placeholder="Any extra context, urgency, or details…"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-steel-mid"></textarea>
+    </div>
+
+  </div>
+
+  <div class="flex gap-3">
+    <button type="submit" class="bg-steel-dark text-white px-6 py-2 rounded-lg hover:bg-steel-mid transition text-sm font-medium">Submit Request</button>
+    <a href="/maintenance" class="px-6 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}
