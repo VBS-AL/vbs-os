@@ -42,7 +42,41 @@ def next_number(db: Session, model, field: str, prefix: str) -> str:
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _seed_admin(next(get_db()))
+
+    # ── Hourly backup scheduler (Mon–Fri, 7am–4pm EST) ────────────────────
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        import pytz
+        from app.backup import run_backup
+
+        _scheduler = BackgroundScheduler(timezone=pytz.utc)
+        _scheduler.add_job(
+            run_backup,
+            CronTrigger(
+                day_of_week="mon-fri",
+                hour="12-21",   # 7am–4pm EST = 12:00–21:00 UTC
+                minute=0,
+                timezone=pytz.utc,
+            ),
+        )
+        _scheduler.start()
+        import logging
+        logging.getLogger(__name__).info("Backup scheduler started (Mon–Fri 7am–4pm EST)")
+    except ImportError:
+        import logging
+        logging.getLogger(__name__).warning(
+            "APScheduler or pytz not installed — backups disabled. "
+            "Run: pip install apscheduler pytz supabase"
+        )
+
     yield
+
+    # Shutdown scheduler cleanly on app exit
+    try:
+        _scheduler.shutdown(wait=False)
+    except Exception:
+        pass
 
 def _seed_admin(db: Session):
     """Create default owner account on first run."""
