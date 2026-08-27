@@ -251,12 +251,12 @@ async def reports_index(
     # ── Monthly revenue trend (last 12 months) ────────────────────────────
     trend_start = date(today.year - 1, today.month, 1)
     monthly_raw = db.query(
-        func.strftime('%Y-%m', Invoice.invoice_date).label('month'),
+        func.to_char(Invoice.invoice_date, 'YYYY-MM').label('month'),
         func.sum(Invoice.total).label('revenue'),
     ).filter(
         Invoice.invoice_date >= trend_start,
         Invoice.payment_status != PaymentStatus.void,
-    ).group_by(func.strftime('%Y-%m', Invoice.invoice_date)).all()
+    ).group_by(func.to_char(Invoice.invoice_date, 'YYYY-MM')).all()
 
     monthly_map = {row.month: float(row.revenue or 0) for row in monthly_raw}
     monthly_trend = []
