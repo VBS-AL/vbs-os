@@ -57,7 +57,13 @@
       {% set cs = job.current_stage %}
 
       <!-- Main row -->
-      <tr class="border-t border-gray-100 hover:bg-gray-50 transition {% if cs and cs.status.value == 'blocked' %}bg-red-50 hover:bg-red-100{% endif %}">
+      {% if o.priority.value == 'hot_walk_in' %}
+      <tr class="border-t-2 border-orange-400 bg-orange-50 hover:bg-orange-100 transition">
+      {% elif cs and cs.status.value == 'blocked' %}
+      <tr class="border-t border-gray-100 bg-red-50 hover:bg-red-100 transition">
+      {% else %}
+      <tr class="border-t border-gray-100 hover:bg-gray-50 transition">
+      {% endif %}
 
         <!-- Expand toggle -->
         <td class="pl-4 py-3">
@@ -119,7 +125,9 @@
 
         <!-- Priority -->
         <td class="px-4 py-3">
-          {% if o.priority.value == 'urgent' %}<span class="font-bold text-red-600">&#x26A1; Urgent</span>
+          {% if o.priority.value == 'hot_walk_in' %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500 text-white text-xs font-bold uppercase tracking-wide animate-pulse">&#x1F525; HOT Walk-In</span>
+          {% elif o.priority.value == 'urgent' %}<span class="font-bold text-red-600">&#x26A1; Urgent</span>
           {% elif o.priority.value == 'priority' %}<span class="font-medium text-yellow-600">&#x2191; Priority</span>
           {% else %}<span class="text-gray-400 text-xs">Standard</span>{% endif %}
         </td>

@@ -84,9 +84,11 @@
         </div>
         <div class="text-xs text-gray-500 mb-4">
           Stage: <span class="font-medium text-steel-mid">{{ stage_labels.get(s.stage.stage_type.value, s.stage.stage_type.value) }}</span>
+          {% if user.role.value in ['owner','ops_manager','shop_foreman'] %}
           · Billing: <span class="font-medium">{{ s.billing_dept.replace('_',' ').title() }}</span>
           · Rate: <span class="font-medium">${{ s.billing_rate | int }}/hr</span>
           {% if s.is_overtime %}<span class="ml-2 text-orange-500 font-semibold">OT</span>{% endif %}
+          {% endif %}
         </div>
 
         <!-- Timer Controls -->
@@ -691,8 +693,10 @@
               <tr class="text-gray-400">
                 <th class="text-left pb-1 font-medium">Description</th>
                 <th class="text-right pb-1 font-medium pr-3">Qty</th>
+                {% if user.role.value in ['owner','ops_manager','shop_foreman'] %}
                 <th class="text-right pb-1 font-medium pr-3">Unit Price</th>
                 <th class="text-right pb-1 font-medium pr-3">Materials</th>
+                {% endif %}
                 <th class="text-left pb-1 font-medium">Paint</th>
               </tr>
             </thead>
@@ -706,8 +710,10 @@
                   {% if li.inventory_item %}<span class="ml-1 font-mono text-blue-600 text-xs">{{ li.inventory_item.sku }}</span>{% endif %}
                 </td>
                 <td class="py-1 text-right pr-3 text-gray-600">{{ li.quantity }}{% if li.unit %} {{ li.unit }}{% endif %}</td>
+                {% if user.role.value in ['owner','ops_manager','shop_foreman'] %}
                 <td class="py-1 text-right pr-3 text-gray-500">{% if li.unit_price %}${{ '%.2f'|format(li.unit_price) }}{% else %}—{% endif %}</td>
                 <td class="py-1 text-right pr-3 font-medium text-gray-700">{% if mat_total %}${{ '%.2f'|format(mat_total) }}{% else %}—{% endif %}</td>
+                {% endif %}
                 <td class="py-1 text-gray-500">{{ li.paint_override or o.paint_spec or '—' }}</td>
               </tr>
               {% if li.internal_notes %}
@@ -792,14 +798,15 @@
                   <p class="text-xs font-semibold text-gray-600 mb-1">{{ stage_labels.get(stage.stage_type.value, '') }}</p>
                   {% if stage.stage_type.value == 'delivery' %}
                   <input type="hidden" name="billing_dept" value="general_labor">
-                  <p class="text-xs text-gray-400 italic">Time tracked for internal use — no labor charge added.</p>
-                  {% else %}
+                  {% elif user.role.value in ['owner','ops_manager','shop_foreman'] %}
                   <label class="block text-xs text-gray-500">Billing Department</label>
                   <select name="billing_dept" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-steel-mid">
                     {% for dept, label in billing_options %}
                     <option value="{{ dept.value }}" {% if default_billing and dept == default_billing %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                   </select>
+                  {% else %}
+                  <input type="hidden" name="billing_dept" value="{{ default_billing.value if default_billing else 'general_labor' }}">
                   {% endif %}
                   <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-medium py-1.5 rounded-md transition">
                     Start Timer

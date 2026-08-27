@@ -17,9 +17,10 @@ from app.models.work_session import WorkSession, SessionStatus, PauseReason, PAU
 from app.models.labor import LaborEntry, BillingDept, BILLING_RATES
 
 _PRIORITY_RANK = {
-    Priority.urgent:   0,
-    Priority.priority: 1,
-    Priority.standard: 2,
+    Priority.hot_walk_in: -1,
+    Priority.urgent:       0,
+    Priority.priority:     1,
+    Priority.standard:     2,
 }
 
 router = APIRouter(prefix="/production", tags=["production"])
