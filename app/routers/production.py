@@ -98,8 +98,7 @@ def auto_close_stale_sessions(db: Session):
     else:
         cutoff = shift_end
 
-    # Strip tzinfo for DB comparison — SQLite stores naive UTC datetimes
-    cutoff_utc = cutoff.astimezone(timezone.utc).replace(tzinfo=None)
+    cutoff_utc = cutoff.astimezone(timezone.utc)
     now_utc    = datetime.now(timezone.utc)
 
     stale = db.query(WorkSession).filter(
