@@ -100,7 +100,7 @@ def auto_close_stale_sessions(db: Session):
 
     # Strip tzinfo for DB comparison — SQLite stores naive UTC datetimes
     cutoff_utc = cutoff.astimezone(timezone.utc).replace(tzinfo=None)
-    now_utc    = datetime.utcnow()
+    now_utc    = datetime.now(timezone.utc)
 
     stale = db.query(WorkSession).filter(
         WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
@@ -263,7 +263,7 @@ async def production_board(
         "can_see_financials": financials_visible(user),
         "today":        _date.today(),
         "active_session_by_stage": active_session_by_stage,
-        "now_utc":      datetime.utcnow(),
+        "now_utc":      datetime.now(timezone.utc),
     })
 
 
@@ -309,7 +309,7 @@ async def update_stage_status(
         if StageStatus(status) not in (StageStatus.complete, StageStatus.blocked, StageStatus.in_progress):
             raise HTTPException(403, "Not authorized to update stage status")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     new_status = StageStatus(status)
 
     # Gate: require at least one completed work session before marking any stage done
@@ -436,14 +436,14 @@ async def clock_in(
     ).first()
     if existing:
         # Auto-pause the existing session before starting new one
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if existing.status == SessionStatus.active:
             existing.paused_at    = now
             existing.pause_reason = PauseReason.priority_shift
             existing.status       = SessionStatus.paused
         db.flush()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     dept = BillingDept(billing_dept)
     # Delivery time is tracked for internal purposes only — no billable charge
     rate = 0.0 if stage.stage_type == StageType.delivery else BILLING_RATES[dept]
@@ -489,7 +489,7 @@ async def pause_session(
     if session.status != SessionStatus.active:
         raise HTTPException(400, "Session is not active")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     session.paused_at    = now
     session.pause_reason = PauseReason(pause_reason)
     session.status       = SessionStatus.paused
@@ -513,7 +513,7 @@ async def resume_session(
     if session.status != SessionStatus.paused:
         raise HTTPException(400, "Session is not paused")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     # Accumulate paused time
     if session.paused_at:
         paused_minutes = (now - session.paused_at).total_seconds() / 60.0
@@ -544,7 +544,7 @@ async def stop_session(
     if session.status == SessionStatus.completed:
         raise HTTPException(400, "Session already completed")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # If currently paused, accumulate the final paused block
     if session.status == SessionStatus.paused and session.paused_at:
@@ -658,7 +658,7 @@ async def qa_complete(
     if stage.assigned_to_id != user.id and user.role not in MANAGEMENT_ROLES:
         raise HTTPException(403, "Not authorized")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Stop the active work session for this stage
     active_session = db.query(WorkSession).filter(
@@ -860,7 +860,7 @@ async def delivery_complete(
     if stage.assigned_to_id != user.id and user.role not in MANAGEMENT_ROLES:
         raise HTTPException(403, "Not authorized")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Do NOT stop the session here — the timer keeps running until delivery is confirmed.
     # That way we track total time from packing start to confirmed delivery.
@@ -1040,7 +1040,7 @@ async def employee_queue(
                 "stage_count": emp_stage_count,
             })
 
-    now_utc = datetime.utcnow()
+    now_utc = datetime.now(timezone.utc)
 
     # ── My Stats ─────────────────────────────────────────────────────────
     stat_period = stat_period if stat_period in ("day", "week", "month") else "day"

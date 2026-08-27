@@ -76,7 +76,7 @@ async def confirm_packing_check(
     if pl.checker_id != user.id:
         raise HTTPException(403, "Only the designated checker can confirm this packing list")
     pl.check_confirmed    = True
-    pl.check_confirmed_at = datetime.utcnow()
+    pl.check_confirmed_at = datetime.now(timezone.utc)
     db.commit()
     return RedirectResponse("/production/queue", status_code=302)
 
@@ -112,7 +112,7 @@ async def confirm_delivery(
             status_code=302,
         )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if order.status == OrderStatus.ready:
         order.status = OrderStatus.delivered
 

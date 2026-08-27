@@ -54,7 +54,7 @@ async def upload_drawings(
                 detail=f"File type '{ext}' is not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
             )
 
-        timestamp = int(datetime.utcnow().timestamp())
+        timestamp = int(datetime.now(timezone.utc).timestamp())
         unique_filename = f"{timestamp}_{upload.filename}"
         dest_path = os.path.join(dest_dir, unique_filename)
 

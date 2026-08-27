@@ -251,7 +251,7 @@ async def create_order(
             ext = os.path.splitext(upload.filename)[1].lower()
             if ext not in allowed_ext:
                 continue
-            timestamp = int(datetime.utcnow().timestamp())
+            timestamp = int(datetime.now(timezone.utc).timestamp())
             unique_filename = f"{timestamp}_{upload.filename}"
             content = await upload.read()
             with open(os.path.join(dest_dir, unique_filename), "wb") as fh:
@@ -333,7 +333,7 @@ async def order_detail(request: Request, order_id: int, user: User = Depends(req
         "qa_results": QAResult, "stage_types": StageType, "today": date.today().isoformat(),
         "can_see_financials": financials_visible(user),
         "active_session_by_stage": active_session_by_stage,
-        "now_utc": datetime.utcnow(),
+        "now_utc": datetime.now(timezone.utc),
         "inv_block": inv_block,
         "inv_shortages": inv_shortages,
         "status_error": request.query_params.get("status_error", ""),
