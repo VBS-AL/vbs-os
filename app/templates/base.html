@@ -41,9 +41,7 @@
       {{ nav_link('/quotes',     'Quotes') }}
       {{ nav_link('/orders',     'Orders') }}
       {{ nav_link('/production', 'Production') }}
-      {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
       {{ nav_link('/fulfillment', 'Fulfillment') }}
-      {% endif %}
       {% if can_see_financials %}{{ nav_link('/invoices', 'Invoices') }}{% endif %}
       {{ nav_link('/inventory',  'Inventory') }}
       {% if user.role.value in ["owner","ops_manager","shop_foreman","estimator","counter_staff"] %}
@@ -95,9 +93,7 @@
       {{ mobile_link('/quotes',     'Quotes') }}
       {{ mobile_link('/orders',     'Orders') }}
       {{ mobile_link('/production', 'Production') }}
-      {% if user.role.value in ["owner","ops_manager","shop_foreman"] %}
       {{ mobile_link('/fulfillment', 'Fulfillment') }}
-      {% endif %}
       {% if can_see_financials %}
       {{ mobile_link('/invoices', 'Invoices') }}
       {% endif %}
