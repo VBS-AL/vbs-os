@@ -383,6 +383,90 @@ async def add_third_party_line(
     return RedirectResponse(f"/orders/{order_id}", status_code=302)
 
 
+@router.post("/{order_id}/line-items")
+async def add_line_item(
+    order_id: int,
+    description: str  = Form(...),
+    quantity: float   = Form(1),
+    unit_price: str   = Form(""),
+    est_labor_hours: str = Form(""),
+    est_labor_dept: str  = Form(""),
+    internal_notes: str  = Form(""),
+    user: User = Depends(require_foreman_up),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.invoice:
+        raise HTTPException(400, "Cannot modify a invoiced order")
+    max_line = max((li.line_number for li in order.line_items), default=0)
+    li = OrderLineItem(
+        order_id=order_id,
+        line_number=max_line + 1,
+        description=description.strip(),
+        quantity=quantity,
+        unit_price=float(unit_price) if unit_price.strip() else None,
+        estimated_labor_hours=float(est_labor_hours) if est_labor_hours.strip() else None,
+        estimated_labor_dept=est_labor_dept.strip() or None,
+        internal_notes=internal_notes.strip() or None,
+    )
+    db.add(li)
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}#line-items", status_code=302)
+
+
+@router.post("/{order_id}/line-items/{li_id}/edit")
+async def edit_line_item(
+    order_id: int,
+    li_id: int,
+    description: str  = Form(...),
+    quantity: float   = Form(1),
+    unit_price: str   = Form(""),
+    est_labor_hours: str = Form(""),
+    est_labor_dept: str  = Form(""),
+    internal_notes: str  = Form(""),
+    user: User = Depends(require_foreman_up),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.invoice:
+        raise HTTPException(400, "Cannot modify an invoiced order")
+    li = db.get(OrderLineItem, li_id)
+    if not li or li.order_id != order_id:
+        raise HTTPException(404, "Line item not found")
+    li.description          = description.strip()
+    li.quantity             = quantity
+    li.unit_price           = float(unit_price) if unit_price.strip() else None
+    li.estimated_labor_hours = float(est_labor_hours) if est_labor_hours.strip() else None
+    li.estimated_labor_dept  = est_labor_dept.strip() or None
+    li.internal_notes        = internal_notes.strip() or None
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}#line-items", status_code=302)
+
+
+@router.post("/{order_id}/line-items/{li_id}/delete")
+async def delete_line_item(
+    order_id: int,
+    li_id: int,
+    user: User = Depends(require_foreman_up),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.invoice:
+        raise HTTPException(400, "Cannot modify an invoiced order")
+    li = db.get(OrderLineItem, li_id)
+    if not li or li.order_id != order_id or li.is_delivery_surcharge:
+        raise HTTPException(404, "Line item not found or cannot be deleted")
+    db.delete(li)
+    db.commit()
+    return RedirectResponse(f"/orders/{order_id}#line-items", status_code=302)
+
+
 @router.post("/{order_id}/staging")
 async def update_staging(
     order_id: int,

@@ -249,8 +249,18 @@
       </div>
 
       <!-- Line Items -->
-      <div class="bg-white rounded-xl shadow p-5">
-        <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Line Items</h2>
+      <div class="bg-white rounded-xl shadow p-5" id="line-items">
+        {% set invoiced = order.invoice is not none %}
+        {% set can_edit_lines = user.role.value in ['owner','ops_manager','shop_foreman'] and not invoiced %}
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Line Items</h2>
+          {% if can_edit_lines %}
+          <button type="button" onclick="document.getElementById('add-li-modal').classList.remove('hidden')"
+                  class="text-xs px-2 py-1 rounded bg-steel-dark text-white hover:bg-steel-mid transition">+ Add Item</button>
+          {% elif invoiced %}
+          <span class="text-xs text-gray-400 italic">Locked — invoice issued</span>
+          {% endif %}
+        </div>
         {% if order.line_items %}
         {% set labor_rates = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120} %}
         <table class="w-full text-sm">
@@ -262,6 +272,7 @@
               {% if can_see_financials %}<th class="text-right pb-2 pr-2">Materials</th>{% endif %}
               {% if can_see_financials %}<th class="text-left pb-2 pl-2">Est. Labor</th>{% endif %}
               {% if can_see_financials %}<th class="text-right pb-2">Est. Labor $</th>{% endif %}
+              {% if can_edit_lines %}<th class="pb-2"></th>{% endif %}
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
@@ -315,10 +326,23 @@
                 {% if labor_line > 0 %}${{ '%.2f'|format(labor_line) }}{% else %}&mdash;{% endif %}
               </td>
               {% endif %}
+              {% if can_edit_lines %}
+              <td class="text-right py-2 pl-2 whitespace-nowrap">
+                {% if not li.third_party_cost %}
+                <button type="button"
+                        onclick="openEditLI({{ li.id }}, {{ li.description|tojson }}, {{ li.quantity }}, '{{ '%.2f'|format(li.unit_price or 0) }}', '{{ li.estimated_labor_hours or '' }}', '{{ li.estimated_labor_dept or '' }}', {{ li.internal_notes|tojson if li.internal_notes else 'null' }})"
+                        class="text-xs text-blue-600 hover:underline mr-2">Edit</button>
+                {% endif %}
+                <form method="post" action="/orders/{{ order.id }}/line-items/{{ li.id }}/delete" class="inline"
+                      onsubmit="return confirm('Remove this line item?')">
+                  <button type="submit" class="text-xs text-red-500 hover:underline">Remove</button>
+                </form>
+              </td>
+              {% endif %}
             </tr>
             {% if li.internal_notes %}
             <tr>
-              <td colspan="7" class="pb-2 pt-0">
+              <td colspan="8" class="pb-2 pt-0">
                 <div class="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-800">
                   <span class="mt-0.5">&#x1F512;</span>
                   <span>{{ li.internal_notes }}</span>
@@ -336,16 +360,19 @@
               <td class="text-right pt-2 font-medium pr-2">${{ '%.2f'|format(ns.mat_total) }}</td>
               <td class="text-right pt-2 text-gray-500">Est. Labor Subtotal</td>
               <td class="text-right pt-2 font-medium text-indigo-600">${{ '%.2f'|format(ns.labor_total) }}</td>
+              {% if can_edit_lines %}<td></td>{% endif %}
             </tr>
             {% if ns.surcharge > 0 %}
             <tr>
               <td colspan="5" class="text-right pt-1 text-gray-500">Delivery</td>
               <td class="text-right pt-1 font-medium text-gray-700">${{ '%.2f'|format(ns.surcharge) }}</td>
+              {% if can_edit_lines %}<td></td>{% endif %}
             </tr>
             {% endif %}
             <tr>
               <td colspan="5" class="text-right pt-1 pb-1 text-gray-700 font-semibold">Est. Total</td>
               <td class="text-right pt-1 pb-1 font-bold text-steel-dark">${{ '%.2f'|format(ns.mat_total + ns.labor_total + ns.surcharge) }}</td>
+              {% if can_edit_lines %}<td></td>{% endif %}
             </tr>
           </tfoot>
           {% endif %}
@@ -354,6 +381,118 @@
         <p class="text-sm text-gray-400">No line items.</p>
         {% endif %}
       </div>
+
+      <!-- Add Line Item Modal -->
+      {% if can_edit_lines %}
+      <div id="add-li-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <h3 class="text-sm font-semibold text-steel-dark mb-4">Add Line Item</h3>
+          <form method="post" action="/orders/{{ order.id }}/line-items" class="space-y-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Description <span class="text-red-500">*</span></label>
+              <input name="description" required class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Qty</label>
+                <input name="quantity" type="number" step="0.01" value="1" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Unit Price ($)</label>
+                <input name="unit_price" type="number" step="0.01" placeholder="0.00" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Est. Labor Hours</label>
+                <input name="est_labor_hours" type="number" step="0.25" placeholder="0" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Labor Dept</label>
+                <select name="est_labor_dept" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+                  <option value="">— none —</option>
+                  <option value="general_labor">Gen Labor</option>
+                  <option value="steel_fabrication">Steel Fab</option>
+                  <option value="aluminum_structural">Aluminum</option>
+                  <option value="hot_walk_in">HOT Walk-In</option>
+                  <option value="welding_truck">Welding Truck</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Shop Notes (internal only)</label>
+              <input name="internal_notes" placeholder="Optional" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button type="submit" class="flex-1 bg-steel-dark text-white rounded py-2 text-sm font-medium hover:bg-steel-mid transition">Add Item</button>
+              <button type="button" onclick="document.getElementById('add-li-modal').classList.add('hidden')"
+                      class="flex-1 border border-gray-200 rounded py-2 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Edit Line Item Modal -->
+      <div id="edit-li-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <h3 class="text-sm font-semibold text-steel-dark mb-4">Edit Line Item</h3>
+          <form id="edit-li-form" method="post" action="" class="space-y-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Description <span class="text-red-500">*</span></label>
+              <input id="edit-li-desc" name="description" required class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Qty</label>
+                <input id="edit-li-qty" name="quantity" type="number" step="0.01" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Unit Price ($)</label>
+                <input id="edit-li-price" name="unit_price" type="number" step="0.01" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Est. Labor Hours</label>
+                <input id="edit-li-hours" name="est_labor_hours" type="number" step="0.25" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Labor Dept</label>
+                <select id="edit-li-dept" name="est_labor_dept" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+                  <option value="">— none —</option>
+                  <option value="general_labor">Gen Labor</option>
+                  <option value="steel_fabrication">Steel Fab</option>
+                  <option value="aluminum_structural">Aluminum</option>
+                  <option value="hot_walk_in">HOT Walk-In</option>
+                  <option value="welding_truck">Welding Truck</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Shop Notes (internal only)</label>
+              <input id="edit-li-notes" name="internal_notes" placeholder="Optional" class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button type="submit" class="flex-1 bg-steel-dark text-white rounded py-2 text-sm font-medium hover:bg-steel-mid transition">Save Changes</button>
+              <button type="button" onclick="document.getElementById('edit-li-modal').classList.add('hidden')"
+                      class="flex-1 border border-gray-200 rounded py-2 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <script>
+      function openEditLI(id, desc, qty, price, hours, dept, notes) {
+        document.getElementById('edit-li-form').action = '/orders/{{ order.id }}/line-items/' + id + '/edit';
+        document.getElementById('edit-li-desc').value  = desc;
+        document.getElementById('edit-li-qty').value   = qty;
+        document.getElementById('edit-li-price').value = price;
+        document.getElementById('edit-li-hours').value = hours;
+        document.getElementById('edit-li-dept').value  = dept;
+        document.getElementById('edit-li-notes').value = notes || '';
+        document.getElementById('edit-li-modal').classList.remove('hidden');
+      }
+      </script>
+      {% endif %}
 
       <!-- 3rd Party Services -->
       {% if user.role.value in ['owner','ops_manager'] and order.status.value not in ['paid','cancelled'] %}
