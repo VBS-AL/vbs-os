@@ -452,6 +452,13 @@
         <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
           <h3 class="text-sm font-semibold text-steel-dark mb-4">Edit Line Item</h3>
           <form id="edit-li-form" method="post" action="" class="space-y-3">
+            <!-- Inventory search -->
+            <div class="relative">
+              <label class="block text-xs text-gray-500 mb-1">Search Inventory <span class="text-gray-400">(optional — replaces item)</span></label>
+              <input id="edit-li-inv-search" type="text" placeholder="Type SKU or name…" autocomplete="off"
+                     class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
+              <div id="edit-li-inv-results" class="hidden absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 divide-y divide-gray-100 max-h-52 overflow-y-auto"></div>
+            </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">Description <span class="text-red-500">*</span></label>
               <input id="edit-li-desc" name="description" required class="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-steel-mid">
@@ -489,14 +496,17 @@
             </div>
             <div class="flex gap-2 pt-1">
               <button type="submit" class="flex-1 bg-steel-dark text-white rounded py-2 text-sm font-medium hover:bg-steel-mid transition">Save Changes</button>
-              <button type="button" onclick="document.getElementById('edit-li-modal').classList.add('hidden')"
+              <button type="button" onclick="closeEditModal()"
                       class="flex-1 border border-gray-200 rounded py-2 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
             </div>
           </form>
         </div>
       </div>
       <script>
+      let editLiUnitPrice = null;
+
       function openEditLI(btn) {
+        editLiUnitPrice = null;
         document.getElementById('edit-li-form').action = '/orders/{{ order.id }}/line-items/' + btn.dataset.liId + '/edit';
         document.getElementById('edit-li-desc').value  = btn.dataset.liDesc;
         document.getElementById('edit-li-qty').value   = btn.dataset.liQty;
@@ -504,8 +514,48 @@
         document.getElementById('edit-li-hours').value = btn.dataset.liHours;
         document.getElementById('edit-li-dept').value  = btn.dataset.liDept;
         document.getElementById('edit-li-notes').value = btn.dataset.liNotes || '';
+        document.getElementById('edit-li-inv-search').value = '';
+        document.getElementById('edit-li-inv-results').classList.add('hidden');
         document.getElementById('edit-li-modal').classList.remove('hidden');
       }
+
+      function closeEditModal() {
+        document.getElementById('edit-li-modal').classList.add('hidden');
+        editLiUnitPrice = null;
+      }
+
+      document.getElementById('edit-li-inv-search').addEventListener('input', function() {
+        const q = this.value.trim();
+        const resultsEl = document.getElementById('edit-li-inv-results');
+        if (q.length < 1) { resultsEl.classList.add('hidden'); resultsEl.innerHTML = ''; return; }
+        fetch('/inventory/search?q=' + encodeURIComponent(q), { headers: { 'HX-Request': 'true' } })
+          .then(r => r.text())
+          .then(html => {
+            resultsEl.innerHTML = html;
+            resultsEl.classList.toggle('hidden', !html.trim() || html.includes('No items found'));
+          });
+      });
+
+      document.getElementById('edit-li-inv-results').addEventListener('click', function(e) {
+        const item = e.target.closest('[data-inv-id]');
+        if (!item) return;
+        document.getElementById('edit-li-desc').value = item.dataset.invName;
+        document.getElementById('edit-li-inv-search').value = item.dataset.invSku
+          ? item.dataset.invSku + ' · ' + item.dataset.invName
+          : item.dataset.invName;
+        if (item.dataset.invPrice) {
+          editLiUnitPrice = parseFloat(item.dataset.invPrice);
+          const qty = parseFloat(document.getElementById('edit-li-qty').value) || 1;
+          document.getElementById('edit-li-price').value = (editLiUnitPrice * qty).toFixed(2);
+        }
+        this.classList.add('hidden');
+      });
+
+      document.getElementById('edit-li-qty').addEventListener('input', function() {
+        if (editLiUnitPrice !== null) {
+          document.getElementById('edit-li-price').value = (editLiUnitPrice * (parseFloat(this.value) || 1)).toFixed(2);
+        }
+      });
 
       // ── Add modal inventory search ─────────────────────────────────────────
       let addLiUnitPrice = null;
