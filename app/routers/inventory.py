@@ -129,7 +129,7 @@ async def search_inventory(
     items = db.query(InventoryItem).filter(
         InventoryItem.is_active == True,
         (InventoryItem.name.ilike(f"%{q}%") | InventoryItem.sku.ilike(f"%{q}%")),
-    ).order_by(InventoryItem.name).limit(10).all()
+    ).order_by(InventoryItem.name).limit(40).all()
 
     if not items:
         return HTMLResponse('<div class="px-3 py-2 text-sm text-gray-400">No items found</div>')

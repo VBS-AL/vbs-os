@@ -140,6 +140,16 @@
         <p id="no-columns" class="text-sm text-gray-400 text-center py-3">No columns added.</p>
       </div>
 
+      <!-- HARDWARE -->
+      <div class="bg-white rounded-xl shadow p-6 mb-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-steel-dark uppercase tracking-wide">Hardware</h2>
+          <button type="button" onclick="addHardwareRow()" class="text-sm text-steel-mid hover:text-steel-dark font-medium">+ Add Hardware</button>
+        </div>
+        <div id="hardware-rows" class="space-y-3"></div>
+        <p id="no-hardware" class="text-sm text-gray-400 text-center py-3">No hardware added.</p>
+      </div>
+
     </div>
     <!-- ══ END BEAM SECTIONS ════════════════════════════════════════════════ -->
 
@@ -364,6 +374,73 @@ function syncColNoMsg() {
     document.querySelectorAll('.col-row').length ? 'none' : 'block';
 }
 
+// ── Hardware rows ─────────────────────────────────────────────────────────────
+let hwCount = 0;
+function addHardwareRow() {
+  const hidx = 'h' + hwCount++;
+  const row = document.createElement('div');
+  row.className = 'hw-row bg-gray-50 rounded-lg p-3 space-y-2';
+  row.innerHTML = `
+    <div class="relative">
+      <label class="block text-xs text-gray-500 mb-1">Search Inventory <span class="text-gray-400">(SKU or name)</span></label>
+      <input type="text" id="inv-search-${hidx}" name="q" placeholder="Type to search hardware…" autocomplete="off"
+        hx-get="/inventory/search" hx-trigger="keyup changed delay:250ms" hx-target="#inv-results-${hidx}"
+        hx-include="this"
+        class="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-steel-mid focus:outline-none"/>
+      <input type="hidden" class="hw-inv-id" id="li-inv-id-${hidx}"/>
+      <div id="inv-results-${hidx}" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 divide-y divide-gray-100 hidden max-h-48 overflow-y-auto"></div>
+      <span id="inv-badge-${hidx}" class="hidden mt-1 inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5">
+        <span id="inv-badge-text-${hidx}"></span>
+        <button type="button" onclick="clearHwInv('${hidx}')" class="text-blue-400 hover:text-blue-600 ml-1">x</button>
+      </span>
+    </div>
+    <div class="grid gap-2 items-center" style="grid-template-columns: 48px 1fr 110px 32px;">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Qty</label>
+        <input type="number" class="hw-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1"
+          oninput="updateHwPrice(this)"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Description</label>
+        <input type="text" class="hw-desc w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="e.g. 3/4&quot; anchor bolt"/>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
+        <input type="number" class="hw-price w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" min="0" step="0.01" placeholder="0.00"/>
+      </div>
+      <div class="flex justify-end pt-4">
+        <button type="button" onclick="this.closest('.hw-row').remove(); syncHwNoMsg()"
+          class="text-red-400 hover:text-red-600 text-lg leading-none">x</button>
+      </div>
+    </div>
+    <div class="mt-1">
+      <label class="block text-xs text-amber-700 font-medium mb-1">Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
+      <textarea class="hw-internal-notes w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none" rows="1" placeholder="Shop directions, production notes…"></textarea>
+    </div>`;
+  document.getElementById('hardware-rows').appendChild(row);
+  syncHwNoMsg();
+  htmx.process(row);
+  row.querySelector('.hw-desc').focus();
+}
+
+function clearHwInv(hidx) {
+  document.getElementById('li-inv-id-' + hidx).value = '';
+  document.getElementById('inv-search-' + hidx).value = '';
+  document.getElementById('inv-badge-' + hidx).classList.add('hidden');
+}
+
+function syncHwNoMsg() {
+  document.getElementById('no-hardware').style.display =
+    document.querySelectorAll('.hw-row').length ? 'none' : 'block';
+}
+
+function updateHwPrice(qtyInput) {
+  const row = qtyInput.closest('.hw-row');
+  const priceInput = row.querySelector('.hw-price');
+  if (!priceInput || !priceInput.dataset.unitPrice) return;
+  priceInput.value = (parseFloat(priceInput.dataset.unitPrice) * (parseFloat(qtyInput.value) || 1)).toFixed(2);
+}
+
 // ── Generic line items ────────────────────────────────────────────────────────
 let lineCount = 0;
 
@@ -510,7 +587,7 @@ function buildBeamLineItems() {
     const size          = row.querySelector('.br-size').value.trim();
     const ft            = row.querySelector('.br-ft').value   || '0';
     const inch          = row.querySelector('.br-in').value   || '0';
-    const price         = row.querySelector('.br-price').value;
+    const priceEl       = row.querySelector('.br-price');
     const invId         = row.querySelector('.br-inv-id')?.value;
     const internalNotes = row.querySelector('.br-internal-notes')?.value.trim() || '';
     if (!size) return;
@@ -519,10 +596,14 @@ function buildBeamLineItems() {
     if (parseInt(inch) > 0) lenParts.push(inch + '"');
     const lenStr = lenParts.length ? ' x ' + lenParts.join('-') : '';
     const desc = 'WF ' + size + '#' + lenStr;
+    // Convert total price → unit price
+    const unitPrice = priceEl?.dataset.unitPrice
+      ? priceEl.dataset.unitPrice
+      : (priceEl?.value && parseFloat(qty) > 0 ? (parseFloat(priceEl.value) / parseFloat(qty)).toFixed(4) : priceEl?.value);
     _addHidden(form, 'li_desc_' + idx,  desc);
     _addHidden(form, 'li_qty_' + idx,   qty);
     _addHidden(form, 'li_unit_' + idx,  'ea');
-    if (price)         _addHidden(form, 'li_price_' + idx, price);
+    if (unitPrice)     _addHidden(form, 'li_price_' + idx, unitPrice);
     if (invId)         _addHidden(form, 'li_inv_id_' + idx, invId);
     if (internalNotes) _addHidden(form, 'li_internal_notes_' + idx, internalNotes);
     idx++;
@@ -534,7 +615,7 @@ function buildBeamLineItems() {
     const ft            = row.querySelector('.cr-ft').value    || '0';
     const inch          = row.querySelector('.cr-in').value    || '0';
     const adj           = row.querySelector('.cr-adj').checked;
-    const price         = row.querySelector('.cr-price').value;
+    const priceEl       = row.querySelector('.cr-price');
     const invId         = row.querySelector('.cr-inv-id')?.value;
     const internalNotes = row.querySelector('.cr-internal-notes')?.value.trim() || '';
     if (!size) return;
@@ -544,10 +625,33 @@ function buildBeamLineItems() {
     const lenStr = lenParts.length ? ' x ' + lenParts.join('-') : '';
     const adjStr = adj ? ' (Adjustable)' : '';
     const desc   = 'Column ' + size + lenStr + adjStr;
+    // Convert total price → unit price
+    const unitPrice = priceEl?.dataset.unitPrice
+      ? priceEl.dataset.unitPrice
+      : (priceEl?.value && parseFloat(qty) > 0 ? (parseFloat(priceEl.value) / parseFloat(qty)).toFixed(4) : priceEl?.value);
     _addHidden(form, 'li_desc_' + idx,  desc);
     _addHidden(form, 'li_qty_' + idx,   qty);
     _addHidden(form, 'li_unit_' + idx,  'ea');
-    if (price)         _addHidden(form, 'li_price_' + idx, price);
+    if (unitPrice)     _addHidden(form, 'li_price_' + idx, unitPrice);
+    if (invId)         _addHidden(form, 'li_inv_id_' + idx, invId);
+    if (internalNotes) _addHidden(form, 'li_internal_notes_' + idx, internalNotes);
+    idx++;
+  });
+
+  document.querySelectorAll('.hw-row').forEach(row => {
+    const qty           = row.querySelector('.hw-qty').value  || '1';
+    const desc          = row.querySelector('.hw-desc').value.trim();
+    const priceEl       = row.querySelector('.hw-price');
+    const invId         = row.querySelector('.hw-inv-id')?.value;
+    const internalNotes = row.querySelector('.hw-internal-notes')?.value.trim() || '';
+    if (!desc) return;
+    const unitPrice = priceEl?.dataset.unitPrice
+      ? priceEl.dataset.unitPrice
+      : (priceEl?.value && parseFloat(qty) > 0 ? (parseFloat(priceEl.value) / parseFloat(qty)).toFixed(4) : priceEl?.value);
+    _addHidden(form, 'li_desc_' + idx,  desc);
+    _addHidden(form, 'li_qty_' + idx,   qty);
+    _addHidden(form, 'li_unit_' + idx,  'ea');
+    if (unitPrice)     _addHidden(form, 'li_price_' + idx, unitPrice);
     if (invId)         _addHidden(form, 'li_inv_id_' + idx, invId);
     if (internalNotes) _addHidden(form, 'li_internal_notes_' + idx, internalNotes);
     idx++;
@@ -588,14 +692,45 @@ document.addEventListener('click', function(e) {
     if (beamRow) {
       beamRow.querySelector('.br-inv-id').value = item.dataset.invId;
       beamRow.querySelector('.br-size').value   = item.dataset.invName;
-      if (item.dataset.invPrice) beamRow.querySelector('.br-price').value = parseFloat(item.dataset.invPrice).toFixed(2);
+      if (item.dataset.invPrice) {
+        const unitPrice = parseFloat(item.dataset.invPrice);
+        const qty = parseFloat(beamRow.querySelector('.br-qty').value) || 1;
+        const priceEl = beamRow.querySelector('.br-price');
+        priceEl.dataset.unitPrice = unitPrice;
+        priceEl.value = (unitPrice * qty).toFixed(2);
+        beamRow.querySelector('.br-qty').oninput = function() {
+          priceEl.value = (unitPrice * (parseFloat(this.value) || 1)).toFixed(2);
+        };
+      }
     }
     // Column row fields
     const colRow = resultsDiv.closest('.col-row');
     if (colRow) {
       colRow.querySelector('.cr-inv-id').value = item.dataset.invId;
       colRow.querySelector('.cr-size').value   = item.dataset.invName;
-      if (item.dataset.invPrice) colRow.querySelector('.cr-price').value = parseFloat(item.dataset.invPrice).toFixed(2);
+      if (item.dataset.invPrice) {
+        const unitPrice = parseFloat(item.dataset.invPrice);
+        const qty = parseFloat(colRow.querySelector('.cr-qty').value) || 1;
+        const priceEl = colRow.querySelector('.cr-price');
+        priceEl.dataset.unitPrice = unitPrice;
+        priceEl.value = (unitPrice * qty).toFixed(2);
+        colRow.querySelector('.cr-qty').oninput = function() {
+          priceEl.value = (unitPrice * (parseFloat(this.value) || 1)).toFixed(2);
+        };
+      }
+    }
+    // Hardware row fields
+    const hwRow = resultsDiv.closest('.hw-row');
+    if (hwRow) {
+      hwRow.querySelector('.hw-inv-id').value = item.dataset.invId;
+      hwRow.querySelector('.hw-desc').value   = item.dataset.invName;
+      if (item.dataset.invPrice) {
+        const unitPrice = parseFloat(item.dataset.invPrice);
+        const qty = parseFloat(hwRow.querySelector('.hw-qty').value) || 1;
+        const priceEl = hwRow.querySelector('.hw-price');
+        priceEl.dataset.unitPrice = unitPrice;
+        priceEl.value = (unitPrice * qty).toFixed(2);
+      }
     }
     document.getElementById('inv-badge-text-' + idx).textContent =
       (item.dataset.invSku ? item.dataset.invSku + ' · ' : '') + item.dataset.invName;
