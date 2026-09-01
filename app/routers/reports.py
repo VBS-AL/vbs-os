@@ -991,8 +991,8 @@ async def unlinked_items_audit(
     orders_with_unlinked = []
     for order_id, items in by_order.items():
         orders_with_unlinked.append({
-            "order":  items[0].order,
-            "items":  items,
+            "order":      items[0].order,
+            "line_items": items,
         })
 
     return templates.TemplateResponse("reports/unlinked_items.html", {
