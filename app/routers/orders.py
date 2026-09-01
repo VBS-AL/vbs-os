@@ -392,6 +392,7 @@ async def add_line_item(
     est_labor_hours: str = Form(""),
     est_labor_dept: str  = Form(""),
     internal_notes: str  = Form(""),
+    inventory_item_id: str = Form(""),
     user: User = Depends(require_foreman_up),
     db: Session = Depends(get_db),
 ):
@@ -399,8 +400,9 @@ async def add_line_item(
     if not order:
         raise HTTPException(404, "Order not found")
     if order.invoice:
-        raise HTTPException(400, "Cannot modify a invoiced order")
+        raise HTTPException(400, "Cannot modify an invoiced order")
     max_line = max((li.line_number for li in order.line_items), default=0)
+    inv_id = int(inventory_item_id) if inventory_item_id.strip() else None
     li = OrderLineItem(
         order_id=order_id,
         line_number=max_line + 1,
@@ -410,6 +412,7 @@ async def add_line_item(
         estimated_labor_hours=float(est_labor_hours) if est_labor_hours.strip() else None,
         estimated_labor_dept=est_labor_dept.strip() or None,
         internal_notes=internal_notes.strip() or None,
+        inventory_item_id=inv_id,
     )
     db.add(li)
     db.commit()
