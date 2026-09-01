@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Unlinked Inventory Audit — Van Buren Steel{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <nav class="text-sm text-gray-400 mb-1">
+      <a href="/reports" class="hover:text-steel-mid">Reports</a> / Unlinked Inventory Audit
+    </nav>
+    <h1 class="text-2xl font-bold text-steel-dark">Unlinked Inventory Audit</h1>
+    <p class="text-sm text-gray-500 mt-1">Active orders with line items not linked to inventory — stock won't track for these.</p>
+  </div>
+  {% if total_count > 0 %}
+  <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 text-orange-700 text-sm font-semibold">
+    ⚠ {{ total_count }} unlinked item{{ 's' if total_count != 1 }}
+  </span>
+  {% else %}
+  <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-sm font-semibold">
+    ✓ All clear
+  </span>
+  {% endif %}
+</div>
+
+{% if orders_with_unlinked %}
+<div class="space-y-4">
+  {% for row in orders_with_unlinked %}
+  {% set o = row.order %}
+  <div class="bg-white rounded-xl shadow overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
+      <div class="flex items-center gap-3">
+        <a href="/orders/{{ o.id }}" class="font-mono text-sm font-semibold text-steel-mid hover:underline">{{ o.order_number }}</a>
+        <span class="text-sm text-gray-700">{{ o.customer.company or o.customer.name }}</span>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{{ o.status.value.replace('_',' ').title() }}</span>
+      </div>
+      <a href="/orders/{{ o.id }}#line-items" class="text-xs text-steel-mid hover:underline">Fix →</a>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
+        <tr>
+          <th class="px-5 py-2 text-left">Description</th>
+          <th class="px-5 py-2 text-right">Qty</th>
+          <th class="px-5 py-2 text-right">Unit Price</th>
+          <th class="px-5 py-2 text-left pl-5">Issue</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for li in row.items %}
+        <tr class="hover:bg-orange-50">
+          <td class="px-5 py-2.5 font-medium text-gray-800">{{ li.description }}</td>
+          <td class="px-5 py-2.5 text-right text-gray-500">{{ li.quantity }}</td>
+          <td class="px-5 py-2.5 text-right text-gray-500">${{ '%.2f'|format(li.unit_price or 0) }}</td>
+          <td class="px-5 py-2.5 pl-5">
+            <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">
+              ⚠ not linked to inventory
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="bg-white rounded-xl shadow p-12 text-center">
+  <p class="text-4xl mb-3">✅</p>
+  <p class="text-lg font-semibold text-gray-700">All clear</p>
+  <p class="text-sm text-gray-400 mt-1">Every line item on active orders is linked to inventory.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -22,6 +22,15 @@
        class="px-3 py-1.5 rounded-md text-sm font-semibold transition bg-indigo-600 hover:bg-indigo-500 text-white">
       🏭 Production Analytics →
     </a>
+    {% if user.role.value in ['owner','ops_manager'] %}
+    <a href="/reports/unlinked-items"
+       class="relative px-3 py-1.5 rounded-md text-sm font-semibold transition bg-orange-500 hover:bg-orange-400 text-white flex items-center gap-1.5">
+      ⚠ Inventory Audit →
+      {% if unlinked_items_count > 0 %}
+      <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-orange-600 text-xs font-bold leading-none">{{ unlinked_items_count }}</span>
+      {% endif %}
+    </a>
+    {% endif %}
   </div>
 </div>
 

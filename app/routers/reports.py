@@ -374,6 +374,13 @@ async def reports_index(
         "inventory_total_count":     inventory_total_count,
         "inventory_costed_count":    inventory_costed_count,
         "inventory_low_stock":       inventory_low_stock,
+        # data quality
+        "unlinked_items_count": db.query(OrderLineItem).join(Order).filter(
+            OrderLineItem.inventory_item_id == None,
+            OrderLineItem.is_delivery_surcharge == False,
+            OrderLineItem.third_party_cost == None,
+            Order.status.notin_([OrderStatus.cancelled, OrderStatus.paid]),
+        ).count() if user.role.value in ["owner", "ops_manager"] else 0,
     })
 
 
@@ -946,4 +953,52 @@ async def production_report(
         "total_prod_hours":   total_prod_hours,
         "total_billed_val":   total_billed_val,
         "dept_label_map":     DEPT_LABEL_MAP,
+    })
+
+
+@router.get("/unlinked-items", response_class=HTMLResponse)
+async def unlinked_items_audit(
+    request: Request,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user or user.role.value not in ["owner", "ops_manager"]:
+        return RedirectResponse("/reports", status_code=302)
+
+    # Active orders (not cancelled/paid) with at least one unlinked, non-system line item
+    unlinked = (
+        db.query(OrderLineItem)
+        .join(Order, OrderLineItem.order_id == Order.id)
+        .join(Customer, Order.customer_id == Customer.id)
+        .options(
+            joinedload(OrderLineItem.order).joinedload(Order.customer),
+        )
+        .filter(
+            OrderLineItem.inventory_item_id == None,
+            OrderLineItem.is_delivery_surcharge == False,
+            OrderLineItem.third_party_cost == None,
+            Order.status.notin_([OrderStatus.cancelled, OrderStatus.paid]),
+        )
+        .order_by(Order.id.desc())
+        .all()
+    )
+
+    # Group by order
+    from collections import defaultdict
+    by_order: dict = defaultdict(list)
+    for li in unlinked:
+        by_order[li.order_id].append(li)
+
+    orders_with_unlinked = []
+    for order_id, items in by_order.items():
+        orders_with_unlinked.append({
+            "order":  items[0].order,
+            "items":  items,
+        })
+
+    return templates.TemplateResponse("reports/unlinked_items.html", {
+        "request":              request,
+        "user":                 user,
+        "orders_with_unlinked": orders_with_unlinked,
+        "total_count":          len(unlinked),
     })

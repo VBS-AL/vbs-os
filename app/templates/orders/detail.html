@@ -249,6 +249,15 @@
       </div>
 
       <!-- Line Items -->
+      {% set total_est_labor = namespace(v=0) %}
+      {% for li in order.line_items %}{% if li.estimated_labor_hours %}{% set total_est_labor.v = total_est_labor.v + li.estimated_labor_hours %}{% endif %}{% endfor %}
+      {% if total_est_labor.v == 0 and order.status.value not in ['cancelled','paid'] and user.role.value in ['owner','ops_manager','shop_foreman'] %}
+      <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-3 flex items-start gap-2 text-sm text-amber-800">
+        <span class="mt-0.5">⚠</span>
+        <span><strong>No labor estimated on this order.</strong> Margin reporting will show $0 labor cost until est. labor hours are added to at least one line item.</span>
+      </div>
+      {% endif %}
+
       <div class="bg-white rounded-xl shadow p-5" id="line-items">
         {% set invoiced = order.invoice is not none %}
         {% set can_edit_lines = user.role.value in ['owner','ops_manager','shop_foreman'] and not invoiced %}
@@ -296,7 +305,7 @@
               <td class="py-2">
                 {{ li.description }}
                 {% if li.third_party_cost %}<span class="ml-1 text-xs bg-purple-50 text-purple-600 border border-purple-200 rounded px-1.5 py-0.5">3rd Party</span>{% endif %}
-                {% if li.inventory_item %}<span class="ml-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 font-mono">{{ li.inventory_item.sku }}</span>{% endif %}
+                {% if li.inventory_item %}<span class="ml-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 font-mono">{{ li.inventory_item.sku }}</span>{% elif not li.is_delivery_surcharge and not li.third_party_cost %}<span class="ml-1 text-xs bg-orange-50 text-orange-600 border border-orange-200 rounded px-1.5 py-0.5">⚠ not linked</span>{% endif %}
                 {% if li.paint_override %}<span class="text-xs text-gray-400 ml-1">(paint: {{ li.paint_override }})</span>{% endif %}
                 {% if li.third_party_cost and can_see_financials %}
                 <span class="text-xs text-gray-400 ml-1">(cost: ${{ '%.2f'|format(li.third_party_cost) }} + {{ ((li.third_party_markup or 0.30) * 100)|int }}%)</span>
@@ -337,6 +346,7 @@
                         data-li-hours="{{ li.estimated_labor_hours or '' }}"
                         data-li-dept="{{ li.estimated_labor_dept or '' }}"
                         data-li-notes="{{ li.internal_notes|e if li.internal_notes else '' }}"
+                        data-li-linked="{{ 'true' if li.inventory_item else 'false' }}"
                         onclick="openEditLI(this)"
                         class="text-xs text-blue-600 hover:underline mr-2">Edit</button>
                 {% endif %}
@@ -504,9 +514,11 @@
       </div>
       <script>
       let editLiUnitPrice = null;
+      let editLiWasLinked = false;
 
       function openEditLI(btn) {
         editLiUnitPrice = null;
+        editLiWasLinked = btn.dataset.liLinked === 'true';
         document.getElementById('edit-li-form').action = '/orders/{{ order.id }}/line-items/' + btn.dataset.liId + '/edit';
         document.getElementById('edit-li-desc').value  = btn.dataset.liDesc;
         document.getElementById('edit-li-qty').value   = btn.dataset.liQty;
@@ -603,8 +615,13 @@
         document.getElementById('add-li-inv-results').classList.add('hidden');
       }
 
-      // Convert total → unit price before submit
-      document.getElementById('add-li-form').addEventListener('submit', function() {
+      // Convert total → unit price before submit + confirm if unlinked
+      document.getElementById('add-li-form').addEventListener('submit', function(e) {
+        if (addLiUnitPrice === null && !document.getElementById('add-li-inv-id').value) {
+          if (!confirm('This item isn\'t linked to inventory — stock won\'t be tracked. Add anyway?')) {
+            e.preventDefault(); return;
+          }
+        }
         if (addLiUnitPrice !== null) {
           document.getElementById('add-li-price').value = addLiUnitPrice.toFixed(4);
         } else {
@@ -612,6 +629,16 @@
           const total = parseFloat(document.getElementById('add-li-price').value) || 0;
           if (total > 0 && qty > 1) document.getElementById('add-li-price').value = (total / qty).toFixed(4);
         }
+      });
+
+      document.getElementById('edit-li-form').addEventListener('submit', function(e) {
+        // Warn if item was not linked and they didn't pick a new inventory item
+        if (!editLiWasLinked && editLiUnitPrice === null) {
+          if (!confirm('This item isn\'t linked to inventory — stock won\'t be tracked. Save anyway?')) {
+            e.preventDefault(); return;
+          }
+        }
+        // No unit-price conversion needed for edit — price field IS unit price
       });
       </script>
       {% endif %}
