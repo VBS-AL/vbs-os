@@ -379,7 +379,7 @@ async def reports_index(
             OrderLineItem.inventory_item_id == None,
             OrderLineItem.is_delivery_surcharge == False,
             OrderLineItem.third_party_cost == None,
-            Order.status.notin_([OrderStatus.cancelled, OrderStatus.paid]),
+            Order.status.not_in([OrderStatus.cancelled, OrderStatus.paid]),
         ).count() if user.role.value in ["owner", "ops_manager"] else 0,
     })
 
@@ -969,7 +969,6 @@ async def unlinked_items_audit(
     unlinked = (
         db.query(OrderLineItem)
         .join(Order, OrderLineItem.order_id == Order.id)
-        .join(Customer, Order.customer_id == Customer.id)
         .options(
             joinedload(OrderLineItem.order).joinedload(Order.customer),
         )
@@ -977,7 +976,7 @@ async def unlinked_items_audit(
             OrderLineItem.inventory_item_id == None,
             OrderLineItem.is_delivery_surcharge == False,
             OrderLineItem.third_party_cost == None,
-            Order.status.notin_([OrderStatus.cancelled, OrderStatus.paid]),
+            Order.status.not_in([OrderStatus.cancelled, OrderStatus.paid]),
         )
         .order_by(Order.id.desc())
         .all()
