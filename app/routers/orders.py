@@ -55,7 +55,7 @@ STATUS_FLOW = {
     OrderStatus.in_production: [OrderStatus.qa_review, OrderStatus.on_hold, OrderStatus.cancelled],
     OrderStatus.on_hold:       [OrderStatus.cancelled],  # resume option added dynamically from previous_status
     OrderStatus.qa_review:     [OrderStatus.ready, OrderStatus.in_production],
-    OrderStatus.ready:         [OrderStatus.delivered],
+    OrderStatus.ready:         [OrderStatus.delivered, OrderStatus.cancelled],
     OrderStatus.delivered:     [OrderStatus.invoiced],
     OrderStatus.invoiced:      [OrderStatus.paid],
     OrderStatus.paid:          [],

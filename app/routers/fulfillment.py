@@ -9,7 +9,7 @@ from datetime import date
 from app.database import get_db
 from app.auth import require_user, financials_visible
 from app.models.user import User
-from app.models.order import Order, OrderStatus
+from app.models.order import Order, OrderStatus, JobType
 from app.models.customer import Customer
 from app.models.packing_list import PackingList, SHIPPED_VIA_LABELS
 
@@ -79,11 +79,13 @@ async def fulfillment_index(
     packing_lists = pl_query.order_by(desc(PackingList.created_at)).all()
 
     # ── Section 2: ready orders with no packing list yet ─────────────────────
+    # Retail orders bypass the packing list flow entirely — exclude them here
     awaiting_pl = (
         db.query(Order)
         .options(joinedload(Order.customer))
         .filter(
             Order.status == OrderStatus.ready,
+            Order.job_type != JobType.retail,
             ~exists().where(PackingList.order_id == Order.id),
         )
         .order_by(Order.promised_date.asc().nulls_last(), Order.created_at.asc())
