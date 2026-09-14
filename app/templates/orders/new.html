@@ -602,6 +602,8 @@ function updateBeamPrice(row) {
 
   const totalFt = ft + (inch / 12);
 
+  const billedFt = totalFt > 0 ? Math.ceil(totalFt / 5) * 5 : (stockLength || 0);
+
   if (totalFt <= 0) {
     // No footage entered → full piece billing
     warnEl.classList.add('hidden');
@@ -629,12 +631,18 @@ function updateBeamPrice(row) {
   // Valid cut — round up to nearest 5 ft
   warnEl.classList.add('hidden');
   priceEl.classList.remove('border-red-400');
-  const billedFt  = Math.ceil(totalFt / 5) * 5;
+  priceEl.dataset.billedFt = billedFt;
+  if (billedInfo) { billedInfo.textContent = `Billed: ${billedFt}'`; billedInfo.classList.remove('hidden'); }
+
+  if (!perFootRate) {
+    // Stock length unknown (item name missing footage) — show billed ft but leave price for manual entry
+    if (billedInfo) billedInfo.textContent += ' — enter price manually';
+    return;
+  }
+
   const unitPrice = perFootRate * billedFt;
   priceEl.dataset.unitPrice = unitPrice.toFixed(4);
-  priceEl.dataset.billedFt  = billedFt;
   priceEl.value = (unitPrice * qty).toFixed(2);
-  if (billedInfo) { billedInfo.textContent = `Billed: ${billedFt}'`; billedInfo.classList.remove('hidden'); }
 }
 
 function updateColPrice(row) {
@@ -650,7 +658,8 @@ function updateColPrice(row) {
 
   if (!stockPrice) return;
 
-  const totalFt = ft + (inch / 12);
+  const totalFt  = ft + (inch / 12);
+  const billedFt = totalFt > 0 ? Math.ceil(totalFt / 5) * 5 : (stockLength || 0);
 
   if (totalFt <= 0) {
     warnEl.classList.add('hidden');
@@ -676,12 +685,17 @@ function updateColPrice(row) {
 
   warnEl.classList.add('hidden');
   priceEl.classList.remove('border-red-400');
-  const billedFt  = Math.ceil(totalFt / 5) * 5;
+  priceEl.dataset.billedFt = billedFt;
+  if (billedInfo) { billedInfo.textContent = `Billed: ${billedFt}'`; billedInfo.classList.remove('hidden'); }
+
+  if (!perFootRate) {
+    if (billedInfo) billedInfo.textContent += ' — enter price manually';
+    return;
+  }
+
   const unitPrice = perFootRate * billedFt;
   priceEl.dataset.unitPrice = unitPrice.toFixed(4);
-  priceEl.dataset.billedFt  = billedFt;
   priceEl.value = (unitPrice * qty).toFixed(2);
-  if (billedInfo) { billedInfo.textContent = `Billed: ${billedFt}'`; billedInfo.classList.remove('hidden'); }
 }
 
 // ── Build beam/column hidden inputs before submit ─────────────────────────────
