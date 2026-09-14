@@ -128,6 +128,8 @@ async def edit_user_form(
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(404, "User not found")
+    if target.role == UserRole.owner and user.role != UserRole.owner:
+        raise HTTPException(403, "Owner accounts can only be edited by other owners.")
     return templates.TemplateResponse("users/edit.html", {
         "request": request, "user": user, "target": target, "roles": UserRole,
         "can_see_financials": financials_visible(user),
@@ -151,6 +153,8 @@ async def update_user(
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(404)
+    if target.role == UserRole.owner and user.role != UserRole.owner:
+        raise HTTPException(403, "Owner accounts can only be edited by other owners.")
 
     # Prevent deactivating yourself
     if user_id == user.id and not is_active:
@@ -199,6 +203,8 @@ async def archive_user(
         raise HTTPException(404, "User not found")
     if user_id == user.id:
         raise HTTPException(400, "You cannot archive your own account.")
+    if target.role == UserRole.owner and user.role != UserRole.owner:
+        raise HTTPException(403, "Owner accounts can only be archived by other owners.")
     if target.role == UserRole.owner:
         active_owners = db.query(User).filter(
             User.role == UserRole.owner, User.is_active == True, User.id != user_id
