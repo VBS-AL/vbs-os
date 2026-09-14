@@ -652,6 +652,70 @@ async def update_status(
     db.commit()
     return RedirectResponse(f"/orders/{order_id}", status_code=302)
 
+@router.post("/{order_id}/duplicate")
+async def duplicate_order(
+    order_id: int,
+    user: User = Depends(require_management),
+    db: Session = Depends(get_db),
+):
+    order = db.query(Order).options(
+        joinedload(Order.line_items),
+        joinedload(Order.production_stages),
+    ).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(404)
+
+    new_order = Order(
+        order_number        = next_order_number(db),
+        customer_id         = order.customer_id,
+        job_type            = order.job_type,
+        priority            = order.priority,
+        status              = OrderStatus.draft,
+        description         = order.description,
+        drawings_required   = order.drawings_required,
+        paint_spec          = order.paint_spec,
+        notes               = order.notes,
+        customer_po         = order.customer_po,
+        preferred_delivery_method = order.preferred_delivery_method,
+        promised_date       = None,  # let them set a new date
+        created_by_id       = user.id,
+    )
+    db.add(new_order)
+    db.flush()
+
+    # Copy line items
+    for li in order.line_items:
+        db.add(OrderLineItem(
+            order_id                = new_order.id,
+            line_number             = li.line_number,
+            description             = li.description,
+            quantity                = li.quantity,
+            unit                    = li.unit,
+            unit_price              = li.unit_price,
+            material                = li.material,
+            inventory_item_id       = li.inventory_item_id,
+            internal_notes          = li.internal_notes,
+            estimated_labor_hours   = li.estimated_labor_hours,
+            estimated_labor_dept    = li.estimated_labor_dept,
+            labor_rate_snapshot     = li.labor_rate_snapshot,
+            is_delivery_surcharge   = li.is_delivery_surcharge,
+            third_party_cost        = li.third_party_cost,
+            third_party_markup      = li.third_party_markup,
+            paint_override          = li.paint_override,
+        ))
+
+    # Copy production stages (pending, unassigned)
+    for stage in order.production_stages:
+        db.add(ProductionStage(
+            order_id   = new_order.id,
+            stage_type = stage.stage_type,
+            status     = StageStatus.pending,
+        ))
+
+    db.commit()
+    return RedirectResponse(f"/orders/{new_order.id}", status_code=302)
+
+
 @router.post("/{order_id}/labor")
 async def log_labor(
     order_id: int, billing_dept: str = Form(...), hours: float = Form(...),
