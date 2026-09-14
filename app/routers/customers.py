@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session, joinedload
 from typing import Optional
 
 from app.database import get_db
-from app.auth import require_user, financials_visible
-from app.models.customer import Customer
+from app.auth import require_user, require_management, financials_visible
+from app.models.customer import Customer, Contact
 from app.models.user import User
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -161,7 +161,12 @@ def customer_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    c = db.query(Customer).filter(Customer.id == customer_id).first()
+    c = (
+        db.query(Customer)
+        .options(joinedload(Customer.contacts))
+        .filter(Customer.id == customer_id)
+        .first()
+    )
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
     return templates.TemplateResponse(
@@ -169,6 +174,75 @@ def customer_detail(
         {"request": request, "customer": c, "user": current_user,
          "can_see_financials": financials_visible(current_user)},
     )
+
+
+@router.post("/{customer_id}/contacts")
+def add_contact(
+    customer_id: int,
+    name: str = Form(...),
+    title: str = Form(""),
+    phone: str = Form(""),
+    email: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_management),
+):
+    c = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not c:
+        raise HTTPException(status_code=404)
+    db.add(Contact(
+        customer_id=customer_id,
+        name=name.strip(),
+        title=title.strip() or None,
+        phone=phone.strip() or None,
+        email=email.strip() or None,
+        notes=notes.strip() or None,
+    ))
+    db.commit()
+    return RedirectResponse(f"/customers/{customer_id}", status_code=303)
+
+
+@router.post("/{customer_id}/contacts/{contact_id}/edit")
+def edit_contact(
+    customer_id: int,
+    contact_id: int,
+    name: str = Form(...),
+    title: str = Form(""),
+    phone: str = Form(""),
+    email: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_management),
+):
+    contact = db.query(Contact).filter(
+        Contact.id == contact_id, Contact.customer_id == customer_id
+    ).first()
+    if not contact:
+        raise HTTPException(status_code=404)
+    contact.name  = name.strip()
+    contact.title = title.strip() or None
+    contact.phone = phone.strip() or None
+    contact.email = email.strip() or None
+    contact.notes = notes.strip() or None
+    db.commit()
+    return RedirectResponse(f"/customers/{customer_id}", status_code=303)
+
+
+@router.post("/{customer_id}/contacts/{contact_id}/delete")
+def delete_contact(
+    customer_id: int,
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_management),
+):
+    contact = db.query(Contact).filter(
+        Contact.id == contact_id, Contact.customer_id == customer_id
+    ).first()
+    if not contact:
+        raise HTTPException(status_code=404)
+    db.delete(contact)
+    db.commit()
+    return RedirectResponse(f"/customers/{customer_id}", status_code=303)
 
 
 @router.get("/{customer_id}/edit", response_class=HTMLResponse)

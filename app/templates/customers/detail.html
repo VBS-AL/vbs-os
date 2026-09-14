@@ -136,8 +136,136 @@
         {% endif %}
       </div>
 
+      <!-- Contacts -->
+      <div class="bg-white rounded-xl shadow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide">Additional Contacts</h2>
+        </div>
+
+        {% if customer.contacts %}
+        <div class="space-y-3 mb-4">
+          {% for ct in customer.contacts | sort(attribute='name') %}
+          <div class="border border-gray-100 rounded-lg p-3">
+            <!-- Display row -->
+            <div id="contact-view-{{ ct.id }}" class="flex items-start justify-between gap-2">
+              <div class="text-sm space-y-0.5">
+                <div class="font-semibold text-steel-dark">{{ ct.name }}{% if ct.title %} <span class="font-normal text-gray-400">· {{ ct.title }}</span>{% endif %}</div>
+                {% if ct.phone %}<div class="text-gray-500">{{ ct.phone }}</div>{% endif %}
+                {% if ct.email %}<div class="text-gray-500">{{ ct.email }}</div>{% endif %}
+                {% if ct.notes %}<div class="text-xs text-gray-400 italic mt-0.5">{{ ct.notes }}</div>{% endif %}
+              </div>
+              {% if user.role.value in ['owner', 'ops_manager'] %}
+              <div class="flex gap-2 shrink-0">
+                <button type="button" onclick="toggleContactEdit({{ ct.id }})"
+                  class="text-xs text-steel-mid hover:underline">Edit</button>
+                <form method="POST" action="/customers/{{ customer.id }}/contacts/{{ ct.id }}/delete"
+                  onsubmit="return confirm('Remove this contact?')">
+                  <button type="submit" class="text-xs text-red-400 hover:underline">Remove</button>
+                </form>
+              </div>
+              {% endif %}
+            </div>
+            <!-- Edit form (hidden by default) -->
+            {% if user.role.value in ['owner', 'ops_manager'] %}
+            <form id="contact-edit-{{ ct.id }}" method="POST"
+              action="/customers/{{ customer.id }}/contacts/{{ ct.id }}/edit"
+              class="hidden mt-3 pt-3 border-t border-gray-100 space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Name *</label>
+                  <input type="text" name="name" value="{{ ct.name }}" required
+                    class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Title</label>
+                  <input type="text" name="title" value="{{ ct.title or '' }}"
+                    class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Phone</label>
+                  <input type="tel" name="phone" value="{{ ct.phone or '' }}"
+                    class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Email</label>
+                  <input type="email" name="email" value="{{ ct.email or '' }}"
+                    class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-1">Notes</label>
+                  <input type="text" name="notes" value="{{ ct.notes or '' }}"
+                    class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+                </div>
+              </div>
+              <div class="flex gap-2 justify-end">
+                <button type="button" onclick="toggleContactEdit({{ ct.id }})"
+                  class="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                <button type="submit"
+                  class="text-xs bg-steel-mid text-white px-3 py-1.5 rounded-md hover:bg-steel-dark transition">Save</button>
+              </div>
+            </form>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400 italic mb-4">No additional contacts yet.</p>
+        {% endif %}
+
+        {% if user.role.value in ['owner', 'ops_manager'] %}
+        <!-- Add contact form -->
+        <div class="border-t border-gray-100 pt-4">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Add Contact</p>
+          <form method="POST" action="/customers/{{ customer.id }}/contacts" class="space-y-2">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Name *</label>
+                <input type="text" name="name" required placeholder="Jane Smith"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Title</label>
+                <input type="text" name="title" placeholder="Project Manager"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Phone</label>
+                <input type="tel" name="phone"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Email</label>
+                <input type="email" name="email"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">Notes</label>
+                <input type="text" name="notes" placeholder="e.g. Best reached afternoons"
+                  class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"/>
+              </div>
+            </div>
+            <div class="flex justify-end">
+              <button type="submit"
+                class="text-xs bg-steel-mid text-white px-3 py-1.5 rounded-md hover:bg-steel-dark transition">
+                + Add Contact
+              </button>
+            </div>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+
     </div><!-- /col-span-2 -->
 
   </div><!-- /grid -->
 </div>
+
+<script>
+function toggleContactEdit(id) {
+  const view = document.getElementById('contact-view-' + id);
+  const form = document.getElementById('contact-edit-' + id);
+  view.classList.toggle('hidden');
+  form.classList.toggle('hidden');
+}
+</script>
 {% endblock %}
