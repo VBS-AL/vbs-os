@@ -640,7 +640,7 @@ async def margin_report_csv(
 
     if not user:
         return RedirectResponse("/auth/login", status_code=302)
-    if user.role != UserRole.owner:
+    if user.role not in [UserRole.owner, UserRole.ops_manager]:
         return RedirectResponse("/reports", status_code=302)
 
     start_date, end_date, period, date_from, date_to = _margin_period_dates(
