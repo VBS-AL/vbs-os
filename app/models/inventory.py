@@ -122,6 +122,20 @@ class InventoryPriceHistory(Base):
     changed_by = relationship("User", foreign_keys=[changed_by_id])
 
 
+class MarkupRateHistory(Base):
+    """Logs every change to a category markup rate in inventory settings."""
+    __tablename__ = "markup_rate_history"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    category      = Column(String, nullable=False, index=True)  # InventoryCategory value
+    old_value     = Column(Float, nullable=True)
+    new_value     = Column(Float, nullable=False)
+    changed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    changed_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    changed_by = relationship("User", foreign_keys=[changed_by_id])
+
+
 class InventoryAdjustment(Base):
     __tablename__ = "inventory_adjustments"
 

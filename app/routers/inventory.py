@@ -6,6 +6,7 @@ from typing import Optional
 from datetime import date
 import io
 import openpyxl
+from html import escape as _esc
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
@@ -13,7 +14,7 @@ from app.database import get_db
 from app.auth import get_current_user, financials_visible
 from app.models.inventory import (
     InventoryItem, InventoryAdjustment, InventoryPriceHistory,
-    InventoryCategory, AdjustmentReason,
+    MarkupRateHistory, InventoryCategory, AdjustmentReason,
 )
 from app.models.settings import AppSetting
 
@@ -149,9 +150,9 @@ async def search_inventory(
         rows += (
             f'<div class="px-3 py-2 hover:bg-steel-light cursor-pointer text-sm flex justify-between items-center"'
             f' data-inv-id="{item.id}"'
-            f' data-inv-name="{item.name}"'
-            f' data-inv-sku="{item.sku or ""}"'
-            f' data-inv-unit="{item.unit}"'
+            f' data-inv-name="{_esc(item.name)}"'
+            f' data-inv-sku="{_esc(item.sku or "")}"'
+            f' data-inv-unit="{_esc(item.unit)}"'
             f' data-inv-cost="{item.cost_per_unit or ""}"'
             f' data-inv-price="{sell_price}"'
             f' data-inv-qty="{qty}"'
@@ -317,6 +318,12 @@ async def markup_settings_page(request: Request, user=Depends(get_current_user),
     if not user:
         return RedirectResponse("/auth/login", status_code=302)
     markups = get_category_markups(db)
+    history = (
+        db.query(MarkupRateHistory)
+        .order_by(MarkupRateHistory.changed_at.desc())
+        .limit(100)
+        .all()
+    )
     return templates.TemplateResponse("inventory/settings.html", {
         "request": request, "user": user,
         "can_see_financials": financials_visible(user),
@@ -324,6 +331,7 @@ async def markup_settings_page(request: Request, user=Depends(get_current_user),
         "category_labels": CATEGORY_LABELS,
         "categories": list(InventoryCategory),
         "saved": request.query_params.get("saved") == "1",
+        "history": history,
     })
 
 
@@ -340,14 +348,24 @@ async def save_markup_settings(
         key = f"markup.{cat.value}"
         val = str(form.get(f"markup_{cat.value}", "0")).strip()
         try:
-            float(val)
+            new_val = float(val)
         except ValueError:
+            new_val = 0.0
             val = "0"
         setting = db.query(AppSetting).filter(AppSetting.key == key).first()
+        old_val = float(setting.value) if setting else None
+        # Only log if value actually changed
+        if old_val != new_val:
+            db.add(MarkupRateHistory(
+                category=cat.value,
+                old_value=old_val,
+                new_value=new_val,
+                changed_by_id=user.id if user else None,
+            ))
         if setting:
-            setting.value = val
+            setting.value = str(new_val)
         else:
-            db.add(AppSetting(key=key, value=val))
+            db.add(AppSetting(key=key, value=str(new_val)))
     db.commit()
     return RedirectResponse("/inventory/settings?saved=1", status_code=302)
 
