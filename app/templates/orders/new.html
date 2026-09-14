@@ -257,29 +257,31 @@ function addBeamRow() {
     <div class="grid gap-2 items-center" style="grid-template-columns: 48px 1fr 70px 70px 100px 32px;">
       <div>
         <label class="block text-xs text-gray-500 mb-1">Qty</label>
-        <input type="number" class="br-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1"/>
+        <input type="number" class="br-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1" oninput="updateBeamPrice(this.closest('.beam-row'))"/>
       </div>
       <div>
-        <label class="block text-xs text-gray-500 mb-1">Size (WF ___#)</label>
-        <input type="text" class="br-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="e.g. 8x31"/>
+        <label class="block text-xs text-gray-500 mb-1">Size / Description</label>
+        <input type="text" class="br-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="e.g. I BEAM 8x31 40'"/>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">Ft</label>
-        <input type="number" class="br-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0"/>
+        <input type="number" class="br-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0" oninput="updateBeamPrice(this.closest('.beam-row'))"/>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">In</label>
-        <input type="number" class="br-in w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" max="11" placeholder="0"/>
+        <input type="number" class="br-in w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" max="11" placeholder="0" oninput="updateBeamPrice(this.closest('.beam-row'))"/>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
         <input type="number" class="br-price w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" min="0" step="0.01" placeholder="0.00"/>
+        <p class="br-billed-info text-xs text-steel-mid font-medium mt-0.5 hidden"></p>
       </div>
       <div class="flex justify-end pt-4">
         <button type="button" onclick="this.closest('.beam-row').remove(); syncBeamNoMsg()"
           class="text-red-400 hover:text-red-600 text-lg leading-none">x</button>
       </div>
     </div>
+    <p class="br-footage-warn hidden text-xs text-red-600 font-medium mt-1"></p>
     <div class="mt-1">
       <label class="block text-xs text-amber-700 font-medium mb-1">Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
       <textarea class="br-internal-notes w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none" rows="1" placeholder="Shop directions, production notes…"></textarea>
@@ -324,19 +326,19 @@ function addColumnRow() {
     <div class="grid gap-2 items-center" style="grid-template-columns: 48px 1fr 70px 70px 80px 100px 32px;">
       <div>
         <label class="block text-xs text-gray-500 mb-1">Qty</label>
-        <input type="number" class="cr-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1"/>
+        <input type="number" class="cr-qty w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="1" value="1" oninput="updateColPrice(this.closest('.col-row'))"/>
       </div>
       <div>
-        <label class="block text-xs text-gray-500 mb-1">Size / Diameter</label>
-        <input type="text" class="cr-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="e.g. 4in Round"/>
+        <label class="block text-xs text-gray-500 mb-1">Size / Description</label>
+        <input type="text" class="cr-size w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="e.g. 4in Round Column 20'"/>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">Ft</label>
-        <input type="number" class="cr-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0"/>
+        <input type="number" class="cr-ft w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" placeholder="0" oninput="updateColPrice(this.closest('.col-row'))"/>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">In</label>
-        <input type="number" class="cr-in w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" max="11" placeholder="0"/>
+        <input type="number" class="cr-in w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm text-center" min="0" max="11" placeholder="0" oninput="updateColPrice(this.closest('.col-row'))"/>
       </div>
       <div class="flex items-end pb-1.5 justify-center">
         <label class="flex items-center gap-1 text-sm cursor-pointer">
@@ -347,12 +349,14 @@ function addColumnRow() {
       <div>
         <label class="block text-xs text-gray-500 mb-1">Price ($)</label>
         <input type="number" class="cr-price w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" min="0" step="0.01" placeholder="0.00"/>
+        <p class="cr-billed-info text-xs text-steel-mid font-medium mt-0.5 hidden"></p>
       </div>
       <div class="flex justify-end pt-4">
         <button type="button" onclick="this.closest('.col-row').remove(); syncColNoMsg()"
           class="text-red-400 hover:text-red-600 text-lg leading-none">x</button>
       </div>
     </div>
+    <p class="cr-footage-warn hidden text-xs text-red-600 font-medium mt-1"></p>
     <div class="mt-1">
       <label class="block text-xs text-amber-700 font-medium mb-1">Internal Notes <span class="text-amber-500 font-normal">(not shown to customer)</span></label>
       <textarea class="cr-internal-notes w-full border border-amber-200 rounded-md px-2 py-1.5 text-sm bg-amber-50 text-gray-700 placeholder-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none" rows="1" placeholder="Shop directions, production notes…"></textarea>
@@ -576,6 +580,110 @@ function clearInv(idx) {
   document.getElementById(`inv-badge-${idx}`).classList.add('hidden');
 }
 
+// ── Beam / Column pricing helpers ─────────────────────────────────────────────
+function parseStockLength(name) {
+  // Extract trailing footage from names like "I BEAM 4" X 7.7# 40'" or "W8X31 60'"
+  const m = (name || '').match(/(\d+)'\s*$/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+function updateBeamPrice(row) {
+  const priceEl     = row.querySelector('.br-price');
+  const warnEl      = row.querySelector('.br-footage-warn');
+  const billedInfo  = row.querySelector('.br-billed-info');
+  const qty         = parseFloat(row.querySelector('.br-qty').value) || 1;
+  const ft          = parseFloat(row.querySelector('.br-ft').value)  || 0;
+  const inch        = parseFloat(row.querySelector('.br-in').value)  || 0;
+  const stockPrice  = parseFloat(priceEl.dataset.stockPrice);
+  const stockLength = parseFloat(priceEl.dataset.stockLength);
+  const perFootRate = parseFloat(priceEl.dataset.perFootRate);
+
+  if (!stockPrice) return; // no inventory linked — manual entry
+
+  const totalFt = ft + (inch / 12);
+
+  if (totalFt <= 0) {
+    // No footage entered → full piece billing
+    warnEl.classList.add('hidden');
+    priceEl.classList.remove('border-red-400');
+    priceEl.dataset.unitPrice = stockPrice.toFixed(4);
+    priceEl.dataset.billedFt  = stockLength || '';
+    priceEl.value = (stockPrice * qty).toFixed(2);
+    if (billedInfo) { billedInfo.textContent = stockLength ? `Full piece: ${stockLength}' billed` : ''; billedInfo.classList.toggle('hidden', !stockLength); }
+    return;
+  }
+
+  if (stockLength > 0 && totalFt > stockLength) {
+    // Footage exceeds stock → block
+    const inStr = inch > 0 ? `${inch}"` : '';
+    warnEl.textContent = `⚠ ${ft}'${inStr} exceeds stock length of ${stockLength}'. Select a longer beam.`;
+    warnEl.classList.remove('hidden');
+    priceEl.classList.add('border-red-400');
+    priceEl.value = '';
+    priceEl.dataset.unitPrice = '';
+    priceEl.dataset.billedFt  = '';
+    if (billedInfo) billedInfo.classList.add('hidden');
+    return;
+  }
+
+  // Valid cut — round up to nearest 5 ft
+  warnEl.classList.add('hidden');
+  priceEl.classList.remove('border-red-400');
+  const billedFt  = Math.ceil(totalFt / 5) * 5;
+  const unitPrice = perFootRate * billedFt;
+  priceEl.dataset.unitPrice = unitPrice.toFixed(4);
+  priceEl.dataset.billedFt  = billedFt;
+  priceEl.value = (unitPrice * qty).toFixed(2);
+  if (billedInfo) { billedInfo.textContent = `Billed: ${billedFt}'`; billedInfo.classList.remove('hidden'); }
+}
+
+function updateColPrice(row) {
+  const priceEl     = row.querySelector('.cr-price');
+  const warnEl      = row.querySelector('.cr-footage-warn');
+  const billedInfo  = row.querySelector('.cr-billed-info');
+  const qty         = parseFloat(row.querySelector('.cr-qty').value) || 1;
+  const ft          = parseFloat(row.querySelector('.cr-ft').value)  || 0;
+  const inch        = parseFloat(row.querySelector('.cr-in').value)  || 0;
+  const stockPrice  = parseFloat(priceEl.dataset.stockPrice);
+  const stockLength = parseFloat(priceEl.dataset.stockLength);
+  const perFootRate = parseFloat(priceEl.dataset.perFootRate);
+
+  if (!stockPrice) return;
+
+  const totalFt = ft + (inch / 12);
+
+  if (totalFt <= 0) {
+    warnEl.classList.add('hidden');
+    priceEl.classList.remove('border-red-400');
+    priceEl.dataset.unitPrice = stockPrice.toFixed(4);
+    priceEl.dataset.billedFt  = stockLength || '';
+    priceEl.value = (stockPrice * qty).toFixed(2);
+    if (billedInfo) { billedInfo.textContent = stockLength ? `Full piece: ${stockLength}' billed` : ''; billedInfo.classList.toggle('hidden', !stockLength); }
+    return;
+  }
+
+  if (stockLength > 0 && totalFt > stockLength) {
+    const inStr = inch > 0 ? `${inch}"` : '';
+    warnEl.textContent = `⚠ ${ft}'${inStr} exceeds stock length of ${stockLength}'. Select a longer piece.`;
+    warnEl.classList.remove('hidden');
+    priceEl.classList.add('border-red-400');
+    priceEl.value = '';
+    priceEl.dataset.unitPrice = '';
+    priceEl.dataset.billedFt  = '';
+    if (billedInfo) billedInfo.classList.add('hidden');
+    return;
+  }
+
+  warnEl.classList.add('hidden');
+  priceEl.classList.remove('border-red-400');
+  const billedFt  = Math.ceil(totalFt / 5) * 5;
+  const unitPrice = perFootRate * billedFt;
+  priceEl.dataset.unitPrice = unitPrice.toFixed(4);
+  priceEl.dataset.billedFt  = billedFt;
+  priceEl.value = (unitPrice * qty).toFixed(2);
+  if (billedInfo) { billedInfo.textContent = `Billed: ${billedFt}'`; billedInfo.classList.remove('hidden'); }
+}
+
 // ── Build beam/column hidden inputs before submit ─────────────────────────────
 function buildBeamLineItems() {
   document.querySelectorAll('.beam-hidden-li').forEach(el => el.remove());
@@ -585,18 +693,22 @@ function buildBeamLineItems() {
   document.querySelectorAll('.beam-row').forEach(row => {
     const qty           = row.querySelector('.br-qty').value  || '1';
     const size          = row.querySelector('.br-size').value.trim();
-    const ft            = row.querySelector('.br-ft').value   || '0';
-    const inch          = row.querySelector('.br-in').value   || '0';
+    const ft            = parseInt(row.querySelector('.br-ft').value)  || 0;
+    const inch          = parseInt(row.querySelector('.br-in').value)  || 0;
     const priceEl       = row.querySelector('.br-price');
     const invId         = row.querySelector('.br-inv-id')?.value;
     const internalNotes = row.querySelector('.br-internal-notes')?.value.trim() || '';
     if (!size) return;
-    const lenParts = [];
-    if (parseInt(ft) > 0)   lenParts.push(ft + "'");
-    if (parseInt(inch) > 0) lenParts.push(inch + '"');
-    const lenStr = lenParts.length ? ' x ' + lenParts.join('-') : '';
-    const desc = 'WF ' + size + '#' + lenStr;
-    // Convert total price → unit price
+    // Build description: full name + cut/billed footage info
+    const billedFt = priceEl?.dataset.billedFt;
+    let desc;
+    if (billedFt && parseFloat(billedFt) > 0) {
+      const cutStr = ft > 0 ? `${ft}'${inch > 0 ? inch + '"' : ''}` : '';
+      desc = cutStr ? `${size} — ${billedFt}' billed (cut ${cutStr})` : `${size} — ${billedFt}' billed`;
+    } else {
+      desc = size;
+    }
+    // Unit price (already per-piece, set by updateBeamPrice or dataset.unitPrice)
     const unitPrice = priceEl?.dataset.unitPrice
       ? priceEl.dataset.unitPrice
       : (priceEl?.value && parseFloat(qty) > 0 ? (parseFloat(priceEl.value) / parseFloat(qty)).toFixed(4) : priceEl?.value);
@@ -612,20 +724,26 @@ function buildBeamLineItems() {
   document.querySelectorAll('.col-row').forEach(row => {
     const qty           = row.querySelector('.cr-qty').value   || '1';
     const size          = row.querySelector('.cr-size').value.trim();
-    const ft            = row.querySelector('.cr-ft').value    || '0';
-    const inch          = row.querySelector('.cr-in').value    || '0';
+    const ft            = parseInt(row.querySelector('.cr-ft').value)  || 0;
+    const inch          = parseInt(row.querySelector('.cr-in').value)  || 0;
     const adj           = row.querySelector('.cr-adj').checked;
     const priceEl       = row.querySelector('.cr-price');
     const invId         = row.querySelector('.cr-inv-id')?.value;
     const internalNotes = row.querySelector('.cr-internal-notes')?.value.trim() || '';
     if (!size) return;
-    const lenParts = [];
-    if (parseInt(ft) > 0)   lenParts.push(ft + "'");
-    if (parseInt(inch) > 0) lenParts.push(inch + '"');
-    const lenStr = lenParts.length ? ' x ' + lenParts.join('-') : '';
-    const adjStr = adj ? ' (Adjustable)' : '';
-    const desc   = 'Column ' + size + lenStr + adjStr;
-    // Convert total price → unit price
+    // Build description: full name + cut/billed footage + adjustable flag
+    const billedFt = priceEl?.dataset.billedFt;
+    const adjStr   = adj ? ' (Adjustable)' : '';
+    let desc;
+    if (billedFt && parseFloat(billedFt) > 0) {
+      const cutStr = ft > 0 ? `${ft}'${inch > 0 ? inch + '"' : ''}` : '';
+      desc = cutStr
+        ? `${size} — ${billedFt}' billed (cut ${cutStr})${adjStr}`
+        : `${size} — ${billedFt}' billed${adjStr}`;
+    } else {
+      desc = size + adjStr;
+    }
+    // Unit price (already per-piece, set by updateColPrice or dataset.unitPrice)
     const unitPrice = priceEl?.dataset.unitPrice
       ? priceEl.dataset.unitPrice
       : (priceEl?.value && parseFloat(qty) > 0 ? (parseFloat(priceEl.value) / parseFloat(qty)).toFixed(4) : priceEl?.value);
@@ -691,32 +809,30 @@ document.addEventListener('click', function(e) {
     const beamRow = resultsDiv.closest('.beam-row');
     if (beamRow) {
       beamRow.querySelector('.br-inv-id').value = item.dataset.invId;
-      beamRow.querySelector('.br-size').value   = item.dataset.invName;
+      beamRow.querySelector('.br-size').value   = item.dataset.invName; // full name
       if (item.dataset.invPrice) {
-        const unitPrice = parseFloat(item.dataset.invPrice);
-        const qty = parseFloat(beamRow.querySelector('.br-qty').value) || 1;
-        const priceEl = beamRow.querySelector('.br-price');
-        priceEl.dataset.unitPrice = unitPrice;
-        priceEl.value = (unitPrice * qty).toFixed(2);
-        beamRow.querySelector('.br-qty').oninput = function() {
-          priceEl.value = (unitPrice * (parseFloat(this.value) || 1)).toFixed(2);
-        };
+        const stockPrice  = parseFloat(item.dataset.invPrice);
+        const stockLength = parseStockLength(item.dataset.invName);
+        const priceEl     = beamRow.querySelector('.br-price');
+        priceEl.dataset.stockPrice  = stockPrice;
+        priceEl.dataset.stockLength = stockLength;
+        priceEl.dataset.perFootRate = stockLength > 0 ? (stockPrice / stockLength).toFixed(6) : 0;
+        updateBeamPrice(beamRow);
       }
     }
     // Column row fields
     const colRow = resultsDiv.closest('.col-row');
     if (colRow) {
       colRow.querySelector('.cr-inv-id').value = item.dataset.invId;
-      colRow.querySelector('.cr-size').value   = item.dataset.invName;
+      colRow.querySelector('.cr-size').value   = item.dataset.invName; // full name
       if (item.dataset.invPrice) {
-        const unitPrice = parseFloat(item.dataset.invPrice);
-        const qty = parseFloat(colRow.querySelector('.cr-qty').value) || 1;
-        const priceEl = colRow.querySelector('.cr-price');
-        priceEl.dataset.unitPrice = unitPrice;
-        priceEl.value = (unitPrice * qty).toFixed(2);
-        colRow.querySelector('.cr-qty').oninput = function() {
-          priceEl.value = (unitPrice * (parseFloat(this.value) || 1)).toFixed(2);
-        };
+        const stockPrice  = parseFloat(item.dataset.invPrice);
+        const stockLength = parseStockLength(item.dataset.invName);
+        const priceEl     = colRow.querySelector('.cr-price');
+        priceEl.dataset.stockPrice  = stockPrice;
+        priceEl.dataset.stockLength = stockLength;
+        priceEl.dataset.perFootRate = stockLength > 0 ? (stockPrice / stockLength).toFixed(6) : 0;
+        updateColPrice(colRow);
       }
     }
     // Hardware row fields
