@@ -100,7 +100,12 @@ async def generate_invoice(
         raise HTTPException(404, "Order not found")
 
     if order.invoice:
-        return RedirectResponse(f"/invoices/{order.invoice.id}", status_code=302)
+        # Allow regeneration only if the existing invoice is voided
+        if order.invoice.payment_status != PaymentStatus.void:
+            return RedirectResponse(f"/invoices/{order.invoice.id}", status_code=302)
+        # Delete the voided invoice so we can create a fresh one
+        db.delete(order.invoice)
+        db.flush()
 
     # Labor rates (must match invoice template)
     _LABOR_RATES = {'general_labor': 80, 'steel_fabrication': 100, 'aluminum_structural': 120, 'hot_walk_in': 150, 'welding_truck': 120}
@@ -129,6 +134,7 @@ async def generate_invoice(
         due_date=today + timedelta(days=due_days),
         payment_status=PaymentStatus.unpaid,
         subtotal=round(subtotal, 2),
+        tax_rate=tax_rate,
         tax=tax,
         total=round(total, 2),
         amount_paid=0,

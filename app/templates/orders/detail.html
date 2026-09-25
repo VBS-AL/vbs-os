@@ -1101,7 +1101,7 @@
       {% if order.status.value == 'delivered' and can_see_financials %}
       <div class="bg-white rounded-xl shadow p-5">
         <h2 class="text-xs font-semibold text-steel-dark uppercase tracking-wide mb-3">Generate Invoice</h2>
-        {% if order.invoice %}
+        {% if order.invoice and order.invoice.payment_status.value != 'void' %}
         <div class="text-sm text-green-700 font-medium">
           &#x2713; Invoice exists:
           <a href="/invoices/{{ order.invoice.id }}" class="underline hover:text-green-900">{{ order.invoice.invoice_number }}</a>

@@ -29,6 +29,7 @@ class Invoice(Base):
     due_date        = Column(Date, nullable=True)
     payment_status  = Column(SAEnum(PaymentStatus), default=PaymentStatus.unpaid)
     subtotal        = Column(Float, nullable=False, default=0)
+    tax_rate        = Column(Float, nullable=False, default=0)   # % entered at generation time
     tax             = Column(Float, nullable=False, default=0)
     total           = Column(Float, nullable=False, default=0)
     amount_paid     = Column(Float, default=0)
