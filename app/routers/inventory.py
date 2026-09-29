@@ -173,13 +173,17 @@ async def list_inventory(
     q: str = "",
     sort_by: str = "",
     sort_dir: str = "asc",
+    show_archived: str = "",  # "1" to show archived only
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if not user:
         return RedirectResponse("/auth/login", status_code=302)
 
-    query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    if show_archived == "1":
+        query = db.query(InventoryItem).filter(InventoryItem.is_active == False)
+    else:
+        query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
 
     if category:
         query = query.filter(InventoryItem.category == category)
@@ -231,6 +235,7 @@ async def list_inventory(
         "low_stock_count":  low_stock_count,
         "category_labels":  CATEGORY_LABELS,
         "categories":       list(InventoryCategory),
+        "show_archived":    show_archived == "1",
     }
 
     # Return only table rows for HTMX requests
@@ -1021,5 +1026,22 @@ async def save_item(
     item.supplier_name     = supplier_name
     item.supplier_contact  = supplier_contact
     item.notes             = notes
+    db.commit()
+    return RedirectResponse(f"/inventory/{item_id}", status_code=302)
+
+
+# ── Archive / Unarchive ────────────────────────────────────────────────────
+@router.post("/{item_id}/archive")
+async def archive_item(
+    item_id: int,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user or user.role.value not in ("owner", "ops_manager"):
+        raise HTTPException(403, "Not authorized")
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "Item not found")
+    item.is_active = not item.is_active  # toggle
     db.commit()
     return RedirectResponse(f"/inventory/{item_id}", status_code=302)

@@ -8,11 +8,36 @@
     <p class="text-xs font-mono text-gray-400 mb-1">{{ item.sku or '—' }}</p>
     <h1 class="text-2xl font-bold text-steel-dark">{{ item.name }}</h1>
     <p class="text-sm text-gray-500">{{ category_labels[item.category.value] }}</p>
+    {% if not item.is_active %}
+    <span class="inline-block mt-1 text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">Archived</span>
+    {% endif %}
   </div>
-  <a href="/inventory/{{ item.id }}/edit"
-     class="bg-steel-dark text-white text-sm px-4 py-2 rounded-lg hover:bg-steel-mid transition">
-    Edit Item
-  </a>
+  <div class="flex items-center gap-2">
+    {% if item.is_active %}
+    <a href="/inventory/{{ item.id }}/edit"
+       class="bg-steel-dark text-white text-sm px-4 py-2 rounded-lg hover:bg-steel-mid transition">
+      Edit Item
+    </a>
+    {% if user.role.value in ['owner', 'ops_manager'] %}
+    <form method="POST" action="/inventory/{{ item.id }}/archive"
+          onsubmit="return confirm('Archive this SKU? It will be hidden from inventory and order search.')">
+      <button type="submit"
+        class="text-sm px-4 py-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-100 transition">
+        Archive
+      </button>
+    </form>
+    {% endif %}
+    {% else %}
+    {% if user.role.value in ['owner', 'ops_manager'] %}
+    <form method="POST" action="/inventory/{{ item.id }}/archive">
+      <button type="submit"
+        class="text-sm px-4 py-2 rounded-lg border border-green-400 text-green-700 hover:bg-green-50 transition">
+        Unarchive
+      </button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
 </div>
 
 <div class="grid grid-cols-3 gap-6">

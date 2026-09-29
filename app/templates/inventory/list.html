@@ -64,8 +64,30 @@
        class="px-4 py-2 bg-red-50 border border-red-300 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 transition">
       ✕ Clear
     </a>
+
+    {% if user.role.value in ['owner', 'ops_manager'] %}
+    <div class="ml-auto">
+      {% if show_archived %}
+      <a href="/inventory"
+         class="px-4 py-2 bg-gray-700 text-white text-sm font-medium rounded-lg hover:bg-gray-600 transition">
+        ← Active Items
+      </a>
+      {% else %}
+      <a href="/inventory?show_archived=1"
+         class="px-4 py-2 border border-gray-300 text-gray-500 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+        Show Archived
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
   </form>
 </div>
+
+{% if show_archived %}
+<div class="mb-4 px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-600 font-medium">
+  Showing archived SKUs — these are hidden from inventory search and order line items.
+</div>
+{% endif %}
 
 <!-- Table -->
 <div class="bg-white rounded-xl shadow overflow-hidden">
