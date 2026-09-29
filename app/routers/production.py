@@ -428,18 +428,18 @@ async def clock_in(
     if user.role not in MANAGEMENT_ROLES and stage.assigned_to_id != user.id:
         raise HTTPException(403, "You are not assigned to this stage")
 
-    # Check for existing active session for this employee
-    existing = db.query(WorkSession).filter(
+    # Pause ALL existing active sessions for this employee before starting a new one
+    existing_sessions = db.query(WorkSession).filter(
         WorkSession.employee_id == user.id,
         WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
-    ).first()
-    if existing:
-        # Auto-pause the existing session before starting new one
-        now = datetime.now(timezone.utc)
+    ).all()
+    now = datetime.now(timezone.utc)
+    for existing in existing_sessions:
         if existing.status == SessionStatus.active:
             existing.paused_at    = now
             existing.pause_reason = PauseReason.priority_shift
             existing.status       = SessionStatus.paused
+    if existing_sessions:
         db.flush()
 
     now = datetime.now(timezone.utc)
@@ -494,6 +494,8 @@ async def pause_session(
     session.status       = SessionStatus.paused
     db.commit()
 
+    if session.employee_id != user.id:
+        return RedirectResponse(f"/production/queue?emp_id={session.employee_id}", status_code=302)
     return RedirectResponse("/production/queue", status_code=302)
 
 
@@ -524,6 +526,8 @@ async def resume_session(
     session.is_overtime  = _is_overtime(now)
     db.commit()
 
+    if session.employee_id != user.id:
+        return RedirectResponse(f"/production/queue?emp_id={session.employee_id}", status_code=302)
     return RedirectResponse("/production/queue", status_code=302)
 
 
@@ -580,6 +584,9 @@ async def stop_session(
         session.labor_entry_id = entry.id
 
     db.commit()
+    # If management stopped someone else's session, redirect back to their queue
+    if session.employee_id != user.id:
+        return RedirectResponse(f"/production/queue?emp_id={session.employee_id}", status_code=302)
     return RedirectResponse("/production/queue", status_code=302)
 
 
@@ -970,7 +977,7 @@ async def employee_queue(
     my_session = db.query(WorkSession).filter(
         WorkSession.employee_id == view_employee.id,
         WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
-    ).options(
+    ).order_by(WorkSession.id.desc()).options(
         joinedload(WorkSession.stage),
         joinedload(WorkSession.order).joinedload(Order.customer),
         joinedload(WorkSession.order).joinedload(Order.line_items).joinedload(OrderLineItem.inventory_item),
