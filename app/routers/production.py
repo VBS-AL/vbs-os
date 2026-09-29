@@ -867,16 +867,42 @@ async def delivery_complete(
 
     now = datetime.now(timezone.utc)
 
-    # Do NOT stop the session here — the timer keeps running until delivery is confirmed.
-    # That way we track total time from packing start to confirmed delivery.
-    # Store notes on the session for now if provided.
+    # Stop the delivery session when the packing list is submitted.
+    # The stage stays in_progress until the checker confirms, but Brian's timer
+    # should not block him from working on other jobs while waiting.
     active_session = db.query(WorkSession).filter(
         WorkSession.stage_id == stage_id,
         WorkSession.employee_id == user.id,
         WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
     ).first()
-    if active_session and session_notes:
-        active_session.notes = session_notes.strip() or None
+    if active_session:
+        if active_session.status == SessionStatus.paused and active_session.paused_at:
+            active_session.total_paused_minutes = (active_session.total_paused_minutes or 0.0) + \
+                (now - active_session.paused_at).total_seconds() / 60.0
+        duration = _net_minutes(active_session, now)
+        if session_notes:
+            active_session.notes = session_notes.strip() or None
+        active_session.ended_at         = now
+        active_session.duration_minutes = duration
+        active_session.status           = SessionStatus.completed
+        if duration > 0:
+            work_date = now.replace(tzinfo=timezone.utc).astimezone(EASTERN).date()
+            dept      = BillingDept(active_session.billing_dept)
+            entry = LaborEntry(
+                order_id     = active_session.order_id,
+                stage_id     = active_session.stage_id,
+                employee_id  = active_session.employee_id,
+                billing_dept = dept,
+                hours        = round(duration / 60.0, 4),
+                billing_rate = active_session.billing_rate,
+                billed_value = 0.0,  # delivery is non-billable
+                work_date    = work_date,
+                notes        = active_session.notes,
+                is_rework    = 0,
+            )
+            db.add(entry)
+            db.flush()
+            active_session.labor_entry_id = entry.id
 
     # Auto-calculate weight from inventory line items if not provided
     order = db.query(Order).options(joinedload(Order.line_items)).filter(Order.id == stage.order_id).first()
