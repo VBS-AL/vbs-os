@@ -666,12 +666,11 @@ async def qa_complete(
 
     now = datetime.now(timezone.utc)
 
-    # Stop the active work session for this stage
+    # Stop the active work session for this stage (any employee — supports management submitting on behalf)
     active_session = db.query(WorkSession).filter(
         WorkSession.stage_id == stage_id,
-        WorkSession.employee_id == user.id,
         WorkSession.status.in_([SessionStatus.active, SessionStatus.paused]),
-    ).first()
+    ).order_by(WorkSession.id.desc()).first()
 
     if active_session:
         if active_session.status == SessionStatus.paused and active_session.paused_at:

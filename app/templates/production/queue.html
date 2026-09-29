@@ -269,28 +269,28 @@
             <input type="hidden" name="session_notes" value="">
 
             <!-- Result selector -->
-            <div class="grid grid-cols-4 gap-2">
-              <label class="qa-result-btn">
-                <input type="radio" name="result" value="pass" class="sr-only" required>
-                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold cursor-pointer hover:border-green-400 hover:bg-green-50 transition peer-checked:border-green-500">
+            <div class="grid grid-cols-4 gap-2" id="qa-result-grid">
+              <label class="qa-result-btn cursor-pointer" onclick="selectQAResult(this, 'pass')">
+                <input type="radio" name="result" value="pass" class="sr-only">
+                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold transition qa-btn-span">
                   ✅ Pass
                 </span>
               </label>
-              <label class="qa-result-btn">
+              <label class="qa-result-btn cursor-pointer" onclick="selectQAResult(this, 'conditional')">
                 <input type="radio" name="result" value="conditional" class="sr-only">
-                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold cursor-pointer hover:border-yellow-400 hover:bg-yellow-50 transition">
+                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold transition qa-btn-span">
                   ⚠ Conditional
                 </span>
               </label>
-              <label class="qa-result-btn">
+              <label class="qa-result-btn cursor-pointer" onclick="selectQAResult(this, 'rework')">
                 <input type="radio" name="result" value="rework" class="sr-only">
-                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition">
+                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold transition qa-btn-span">
                   🔄 Rework
                 </span>
               </label>
-              <label class="qa-result-btn">
+              <label class="qa-result-btn cursor-pointer" onclick="selectQAResult(this, 'fail')">
                 <input type="radio" name="result" value="fail" class="sr-only">
-                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold cursor-pointer hover:border-red-400 hover:bg-red-50 transition">
+                <span class="block text-center px-2 py-2 rounded-lg border-2 border-gray-200 text-xs font-semibold transition qa-btn-span">
                   ❌ Fail
                 </span>
               </label>
@@ -944,6 +944,57 @@
 
 <!-- Dropdown toggle helper -->
 <script>
+// QA result button selection with visual feedback
+var _qaResultColors = {
+  'pass':        ['border-green-500',  'bg-green-50',  'text-green-800'],
+  'conditional': ['border-yellow-500', 'bg-yellow-50', 'text-yellow-800'],
+  'rework':      ['border-orange-500', 'bg-orange-50', 'text-orange-800'],
+  'fail':        ['border-red-500',    'bg-red-50',    'text-red-800'],
+};
+function selectQAResult(label, value) {
+  // Uncheck all, reset styles
+  document.querySelectorAll('.qa-result-btn .qa-btn-span').forEach(function(span) {
+    span.classList.remove(
+      'border-green-500','bg-green-50','text-green-800',
+      'border-yellow-500','bg-yellow-50','text-yellow-800',
+      'border-orange-500','bg-orange-50','text-orange-800',
+      'border-red-500','bg-red-50','text-red-800'
+    );
+    span.classList.add('border-gray-200');
+  });
+  // Check this radio + highlight its span
+  var radio = label.querySelector('input[type="radio"]');
+  if (radio) radio.checked = true;
+  var span = label.querySelector('.qa-btn-span');
+  if (span) {
+    span.classList.remove('border-gray-200');
+    var cols = _qaResultColors[value] || ['border-steel-mid','bg-gray-50','text-steel-dark'];
+    cols.forEach(function(c) { span.classList.add(c); });
+  }
+  // Show failure fields for rework/fail
+  var failFields = document.getElementById('qa-failure-fields');
+  if (failFields) {
+    if (value === 'rework' || value === 'fail') {
+      failFields.classList.remove('hidden');
+    } else {
+      failFields.classList.add('hidden');
+    }
+  }
+}
+// QA form submit: validate result is selected
+document.addEventListener('DOMContentLoaded', function() {
+  var qaForm = document.querySelector('form[action*="qa-complete"]');
+  if (qaForm) {
+    qaForm.addEventListener('submit', function(e) {
+      var selected = qaForm.querySelector('input[name="result"]:checked');
+      if (!selected) {
+        e.preventDefault();
+        alert('Please select an inspection result (Pass, Conditional, Rework, or Fail) before submitting.');
+      }
+    });
+  }
+});
+
 function toggleClockIn(id) {
   // Close any other open dropdowns first
   document.querySelectorAll('[id^="ci-"], [id="pause-menu"], [id^="dq-"]').forEach(function(el) {
